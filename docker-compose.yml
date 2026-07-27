@@ -1,0 +1,46 @@
+version: "3.8"
+
+services:
+  # خدمة قاعدة البيانات (PostgreSQL)
+  db:
+    image: postgres:15-alpine
+    container_name: chemflow_db
+    restart: always
+    environment:
+      - POSTGRES_DB=chemflow_db
+      - POSTGRES_USER=chemflow_user
+      - POSTGRES_PASSWORD=ChemFlowSecure2026!!
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+
+  # خدمة الكاش (Redis)
+  redis:
+    image: redis:7-alpine
+    container_name: chemflow_redis
+    ports:
+      - "6379:6379"
+
+  # خدمة الباكيند (Django)
+  web:
+    build: ./backend
+    container_name: chemflow_backend
+    command: python manage.py runserver 0.0.0.0:8000
+    # تم إيقاف الـ volumes هنا لحل مشكلة الـ Incorrect function في ويندوز
+    # volumes:
+    #   - ./backend:/app
+    ports:
+      - "8000:8000"
+    environment:
+      - DEBUG=1
+      - DB_HOST=db
+      - DB_NAME=chemflow_db
+      - DB_USER=chemflow_user
+      - DB_PASSWORD=ChemFlowSecure2026!!
+    depends_on:
+      - db
+      - redis
+
+volumes:
+  postgres_data:
