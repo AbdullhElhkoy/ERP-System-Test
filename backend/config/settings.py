@@ -25,7 +25,7 @@ SECRET_KEY = 'django-insecure-+6phkpcu5cta3sjq)21&9i!a3zb%v=+jv@pv_n4)i4k$ay6d$4
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = True
 
-ALLOWED_HOSTS = []
+ALLOWED_HOSTS = ['*']
 
 
 # Application definition
@@ -46,8 +46,13 @@ INSTALLED_APPS = [
     'employees',
     'custom_permissions',
     'raw_materials',
-    'dcp_reaction',
+    'dcp',
    
+]
+
+CSRF_TRUSTED_ORIGINS = [
+    "https://localhost:8000",
+    "https://*.app.github.dev",
 ]
 
 MIDDLEWARE = [
@@ -82,12 +87,13 @@ WSGI_APPLICATION = 'config.wsgi.application'
 
 import os
 
+
 DATABASES = {
     'default': {
         'ENGINE': 'django.db.backends.postgresql',
-        'NAME': os.environ.get('DB_NAME', 'chemflow_erp'),
-        'USER': os.environ.get('DB_USER', 'postgres'),
-        'PASSWORD': os.environ.get('DB_PASSWORD', 'abd1031998'),
+        'NAME': os.environ.get('DB_NAME', 'chemflow_db'),
+        'USER': os.environ.get('DB_USER', 'chemflow_user'),
+        'PASSWORD': os.environ.get('DB_PASSWORD', 'ChemFlowSecure2026!!'),
         'HOST': os.environ.get('DB_HOST', 'localhost'),
         'PORT': os.environ.get('DB_PORT', '5432'),
     }

@@ -28,8 +28,8 @@ services:
     container_name: chemflow_backend
     command: python manage.py runserver 0.0.0.0:8000
     # تم إيقاف الـ volumes هنا لحل مشكلة الـ Incorrect function في ويندوز
-    # volumes:
-    #   - ./backend:/app
+    volumes:
+      - ./backend:/app
     ports:
       - "8000:8000"
     environment:

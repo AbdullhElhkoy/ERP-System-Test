@@ -88,12 +88,12 @@ class Migration(migrations.Migration):
     ]
 
     operations = [
-        migrations.SeparateDatabaseAndState(
-            database_operations=[
-                migrations.RunSQL(
-                    sql="ALTER TABLE plants ADD COLUMN IF NOT EXISTS phase SMALLINT NULL;",
-                    reverse_sql="ALTER TABLE plants DROP COLUMN IF EXISTS phase;",
-                ),
+    migrations.SeparateDatabaseAndState(
+        database_operations=[
+            migrations.RunSQL(
+                sql="ALTER TABLE plants ADD COLUMN IF NOT EXISTS phase SMALLINT NULL;",
+                reverse_sql="ALTER TABLE plants DROP COLUMN IF EXISTS phase;",
+            ),
             ],
             state_operations=[
                 migrations.AddField(
