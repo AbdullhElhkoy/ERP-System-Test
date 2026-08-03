@@ -97,8 +97,7 @@ class BigBag(models.Model):
         verbose_name_plural = "Big Bags (بيج باجات)"
 
     def __str__(self):
-        return f"BigBag #{self.bag_number} ({self.get_status_display()})"
-
+        return f"BigBag #{self.bag_number} ({self.get_status_display()})" #type: igonor
     def clean(self):
         if self.pk:
             original = BigBag.objects.get(pk=self.pk)
