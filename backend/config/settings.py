@@ -46,7 +46,6 @@ INSTALLED_APPS = [
     'employees',
     'custom_permissions',
     'raw_materials',
-    'dcp',
     'shared_definitions',
     'factory',
    
