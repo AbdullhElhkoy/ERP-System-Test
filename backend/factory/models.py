@@ -65,7 +65,24 @@ class ConformityRule(models.Model):
     def __str__(self):
         return f"{self.name} -> {self.quality_grade}"
 
+class Grade(models.Model):
+    """
+    الجريد الفعلي بتاع كل مصنع (A, B, C... أو أي اسم يختاره الأدمن)
+    مربوط بواحد من الـ 3 تصنيفات الثابتة في النظام
+    """
+    plant = models.ForeignKey(Plant, on_delete=models.CASCADE, related_name="factory_grades")
+    code = models.CharField(max_length=20)
+    classification = models.ForeignKey(
+        QualityGrade, on_delete=models.PROTECT, related_name="grades"
+    )
+    is_active = models.BooleanField(default=True)
 
+    class Meta:
+        db_table = "factory_grades"
+        unique_together = (("plant", "code"),)
+
+    def __str__(self):
+        return f"{self.code} ({self.classification})"
 # ═══════════ Reaction ═══════════
 
 class ProcessStage(models.Model):
@@ -189,16 +206,24 @@ class OutputAnalysisResult(models.Model):
 class QualityConformityResult(models.Model):
     reading = models.OneToOneField(OutputReading, on_delete=models.CASCADE, related_name="conformity")
     conformity_rule = models.ForeignKey(ConformityRule, on_delete=models.PROTECT, related_name="results")
+    grade = models.ForeignKey(
+        Grade, on_delete=models.PROTECT, null=True, blank=True, related_name="conformity_results"
+    )
     quality_grade = models.ForeignKey(QualityGrade, on_delete=models.PROTECT, related_name="conformity_results")
     notes = models.TextField(blank=True)
 
     class Meta:
         db_table = "factory_quality_conformity_results"
 
+    def save(self, *args, **kwargs):
+        if self.grade_id:
+            self.quality_grade = self.grade.classification
+        super().save(*args, **kwargs)
+
     def __str__(self):
-        return f"{self.reading} -> {self.quality_grade}"
+        return f"{self.reading} -> {self.grade or self.quality_grade}"
 
-
+    
 class PackingEvent(models.Model):
     plant = models.ForeignKey(Plant, on_delete=models.CASCADE, related_name="factory_packing_events")
     output_reading = models.ForeignKey(OutputReading, on_delete=models.PROTECT, related_name="packing_events")
