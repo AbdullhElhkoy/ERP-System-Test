@@ -42,7 +42,7 @@ INSTALLED_APPS = [
     'django_filters',
     'plants',
     'production',
-    'accounts',
+    'user_account',
     'employees',
     'custom_permissions',
     'warehousing.raw_materials',
