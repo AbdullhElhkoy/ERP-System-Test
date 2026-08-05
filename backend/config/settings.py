@@ -48,6 +48,7 @@ INSTALLED_APPS = [
     'warehousing.raw_materials',
     'shared_definitions',
     'factory',
+    'orders',
    
 ]
 
