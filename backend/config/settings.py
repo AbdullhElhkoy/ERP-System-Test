@@ -45,7 +45,7 @@ INSTALLED_APPS = [
     'accounts',
     'employees',
     'custom_permissions',
-    'raw_materials',
+    'warehousing.raw_materials',
     'shared_definitions',
     'factory',
    
