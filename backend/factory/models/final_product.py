@@ -2,148 +2,8 @@ from django.conf import settings
 from django.db import models, transaction
 from plants.models import Plant
 from shared_definitions.models import QualityGrade
+from .shared import TestDefinition, PackingLocation, PackingType, ConformityRule, Grade
 
-
-# ═══════════ Definition Stages (تعريفات عامة للمصنع) ═══════════
-
-class TestDefinition(models.Model):
-    CATEGORY_CHEMICAL = "chemical"
-    CATEGORY_PHYSICAL = "physical"
-    CATEGORY_CHOICES = [
-        (CATEGORY_CHEMICAL, "كيميائي"),
-        (CATEGORY_PHYSICAL, "فيزيائي"),
-    ]
-
-    plant = models.ForeignKey(Plant, on_delete=models.CASCADE, related_name="factory_test_definitions")
-    name = models.CharField(max_length=100)
-    category = models.CharField(max_length=15, choices=CATEGORY_CHOICES)
-    unit = models.CharField(max_length=20, blank=True)
-
-    class Meta:
-        db_table = "factory_test_definitions"
-        unique_together = (("plant", "name"),)
-
-    def __str__(self):
-        return f"{self.name} ({self.unit})" if self.unit else self.name
-
-
-class PackingLocation(models.Model):
-    plant = models.ForeignKey(Plant, on_delete=models.CASCADE, related_name="factory_packing_locations")
-    name = models.CharField(max_length=100)
-
-    class Meta:
-        db_table = "factory_packing_locations"
-        unique_together = (("plant", "name"),)
-
-    def __str__(self):
-        return self.name
-
-
-class PackingType(models.Model):
-    plant = models.ForeignKey(Plant, on_delete=models.CASCADE, related_name="factory_packing_types")
-    name = models.CharField(max_length=50)
-
-    class Meta:
-        db_table = "factory_packing_types"
-        unique_together = (("plant", "name"),)
-
-    def __str__(self):
-        return self.name
-
-
-class ConformityRule(models.Model):
-    """
-    قاعدة المصنع الخاصة اللي بتحوّل نتيجة فحص لواحدة من الـ 3 درجات المشتركة
-    """
-    plant = models.ForeignKey(Plant, on_delete=models.CASCADE, related_name="factory_conformity_rules")
-    name = models.CharField(max_length=100)
-    quality_grade = models.ForeignKey(QualityGrade, on_delete=models.PROTECT, related_name="conformity_rules")
-    description = models.TextField(blank=True)
-
-    class Meta:
-        db_table = "factory_conformity_rules"
-        unique_together = (("plant", "name"),)
-
-    def __str__(self):
-        return f"{self.name} -> {self.quality_grade}"
-
-
-class Grade(models.Model):
-    """
-    الجريد الفعلي بتاع كل مصنع (A, B, C... أو أي اسم يختاره الأدمن)
-    مربوط بواحد من الـ 3 تصنيفات الثابتة في النظام
-    """
-    plant = models.ForeignKey(Plant, on_delete=models.CASCADE, related_name="factory_grades")
-    code = models.CharField(max_length=20)
-    classification = models.ForeignKey(
-        QualityGrade, on_delete=models.PROTECT, related_name="grades"
-    )
-    is_active = models.BooleanField(default=True)
-
-    class Meta:
-        db_table = "factory_grades"
-        unique_together = (("plant", "code"),)
-
-    def __str__(self):
-        return f"{self.code} ({self.classification})"
-
-
-# ═══════════ Reaction ═══════════
-
-class ProcessStage(models.Model):
-    plant = models.ForeignKey(Plant, on_delete=models.CASCADE, related_name="factory_process_stages")
-    code = models.CharField(max_length=20)
-    name = models.CharField(max_length=100)
-
-    class Meta:
-        db_table = "factory_process_stages"
-        unique_together = (("plant", "code"),)
-
-    def __str__(self):
-        return f"{self.code} - {self.name}"
-
-
-class ProcessStageTest(models.Model):
-    stage = models.ForeignKey(ProcessStage, on_delete=models.CASCADE, related_name="stage_tests")
-    test = models.ForeignKey(TestDefinition, on_delete=models.CASCADE, related_name="process_stage_links")
-
-    class Meta:
-        db_table = "factory_process_stage_tests"
-        unique_together = (("stage", "test"),)
-
-    def __str__(self):
-        return f"{self.stage} - {self.test}"
-
-
-class ProcessReading(models.Model):
-    plant = models.ForeignKey(Plant, on_delete=models.CASCADE, related_name="factory_process_readings")
-    stage = models.ForeignKey(ProcessStage, on_delete=models.PROTECT, related_name="readings")
-    sampled_at = models.DateTimeField()
-    notes = models.TextField(blank=True)
-    created_at = models.DateTimeField(auto_now_add=True)
-
-    class Meta:
-        db_table = "factory_process_readings"
-        ordering = ["-sampled_at"]
-
-    def __str__(self):
-        return f"{self.stage} - {self.sampled_at:%Y-%m-%d %H:%M}"
-
-
-class ProcessAnalysisResult(models.Model):
-    reading = models.ForeignKey(ProcessReading, on_delete=models.CASCADE, related_name="results")
-    test = models.ForeignKey(TestDefinition, on_delete=models.PROTECT, related_name="process_results")
-    result = models.DecimalField(max_digits=10, decimal_places=3, null=True, blank=True)
-
-    class Meta:
-        db_table = "factory_process_analysis_results"
-        unique_together = (("reading", "test"),)
-
-    def __str__(self):
-        return f"{self.reading} - {self.test}: {self.result}"
-
-
-# ═══════════ Final Product ═══════════
 
 class OutputPoint(models.Model):
     plant = models.ForeignKey(Plant, on_delete=models.CASCADE, related_name="factory_output_points")
@@ -211,9 +71,7 @@ class OutputAnalysisResult(models.Model):
 class QualityConformityResult(models.Model):
     reading = models.OneToOneField(OutputReading, on_delete=models.CASCADE, related_name="conformity")
     conformity_rule = models.ForeignKey(ConformityRule, on_delete=models.PROTECT, related_name="results")
-    grade = models.ForeignKey(
-        Grade, on_delete=models.PROTECT, null=True, blank=True, related_name="conformity_results"
-    )
+    grade = models.ForeignKey(Grade, on_delete=models.PROTECT, null=True, blank=True, related_name="conformity_results")
     quality_grade = models.ForeignKey(QualityGrade, on_delete=models.PROTECT, related_name="conformity_results")
     notes = models.TextField(blank=True)
 
@@ -247,9 +105,6 @@ class PackingEvent(models.Model):
 
 
 class PackingConversion(models.Model):
-    """
-    تحويل عام من أي نوع تعبئة لأي نوع تاني (بيج باج<->شكارة، شكارة<->شكارة، حتى سوائل)
-    """
     plant = models.ForeignKey(Plant, on_delete=models.CASCADE, related_name="factory_packing_conversions")
     source_event = models.ForeignKey(PackingEvent, on_delete=models.PROTECT, related_name="conversions_out")
     target_packing_type = models.ForeignKey(PackingType, on_delete=models.PROTECT, related_name="conversions_in")
@@ -267,12 +122,7 @@ class PackingConversion(models.Model):
         return f"{self.source_event} -> {self.target_packing_type} ({self.quantity}{self.unit})"
 
 
-# ═══════════ Sampling System (نظام العينات الجديد) ═══════════
-
 class PlantLotSetting(models.Model):
-    """
-    إعداد كل مصنع لطريقة توليد كود العينة (C11(999)...) - عداد الدورة والتسلسل
-    """
     LOT_MODE_AUTO = "auto"
     LOT_MODE_MANUAL = "manual"
     LOT_MODE_CHOICES = [
@@ -287,10 +137,7 @@ class PlantLotSetting(models.Model):
         related_name="lot_sampling_plants",
         help_text="الإدارة المسؤولة عن سحب العينات لهذا المصنع"
     )
-    reset_threshold = models.IntegerField(
-        default=9999,
-        help_text="لما الرقم التسلسلي يوصل للرقم ده، الدورة (Cycle) بتزيد واحد والتسلسل يرجع لـ 1"
-    )
+    reset_threshold = models.IntegerField(default=9999)
     current_cycle = models.IntegerField(default=1)
     current_sequence = models.IntegerField(default=0)
 
@@ -302,7 +149,6 @@ class PlantLotSetting(models.Model):
 
     @transaction.atomic
     def next_sequence(self):
-        """بيرجع (cycle, sequence) الجايين، ويحدّث العداد نفسه بشكل آمن للتزامن"""
         setting = PlantLotSetting.objects.select_for_update().get(pk=self.pk)
         next_seq = setting.current_sequence + 1
         if next_seq > setting.reset_threshold:
@@ -314,7 +160,6 @@ class PlantLotSetting(models.Model):
 
 
 class Ton(models.Model):
-    """الطن المفرد - وحدة القياس الأساسية اللي بياخد كود مستقل"""
     plant = models.ForeignKey(Plant, on_delete=models.CASCADE, related_name="tons")
     cycle_number = models.IntegerField()
     sequence_number = models.IntegerField()
@@ -343,7 +188,6 @@ class Ton(models.Model):
 
 
 class RepresentativeSample(models.Model):
-    """العينة الممثلة - بتتجمع من طن واحد أو أكتر، وهي اللي بتاخد التحليل الكيميائي الفعلي"""
     plant = models.ForeignKey(Plant, on_delete=models.CASCADE, related_name="representative_samples")
     cycle_number = models.IntegerField()
     code = models.CharField(max_length=150, blank=True)
@@ -355,7 +199,6 @@ class RepresentativeSample(models.Model):
         db_table = "factory_representative_samples"
 
     def refresh_derived_fields(self):
-        """بيتحدث بعد ما تتحدد أو تتعدل الأطنان المكوّنة للعينة"""
         ton_list = list(self.tons.order_by("sequence_number"))
         if not ton_list:
             return
@@ -372,7 +215,6 @@ class RepresentativeSample(models.Model):
 
 
 class TonPhysicalResult(models.Model):
-    """نتيجة فيزيائية حقيقية ومستقلة لكل طن (مش منسوخة من حد)"""
     ton = models.ForeignKey(Ton, on_delete=models.CASCADE, related_name="physical_results")
     test = models.ForeignKey(TestDefinition, on_delete=models.PROTECT, related_name="ton_physical_results")
     result = models.DecimalField(max_digits=10, decimal_places=3, null=True, blank=True)
@@ -386,10 +228,6 @@ class TonPhysicalResult(models.Model):
 
 
 class SampleChemicalResult(models.Model):
-    """
-    نتيجة كيميائية بتتسجل على مستوى الممثلة، وبتتنسخ تلقائيًا لكل طن مكوّن ليها.
-    is_overridden=True لو الطن ده اتعمله استثناء (إعادة فحص لمتغير معين بمفرده).
-    """
     representative_sample = models.ForeignKey(RepresentativeSample, on_delete=models.CASCADE, related_name="chemical_results")
     ton = models.ForeignKey(Ton, on_delete=models.CASCADE, related_name="chemical_results")
     test = models.ForeignKey(TestDefinition, on_delete=models.PROTECT, related_name="sample_chemical_results")
@@ -406,9 +244,6 @@ class SampleChemicalResult(models.Model):
 
 
 class TonGradeAssignment(models.Model):
-    """
-    قرار الجريد النهائي لكل طن - بيتحدد يدويًا من شخص مسؤول (مش تلقائي دلوقتي)
-    """
     ton = models.OneToOneField(Ton, on_delete=models.CASCADE, related_name="grade_assignment")
     grade = models.ForeignKey(Grade, on_delete=models.PROTECT, related_name="ton_assignments")
     assigned_by = models.ForeignKey(
