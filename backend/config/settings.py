@@ -41,7 +41,6 @@ INSTALLED_APPS = [
     'corsheaders',
     'django_filters',
     'plants',
-    'production',
     'user_account',
     'employees',
     'custom_permissions',
