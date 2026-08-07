@@ -1,5 +1,12 @@
 from django.contrib import admin
 from custom_permissions.admin_mixins import PlantScopedAdminMixin
+from .models.plant_proxy import FactoryPlant
+
+
+@admin.register(FactoryPlant)
+class FactoryPlantAdmin(admin.ModelAdmin):
+    list_display = ("plant_name", "product_type")
+
 from .models import (
     TestDefinition,
     PackingLocation,

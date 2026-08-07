@@ -6,6 +6,7 @@ from .final_product import (
     PlantLotSetting, Ton, RepresentativeSample, TonPhysicalResult,
     SampleChemicalResult, TonGradeAssignment,
 )
+from .plant_proxy import FactoryPlant
 
 __all__ = [
     "TestDefinition", "PackingLocation", "PackingType", "ConformityRule", "Grade",
@@ -14,4 +15,5 @@ __all__ = [
     "QualityConformityResult", "PackingEvent", "PackingConversion",
     "PlantLotSetting", "Ton", "RepresentativeSample", "TonPhysicalResult",
     "SampleChemicalResult", "TonGradeAssignment",
+    "FactoryPlant",
 ]

@@ -4,11 +4,11 @@ from django.db import models
 
 class Plant(models.Model):
     plant_id = models.AutoField(primary_key=True, db_column="plant_id")
-    plant_code = models.CharField(
-        max_length=20, unique=True, db_column="plant_code"
-    )
     plant_name = models.CharField(
         max_length=50, unique=True, db_column="plant_name"
+    )
+    product_type = models.CharField(
+        max_length=50, blank=True, db_column="product_type"
     )
 
     class Meta:
@@ -16,8 +16,7 @@ class Plant(models.Model):
         managed = False
 
     def __str__(self):
-        return f"{self.plant_name} ({self.plant_code})"
-
+        return self.plant_name
 
 class Department(models.Model):
     department_id = models.AutoField(primary_key=True, db_column="department_id")

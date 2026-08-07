@@ -31,9 +31,13 @@ class OutputPointTest(models.Model):
 
 
 class OutputReading(models.Model):
+    """
+    سحب العينة - أول حدث بيتسجل فعلياً في المرحلة دي.
+    """
     plant = models.ForeignKey(Plant, on_delete=models.CASCADE, related_name="factory_output_readings")
     output_point = models.ForeignKey(OutputPoint, on_delete=models.PROTECT, related_name="readings")
 
+    product_name = models.CharField(max_length=100, blank=True)
     sampled_at = models.DateTimeField()
     shift = models.ForeignKey(
         "employees.ShiftType", on_delete=models.SET_NULL, null=True, blank=True,
@@ -42,6 +46,17 @@ class OutputReading(models.Model):
     )
     packing_location = models.ForeignKey(PackingLocation, on_delete=models.SET_NULL, null=True, blank=True, related_name="readings")
     packing_type = models.ForeignKey(PackingType, on_delete=models.SET_NULL, null=True, blank=True, related_name="readings")
+
+    sampled_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True, related_name="samples_taken"
+    )
+    analyzed_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True, related_name="samples_analyzed"
+    )
+    reviewed_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True, related_name="samples_reviewed",
+        help_text="ممكن يتحدد بعدين لما التحليل يخلص، مش لازم وقت السحب"
+    )
 
     sample_code = models.CharField(max_length=50, blank=True, editable=False)
     notes = models.TextField(blank=True)
@@ -161,6 +176,10 @@ class PlantLotSetting(models.Model):
 
 class Ton(models.Model):
     plant = models.ForeignKey(Plant, on_delete=models.CASCADE, related_name="tons")
+    output_reading = models.ForeignKey(
+        OutputReading, on_delete=models.PROTECT, null=True, blank=True, related_name="tons",
+        help_text="العينة اللي الطن ده جزء منها"
+    )
     cycle_number = models.IntegerField()
     sequence_number = models.IntegerField()
     weight = models.DecimalField(max_digits=10, decimal_places=3)
@@ -210,6 +229,20 @@ class RepresentativeSample(models.Model):
             self.code = f"C{self.cycle_number}({joined})"
         self.save(update_fields=["weight", "code"])
 
+    def apply_chemical_result(self, test, result, user=None):
+        """
+        بتتسجل مرة واحدة على العينة، وتتوزع تلقائي على كل الأطنان المكوّنة ليها
+        (غير اللي عندهم استثناء is_overridden=True بالفعل)
+        """
+        for ton in self.tons.all():
+            existing = SampleChemicalResult.objects.filter(ton=ton, test=test).first()
+            if existing and existing.is_overridden:
+                continue
+            SampleChemicalResult.objects.update_or_create(
+                ton=ton, test=test,
+                defaults={"representative_sample": self, "result": result, "is_overridden": False},
+            )
+
     def __str__(self):
         return self.code
 
@@ -244,6 +277,9 @@ class SampleChemicalResult(models.Model):
 
 
 class TonGradeAssignment(models.Model):
+    """
+    قرار الجريد النهائي لكل طن - وبمجرد ما يتحدد، الكمية بتتضاف تلقائي لرصيد الأرضية
+    """
     ton = models.OneToOneField(Ton, on_delete=models.CASCADE, related_name="grade_assignment")
     grade = models.ForeignKey(Grade, on_delete=models.PROTECT, related_name="ton_assignments")
     assigned_by = models.ForeignKey(
@@ -255,5 +291,66 @@ class TonGradeAssignment(models.Model):
     class Meta:
         db_table = "factory_ton_grade_assignments"
 
+    def save(self, *args, **kwargs):
+        is_new = self.pk is None
+        super().save(*args, **kwargs)
+        if is_new:
+            FloorStockMovement.objects.create(
+                plant=self.ton.plant, grade=self.grade,
+                movement_type=FloorStockMovement.MOVEMENT_IN_PRODUCTION,
+                quantity=self.ton.weight, ton=self.ton,
+            )
+            FloorStockBalance.adjust(self.ton.plant, self.grade, self.ton.weight)
+
     def __str__(self):
         return f"{self.ton.code} → {self.grade}"
+
+
+class FloorStockBalance(models.Model):
+    """
+    الرصيد الحالي للمنتج النهائي في المصنع - لكل جريد لوحده، لحد وقت التسليم للمخزن
+    """
+    plant = models.ForeignKey(Plant, on_delete=models.CASCADE, related_name="floor_stock_balances")
+    grade = models.ForeignKey(Grade, on_delete=models.PROTECT, related_name="floor_stock_balances")
+    quantity = models.DecimalField(max_digits=12, decimal_places=3, default=0)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        db_table = "factory_floor_stock_balances"
+        unique_together = (("plant", "grade"),)
+
+    def __str__(self):
+        return f"{self.plant.plant_code} - {self.grade}: {self.quantity}"
+
+    @classmethod
+    @transaction.atomic
+    def adjust(cls, plant, grade, delta):
+        balance, _ = cls.objects.select_for_update().get_or_create(plant=plant, grade=grade)
+        balance.quantity += delta
+        balance.save(update_fields=["quantity", "updated_at"])
+        return balance
+
+
+class FloorStockMovement(models.Model):
+    """سجل كل حركة زيادة/نقصان على رصيد الأرضية - للتتبع الكامل"""
+    MOVEMENT_IN_PRODUCTION = "in_production"
+    MOVEMENT_OUT_HANDOVER = "out_handover"
+    MOVEMENT_TYPE_CHOICES = [
+        (MOVEMENT_IN_PRODUCTION, "دخول - إنتاج"),
+        (MOVEMENT_OUT_HANDOVER, "خروج - تسليم للمخزن"),
+    ]
+
+    plant = models.ForeignKey(Plant, on_delete=models.CASCADE, related_name="floor_stock_movements")
+    grade = models.ForeignKey(Grade, on_delete=models.PROTECT, related_name="floor_stock_movements")
+    movement_type = models.CharField(max_length=20, choices=MOVEMENT_TYPE_CHOICES)
+    quantity = models.DecimalField(max_digits=12, decimal_places=3)
+    ton = models.ForeignKey(Ton, on_delete=models.PROTECT, null=True, blank=True, related_name="floor_stock_movements")
+    occurred_at = models.DateTimeField(auto_now_add=True)
+    notes = models.TextField(blank=True)
+
+    class Meta:
+        db_table = "factory_floor_stock_movements"
+        ordering = ["-occurred_at"]
+
+    def __str__(self):
+        return f"{self.plant.plant_code} - {self.get_movement_type_display()} - {self.grade}: {self.quantity}"
