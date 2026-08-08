@@ -1,11 +1,36 @@
 from django.contrib import admin
+from django.shortcuts import redirect
+from django.urls import path
+from django.utils.html import format_html
 from custom_permissions.admin_mixins import PlantScopedAdminMixin
 from .models.plant_proxy import FactoryPlant
 
 
 @admin.register(FactoryPlant)
 class FactoryPlantAdmin(admin.ModelAdmin):
-    list_display = ("plant_name", "product_type")
+    list_display = ("plant_name", "enter_button")
+    search_fields = ("plant_name",)
+
+    def enter_button(self, obj):
+        return format_html(
+            '<a class="button" href="{}">Enter Factory</a>',
+            f"enter/{obj.pk}/",
+        )
+    enter_button.short_description = "دخول المصنع"
+
+    def get_urls(self):
+        urls = super().get_urls()
+        custom = [
+            path("enter/<int:plant_id>/", self.admin_site.admin_view(self.enter_plant), name="factory_enter_plant"),
+        ]
+        return custom + urls
+
+    def enter_plant(self, request, plant_id):
+        request.session["factory_current_plant_id"] = plant_id
+        plant = FactoryPlant.objects.get(pk=plant_id)
+        self.message_user(request, f"دخلت مصنع: {plant.plant_name}")
+        return redirect("admin:factory_factoryplant_changelist")
+
 
 from .models import (
     TestDefinition,
