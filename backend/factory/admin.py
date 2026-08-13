@@ -1,14 +1,54 @@
+import json
+from collections import Counter
+from datetime import datetime
+from decimal import Decimal, InvalidOperation
 from django.contrib import admin
-from django.shortcuts import redirect
+from django.contrib.auth import get_user_model
+from django.db import transaction
+from django.http import JsonResponse
+from django.shortcuts import redirect, render
 from django.urls import path
-from django.utils.html import format_html
+from django.utils.dateparse import parse_date, parse_time
+from django.utils.html import format_html, format_html_join
 from custom_permissions.admin_mixins import PlantScopedAdminMixin
+from .shift_resolver import resolve_shift_type
 from .models.plant_proxy import FactoryPlant
+from .models.dynamic_fields import FieldDefinition, PackingTypeField
+
+# استيراد الموديلات بشكل صريح لضمان معرفة Pylance بها وتجنب أخطاء "unknown import symbol"
+from . import models
+
+TestDefinition = getattr(models, "TestDefinition", None)
+PackingLocation = getattr(models, "PackingLocation", None)
+PackingType = getattr(models, "PackingType", None)
+ConformityRule = getattr(models, "ConformityRule", None)
+Grade = getattr(models, "Grade", None)
+ProcessStage = getattr(models, "ProcessStage", None)
+ProcessStageTest = getattr(models, "ProcessStageTest", None)
+ProcessReading = getattr(models, "ProcessReading", None)
+ProcessAnalysisResult = getattr(models, "ProcessAnalysisResult", None)
+OutputPoint = getattr(models, "OutputPoint", None)
+OutputPointTest = getattr(models, "OutputPointTest", None)
+OutputReading = getattr(models, "OutputReading", None)
+OutputAnalysisResult = getattr(models, "OutputAnalysisResult", None)
+QualityConformityResult = getattr(models, "QualityConformityResult", None)
+PackingEvent = getattr(models, "PackingEvent", None)
+PackingConversion = getattr(models, "PackingConversion", None)
+PlantLotSetting = getattr(models, "PlantLotSetting", None)
+Ton = getattr(models, "Ton", None)
+RepresentativeSample = getattr(models, "RepresentativeSample", None)
+TonPhysicalResult = getattr(models, "TonPhysicalResult", None)
+SampleChemicalResult = getattr(models, "SampleChemicalResult", None)
+TonGradeAssignment = getattr(models, "TonGradeAssignment", None)
+GradeReason = getattr(models, "GradeReason", None)
+RepresentativeGroupSize = getattr(models, "RepresentativeGroupSize", None)
+
+User = get_user_model()
 
 
 @admin.register(FactoryPlant)
 class FactoryPlantAdmin(admin.ModelAdmin):
-    list_display = ("plant_name", "enter_button")
+    list_display = ("plant_name", "final_product_buttons", "settings_button")
     search_fields = ("plant_name",)
 
     def enter_button(self, obj):
@@ -18,51 +58,322 @@ class FactoryPlantAdmin(admin.ModelAdmin):
         )
     enter_button.short_description = "دخول المصنع"
 
+    def final_product_buttons(self, obj):
+        packing_types = PackingType.objects.filter(plant=obj)
+        if not packing_types.exists():
+            return "لا يوجد أنواع تعبئة"
+        return format_html_join(
+            "",
+            '<a class="button" href="final-product-entry/{}/" style="margin-left:5px;">{}</a>',
+            ((pt.pk, pt.name) for pt in packing_types),
+        )
+    final_product_buttons.short_description = "إدخال المنتج النهائي"
+    
+    def settings_button(self, obj):
+        return format_html(
+            '<a class="button" href="{}">إعدادات المصنع</a>',
+            f"settings/{obj.pk}/",
+        )
+    settings_button.short_description = "إعدادات المصنع"
+
     def get_urls(self):
         urls = super().get_urls()
         custom = [
             path("enter/<int:plant_id>/", self.admin_site.admin_view(self.enter_plant), name="factory_enter_plant"),
+            path("final-product-entry/<int:packing_type_id>/", self.admin_site.admin_view(self.final_product_entry), name="factory_final_product_entry"),
+            path("settings/<int:plant_id>/", self.admin_site.admin_view(self.plant_settings), name="factory_plant_settings"),
         ]
         return custom + urls
 
+    def plant_settings(self, request, plant_id):
+        plant = FactoryPlant.objects.filter(pk=plant_id).first()
+        if not plant:
+            self.message_user(request, "المصنع غير موجود")
+            return redirect("admin:factory_factoryplant_changelist")
+
+        links = [
+            {
+                "title": "الجريد (Grades)",
+                "url": f"/admin/factory/grade/?plant__id__exact={plant.pk}",
+            },
+            {
+                "title": "أسباب الرفض (محلي / غير مطابق)",
+                "url": f"/admin/factory/gradereason/?plant__id__exact={plant.pk}",
+            },
+            {
+                "title": "أماكن الإنتاج (Packing Locations)",
+                "url": f"/admin/factory/packinglocation/?plant__id__exact={plant.pk}",
+            },
+            {
+                "title": "تعريفات الاختبارات (Test Definitions)",
+                "url": f"/admin/factory/testdefinition/?plant__id__exact={plant.pk}",
+            },
+            {
+                "title": "أنواع التعبئة (Packing Types)",
+                "url": f"/admin/factory/packingtype/?plant__id__exact={plant.pk}",
+            },
+            {
+                "title": "قواعد المطابقة (Conformity Rules)",
+                "url": f"/admin/factory/conformityrule/?plant__id__exact={plant.pk}",
+            },
+            {
+                "title": "مراحل التفاعل (Process Stages)",
+                "url": f"/admin/factory/processstage/?plant__id__exact={plant.pk}",
+            },
+            {
+                "title": "نقاط السحب (Output Points)",
+                "url": f"/admin/factory/outputpoint/?plant__id__exact={plant.pk}",
+            },
+            {
+                "title": "حجم مجموعة العينة الممثلة (Representative Group Size)",
+                "url": f"/admin/factory/representativegroupsize/?plant__id__exact={plant.pk}",
+            },
+        ]
+
+        context = {
+            **self.admin_site.each_context(request),
+            "plant": plant,
+            "links": links,
+        }
+        return render(request, "factory/plant_settings.html", context)
+
     def enter_plant(self, request, plant_id):
+        plant = FactoryPlant.objects.filter(pk=plant_id).first()
+        if not plant:
+            self.message_user(request, "المصنع غير موجود")
+            return redirect("admin:factory_factoryplant_changelist")
         request.session["factory_current_plant_id"] = plant_id
-        plant = FactoryPlant.objects.get(pk=plant_id)
         self.message_user(request, f"دخلت مصنع: {plant.plant_name}")
         return redirect("admin:factory_factoryplant_changelist")
 
+    def _current_plant(self, request):
+        plant_id = request.session.get("factory_current_plant_id")
+        if not plant_id:
+            return None
+        return FactoryPlant.objects.filter(pk=plant_id).first()
 
-from .models import (
-    TestDefinition,
-    PackingLocation,
-    PackingType,
-    ConformityRule,
-    Grade,
-    ProcessStage,
-    ProcessStageTest,
-    ProcessReading,
-    ProcessAnalysisResult,
-    OutputPoint,
-    OutputPointTest,
-    OutputReading,
-    OutputAnalysisResult,
-    QualityConformityResult,
-    PackingEvent,
-    PackingConversion,
-    PlantLotSetting,
-    Ton,
-    RepresentativeSample,
-    TonPhysicalResult,
-    SampleChemicalResult,
-    TonGradeAssignment,
-)
+    def final_product_entry(self, request, packing_type_id):
+        plant = self._current_plant(request)
+        if not plant:
+            self.message_user(request, "لازم تدخل مصنع الأول")
+            return redirect("admin:factory_factoryplant_changelist")
+
+        packing_type = PackingType.objects.filter(pk=packing_type_id, plant=plant).first()
+        if not packing_type:
+            self.message_user(request, "نوع التعبئة غير موجود لهذا المصنع")
+            return redirect("admin:factory_factoryplant_changelist")
+
+        if request.method == "POST":
+            return self._save_final_product_entry(request, plant, packing_type)
+
+        chemical_tests = TestDefinition.objects.filter(plant=plant, category="chemical", scope="final_product")
+        physical_tests = TestDefinition.objects.filter(plant=plant, category="physical", scope="final_product")
+        grades = Grade.objects.filter(plant=plant, is_active=True)
+        
+        local_reasons = GradeReason.objects.filter(plant=plant, reason_type="local")
+        non_conforming_reasons = GradeReason.objects.filter(plant=plant, reason_type="non_conforming")
+
+        lot_setting, _ = PlantLotSetting.objects.get_or_create(plant=plant)
+        group_size_setting = RepresentativeGroupSize.objects.filter(plant=plant, packing_type=packing_type).first()
+        default_group_size = group_size_setting.default_group_size if group_size_setting else 4
+
+        users_list = list(User.objects.filter(is_staff=True).values("id", "first_name", "last_name", "username"))
+        formatted_users = [
+            {
+                "id": u["id"], 
+                "name": f"{u['first_name']} {u['last_name']}".strip() or u["username"]
+            } for u in users_list
+        ]
+
+        locations = PackingLocation.objects.filter(plant=plant)
+
+        context = {
+            **self.admin_site.each_context(request),
+            "plant": plant,
+            "packing_type": packing_type,
+            "packing_type_id": packing_type.pk,            "chemical_tests": chemical_tests,
+            "physical_tests": physical_tests,
+            "grades": grades,
+            "chemical_tests_json": [{"id": getattr(t, "pk", getattr(t, "id", None)), "name": t.name} for t in chemical_tests],
+            "physical_tests_json": [{"id": getattr(t, "pk", getattr(t, "id", None)), "name": t.name} for t in physical_tests],
+            "grades_json": [
+                {
+                    "id": getattr(g, "pk", getattr(g, "id", None)),
+                    "code": g.code,
+                    "classification": getattr(g.classification, "code", str(g.classification)),
+                }
+                for g in grades
+            ],
+            "local_reasons_json": [{"id": getattr(r, "pk", getattr(r, "id", None)), "text": r.text} for r in local_reasons],
+            "non_conforming_reasons_json": [{"id": getattr(r, "pk", getattr(r, "id", None)), "text": r.text} for r in non_conforming_reasons],
+            "users_json": formatted_users,
+            "packing_locations_json": [{"id": getattr(l, "pk", getattr(l, "id", None)), "name": l.name} for l in locations],
+            "shift_choices": ["A", "B", "C", "D"],
+            "next_cycle": lot_setting.current_cycle,
+            "next_sequence": lot_setting.current_sequence + 1,
+            "default_group_size": default_group_size,
+        }
+        return render(request, "factory/final_product_entry.html", context)
+
+    @transaction.atomic
+    def _save_final_product_entry(self, request, plant, packing_type):
+        payload = json.loads(request.body)
+        rows = payload.get("rows", [])
+
+        tons_by_group = {}
+        rows_by_group = {}
+        default_output_point = OutputPoint.objects.filter(plant=plant).first()
+
+        # الخطوة 1: معالجة وإنشاء أسطر الأطنان (منفردة أو تابعة لمجموعة)
+        for row in rows:
+            if row.get("row_type") != "ton":
+                continue
+
+            sampled_at_date = parse_date(row.get("production_date"))
+            sampling_time_val = parse_time(row.get("sampling_time") or "00:00")
+
+            if sampled_at_date is None or sampling_time_val is None:
+                return JsonResponse({"status": "error", "message": "تاريخ الإنتاج أو وقت السحب غير صالح"}, status=400)
+
+            # مكان الإنتاج -> نقطة السحب (ربط تلقائي بدل output_point_id اللي التمبلت مش بيبعتها)
+            packing_location = None
+            if row.get("packing_location_id"):
+                packing_location = PackingLocation.objects.filter(pk=row["packing_location_id"]).first()
+
+            output_point = default_output_point
+            if packing_location:
+                pl_id = getattr(packing_location, "pk", getattr(packing_location, "id", ""))
+                output_point, _ = OutputPoint.objects.get_or_create(
+                    plant=plant,
+                    code=f"PL{pl_id}",
+                    defaults={"name": packing_location.name},
+                )
+
+            # تحويل حرف مجموعة التدوير (A/B/C/D) إلى نوع الوردية الفعلي في هذا التاريخ
+            shift_type_obj = resolve_shift_type(row.get("shift"), sampled_at_date)
+
+            reading = OutputReading.objects.create(
+                plant=plant,
+                output_point=output_point,
+                packing_location=packing_location,
+                product_name=row.get("product_type", packing_type.name),
+                sampled_at=datetime.combine(sampled_at_date, sampling_time_val),
+                shift=shift_type_obj,
+                packing_type=packing_type,
+                sampled_by_id=row.get("qc_inspector_id") or None,
+            )
+
+            ton = Ton.objects.create(
+                plant=plant,
+                output_reading=reading,
+                weight=Decimal(str(row.get("weight") or 0)),
+                production_date=sampled_at_date,
+                production_shift=shift_type_obj,
+            )
+
+            # النتائج الفيزيائية للطن
+            for test_id, value in row.get("physical", {}).items():
+                if value in (None, ""):
+                    continue
+                try:
+                    result_value = Decimal(str(value))
+                except InvalidOperation:
+                    continue
+                TonPhysicalResult.objects.create(ton=ton, test_id=test_id, result=result_value)
+
+            # قرار الجريد وسببه
+            if row.get("grade_id"):
+                reason_id = row.get("local_reason_id") or row.get("non_conforming_reason_id") or None
+                TonGradeAssignment.objects.create(
+                    ton=ton,
+                    grade_id=row["grade_id"],
+                    reason_id=reason_id,
+                    assigned_by=request.user,
+                )
+
+            group_letter = row.get("group")
+            if group_letter:
+                tons_by_group.setdefault(group_letter, []).append(ton)
+            else:
+                # طن منفرد: ياخد عينة ممثلة تلقائية بيه هو بس عشان تتسجل نتائجه
+                solo_rep = RepresentativeSample.objects.create(plant=plant, cycle_number=ton.cycle_number)
+                solo_rep.tons.add(ton)
+                solo_rep.refresh_derived_fields()
+
+                for test_id, value in row.get("chemical", {}).items():
+                    if value in (None, ""):
+                        continue
+                    try:
+                        result_value = Decimal(str(value))
+                    except InvalidOperation:
+                        continue
+                    try:
+                        test_obj = TestDefinition.objects.get(pk=test_id)
+                    except TestDefinition.DoesNotExist:
+                        continue
+                    solo_rep.apply_chemical_result(test=test_obj, result=result_value, user=request.user)
+
+        # الخطوة 2: تجميع صفوف العينة الممثلة حسب المجموعة
+        for row in rows:
+            if row.get("row_type") == "representative":
+                group_letter = row.get("group")
+                if group_letter:
+                    rows_by_group[group_letter] = row
+
+        # الخطوة 3: إنشاء العينات الممثلة وتوزيع نتائجها الكيميائية على الأطنان
+        for group_letter, tons in tons_by_group.items():
+            rep_row = rows_by_group.get(group_letter, {})
+
+            rep = RepresentativeSample.objects.create(
+                plant=plant,
+                cycle_number=tons[0].cycle_number if tons else 1,
+            )
+            rep.tons.set(tons)
+            rep.refresh_derived_fields()
+
+            # النتائج الكيميائية - بتتسجل على العينة وتتوزع تلقائي على كل الأطنان
+            for test_id, value in rep_row.get("chemical", {}).items():
+                if value in (None, ""):
+                    continue
+                try:
+                    result_value = Decimal(str(value))
+                except InvalidOperation:
+                    continue
+                try:
+                    test_obj = TestDefinition.objects.get(pk=test_id)
+                except TestDefinition.DoesNotExist:
+                    continue
+                rep.apply_chemical_result(test=test_obj, result=result_value, user=request.user)
+
+            # توريث بيانات المعمل والمراجعة لقراءات الأطنان
+            lab_chemist_id = rep_row.get("lab_chemist_id") or None
+            lab_shift_head_id = rep_row.get("lab_shift_head_id") or None
+            qc_shift_head_status = rep_row.get("qc_shift_head") or None
+
+            for ton in tons:
+                if not ton.output_reading:
+                    continue
+                update_fields = []
+                if lab_chemist_id:
+                    ton.output_reading.analyzed_by_id = lab_chemist_id
+                    update_fields.append("analyzed_by_id")
+                if lab_shift_head_id:
+                    ton.output_reading.lab_shift_head_id = lab_shift_head_id
+                    update_fields.append("lab_shift_head_id")
+                if qc_shift_head_status == "reviewed":
+                    ton.output_reading.reviewed_by = request.user
+                    update_fields.append("reviewed_by")
+                if update_fields:
+                    ton.output_reading.save(update_fields=update_fields)
+
+        return JsonResponse({"status": "ok", "rows_saved": len(rows)})
 
 
 @admin.register(TestDefinition)
 class TestDefinitionAdmin(PlantScopedAdminMixin, admin.ModelAdmin):
     plant_lookup_field = "plant"
-    list_display = ("name", "plant", "category", "unit")
-    list_filter = ("plant", "category")
+    list_display = ("name", "plant", "category", "scope", "unit")
+    list_filter = ("plant", "category", "scope")
 
 
 @admin.register(PackingLocation)
@@ -71,12 +382,18 @@ class PackingLocationAdmin(PlantScopedAdminMixin, admin.ModelAdmin):
     list_display = ("name", "plant")
     list_filter = ("plant",)
 
+class PackingTypeFieldInline(admin.TabularInline):
+    model = PackingTypeField
+    extra = 1
+    autocomplete_fields = ["field"]
+
 
 @admin.register(PackingType)
 class PackingTypeAdmin(PlantScopedAdminMixin, admin.ModelAdmin):
     plant_lookup_field = "plant"
     list_display = ("name", "plant")
     list_filter = ("plant",)
+    inlines = [PackingTypeFieldInline]
 
 
 @admin.register(ConformityRule)
@@ -206,11 +523,39 @@ class RepresentativeSampleAdmin(PlantScopedAdminMixin, admin.ModelAdmin):
 
 @admin.register(TonGradeAssignment)
 class TonGradeAssignmentAdmin(admin.ModelAdmin):
-    list_display = ("ton", "grade", "assigned_by", "assigned_at")
-    list_filter = ("grade",)
+    list_display = ("ton", "grade", "reason", "assigned_by", "assigned_at")
+    list_filter = ("grade", "reason")
     readonly_fields = ("assigned_by", "assigned_at")
 
     def save_model(self, request, obj, form, change):
         if not obj.pk:
             obj.assigned_by = request.user
         super().save_model(request, obj, form, change)
+
+
+@admin.register(GradeReason)
+class GradeReasonAdmin(PlantScopedAdminMixin, admin.ModelAdmin):
+    plant_lookup_field = "plant"
+    list_display = ("text", "reason_type", "plant")
+    list_filter = ("plant", "reason_type")
+
+
+@admin.register(RepresentativeGroupSize)
+class RepresentativeGroupSizeAdmin(PlantScopedAdminMixin, admin.ModelAdmin):
+    plant_lookup_field = "plant"
+    list_display = ("plant", "packing_type", "default_group_size")
+    list_filter = ("plant", "packing_type")
+
+
+@admin.register(FieldDefinition)
+class FieldDefinitionAdmin(admin.ModelAdmin):
+    list_display = ("name", "key", "field_type", "category", "unit", "is_active")
+    list_filter = ("category", "field_type", "is_active")
+    search_fields = ("name", "key")
+    prepopulated_fields = {"key": ("name",)}
+
+
+@admin.register(PackingTypeField)
+class PackingTypeFieldAdmin(admin.ModelAdmin):
+    list_display = ("packing_type", "field", "order", "is_required")
+    list_filter = ("packing_type", "field__category")

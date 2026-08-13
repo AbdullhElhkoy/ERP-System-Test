@@ -1,25 +1,68 @@
+"""
+موديلات "المنتج النهائي" لتطبيق factory.
+
+هذا الملف أُعيد بناؤه بالكامل من الصفر ليطابق الشكل الفعلي الموجود في قاعدة
+البيانات (تم التحقق عبر information_schema.columns و information_schema
+foreign key constraints على كل جدول من جداول factory_*). كل الجداول كانت
+فارغة (0 صف) وقت إعادة البناء، فلا يوجد خطر فقدان بيانات.
+"""
+
+from decimal import Decimal
+
 from django.conf import settings
 from django.db import models, transaction
+
 from plants.models import Plant
-from shared_definitions.models import QualityGrade
+from employees.models import ShiftType
 from .shared import TestDefinition, PackingLocation, PackingType, ConformityRule, Grade
 
+
+# ============================================================
+# 1) إعدادات الترقيم لكل مصنع (كود الطن + الدورة/Cycle)
+# ============================================================
+
+class PlantLotSetting(models.Model):
+    LOT_MODE_WEIGHT_BASED = "weight_based"
+    LOT_MODE_MANUAL = "manual"
+    LOT_MODE_CHOICES = [
+        (LOT_MODE_WEIGHT_BASED, "تلقائي حسب الوزن التراكمي"),
+        (LOT_MODE_MANUAL, "يدوي"),
+    ]
+
+    plant = models.OneToOneField(Plant, on_delete=models.CASCADE, related_name="factory_lot_setting")
+    lot_mode = models.CharField(max_length=20, choices=LOT_MODE_CHOICES, default=LOT_MODE_WEIGHT_BASED)
+    sampling_department = models.CharField(max_length=100, blank=True, default="")
+    current_cycle = models.PositiveIntegerField(default=1)
+    current_sequence = models.PositiveIntegerField(default=0)
+    reset_threshold = models.DecimalField(max_digits=12, decimal_places=2, default=Decimal("10000"))
+    cumulative_weight = models.DecimalField(max_digits=14, decimal_places=2, default=Decimal("0"))
+
+    class Meta:
+        db_table = "factory_plant_lot_settings"
+
+    def __str__(self):
+        return f"{self.plant} - Cycle {self.current_cycle} / Seq {self.current_sequence}"
+
+
+# ============================================================
+# 2) نقاط السحب (Output Points) واختباراتها
+# ============================================================
 
 class OutputPoint(models.Model):
     plant = models.ForeignKey(Plant, on_delete=models.CASCADE, related_name="factory_output_points")
     code = models.CharField(max_length=20)
-    name = models.CharField(max_length=100)
+    name = models.CharField(max_length=100, blank=True, default="")
 
     class Meta:
         db_table = "factory_output_points"
         unique_together = (("plant", "code"),)
 
     def __str__(self):
-        return f"{self.code} - {self.name}"
+        return f"{self.code} - {self.name}" if self.name else self.code
 
 
 class OutputPointTest(models.Model):
-    output_point = models.ForeignKey(OutputPoint, on_delete=models.CASCADE, related_name="point_tests")
+    output_point = models.ForeignKey(OutputPoint, on_delete=models.CASCADE, related_name="output_point_tests")
     test = models.ForeignKey(TestDefinition, on_delete=models.CASCADE, related_name="output_point_links")
 
     class Meta:
@@ -30,36 +73,50 @@ class OutputPointTest(models.Model):
         return f"{self.output_point} - {self.test}"
 
 
-class OutputReading(models.Model):
-    """
-    سحب العينة - أول حدث بيتسجل فعلياً في المرحلة دي.
-    """
-    plant = models.ForeignKey(Plant, on_delete=models.CASCADE, related_name="factory_output_readings")
-    output_point = models.ForeignKey(OutputPoint, on_delete=models.PROTECT, related_name="readings")
+# ============================================================
+# 3) قراءة نقطة السحب (OutputReading) — سياق كل عملية سحب/تعبئة
+# ============================================================
 
-    product_name = models.CharField(max_length=100, blank=True)
-    sampled_at = models.DateTimeField()
-    shift = models.ForeignKey(
-        "employees.ShiftType", on_delete=models.SET_NULL, null=True, blank=True,
-        related_name="factory_output_readings",
-        help_text="بتتحدد تلقائيًا من الوردية الثابتة بتاعة المستخدم، والأدمن يقدر يعدّلها وقت الحاجة"
+class OutputReading(models.Model):
+    plant = models.ForeignKey(Plant, on_delete=models.CASCADE, related_name="factory_output_readings")
+    # NOT NULL في الداتابيز فعليًا - نقطة السحب مطلوبة دايمًا
+    output_point = models.ForeignKey(OutputPoint, on_delete=models.PROTECT, related_name="readings")
+    packing_location = models.ForeignKey(
+        PackingLocation, on_delete=models.SET_NULL, null=True, blank=True, related_name="readings"
     )
-    packing_location = models.ForeignKey(PackingLocation, on_delete=models.SET_NULL, null=True, blank=True, related_name="readings")
-    packing_type = models.ForeignKey(PackingType, on_delete=models.SET_NULL, null=True, blank=True, related_name="readings")
+    packing_type = models.ForeignKey(
+        PackingType, on_delete=models.SET_NULL, null=True, blank=True, related_name="readings"
+    )
+    # مؤكد من قيود الداتابيز: shift هو FK حقيقي على shift_types (نفس جدول نظام الورديات)
+    shift = models.ForeignKey(
+        ShiftType, on_delete=models.SET_NULL, null=True, blank=True,
+        db_column="shift_id", related_name="factory_output_readings",
+    )
+    product_name = models.CharField(max_length=100, blank=True, default="")
+    sampled_at = models.DateTimeField()
+
+    # عمود مخزّن فعليًا (مش property) - نحتاج نحدد آلية تعبئته لاحقًا
+    sample_code = models.CharField(max_length=100, blank=True, default="")
+
+    notes = models.TextField(blank=True, default="")
 
     sampled_by = models.ForeignKey(
-        settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True, related_name="samples_taken"
+        settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True,
+        related_name="factory_readings_sampled",
     )
     analyzed_by = models.ForeignKey(
-        settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True, related_name="samples_analyzed"
+        settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True,
+        related_name="factory_readings_analyzed",
     )
     reviewed_by = models.ForeignKey(
-        settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True, related_name="samples_reviewed",
-        help_text="ممكن يتحدد بعدين لما التحليل يخلص، مش لازم وقت السحب"
+        settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True,
+        related_name="factory_readings_reviewed",
+    )
+    lab_shift_head = models.ForeignKey(
+        settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True,
+        related_name="factory_readings_lab_shift_head",
     )
 
-    sample_code = models.CharField(max_length=50, blank=True, editable=False)
-    notes = models.TextField(blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:
@@ -67,7 +124,7 @@ class OutputReading(models.Model):
         ordering = ["-sampled_at"]
 
     def __str__(self):
-        return self.sample_code or f"{self.output_point} - {self.sampled_at:%Y-%m-%d %H:%M}"
+        return f"{self.plant} - {self.sampled_at:%Y-%m-%d %H:%M}"
 
 
 class OutputAnalysisResult(models.Model):
@@ -83,168 +140,60 @@ class OutputAnalysisResult(models.Model):
         return f"{self.reading} - {self.test}: {self.result}"
 
 
-class QualityConformityResult(models.Model):
-    reading = models.OneToOneField(OutputReading, on_delete=models.CASCADE, related_name="conformity")
-    conformity_rule = models.ForeignKey(ConformityRule, on_delete=models.PROTECT, related_name="results")
-    grade = models.ForeignKey(Grade, on_delete=models.PROTECT, null=True, blank=True, related_name="conformity_results")
-    quality_grade = models.ForeignKey(QualityGrade, on_delete=models.PROTECT, related_name="conformity_results")
-    notes = models.TextField(blank=True)
-
-    class Meta:
-        db_table = "factory_quality_conformity_results"
-
-    def save(self, *args, **kwargs):
-        if self.grade_id:
-            self.quality_grade = self.grade.classification
-        super().save(*args, **kwargs)
-
-    def __str__(self):
-        return f"{self.reading} -> {self.grade or self.quality_grade}"
-
-
-class PackingEvent(models.Model):
-    plant = models.ForeignKey(Plant, on_delete=models.CASCADE, related_name="factory_packing_events")
-    output_reading = models.ForeignKey(OutputReading, on_delete=models.PROTECT, related_name="packing_events")
-    packing_type = models.ForeignKey(PackingType, on_delete=models.PROTECT, related_name="packing_events")
-    quantity = models.DecimalField(max_digits=10, decimal_places=3)
-    unit = models.CharField(max_length=20, default="tons")
-    packed_at = models.DateTimeField()
-    created_at = models.DateTimeField(auto_now_add=True)
-
-    class Meta:
-        db_table = "factory_packing_events"
-        ordering = ["-packed_at"]
-
-    def __str__(self):
-        return f"{self.packing_type} - {self.quantity}{self.unit} - {self.packed_at:%Y-%m-%d %H:%M}"
-
-
-class PackingConversion(models.Model):
-    plant = models.ForeignKey(Plant, on_delete=models.CASCADE, related_name="factory_packing_conversions")
-    source_event = models.ForeignKey(PackingEvent, on_delete=models.PROTECT, related_name="conversions_out")
-    target_packing_type = models.ForeignKey(PackingType, on_delete=models.PROTECT, related_name="conversions_in")
-    quantity = models.DecimalField(max_digits=10, decimal_places=3)
-    unit = models.CharField(max_length=20, default="tons")
-    converted_at = models.DateTimeField()
-    notes = models.TextField(blank=True)
-    created_at = models.DateTimeField(auto_now_add=True)
-
-    class Meta:
-        db_table = "factory_packing_conversions"
-        ordering = ["-converted_at"]
-
-    def __str__(self):
-        return f"{self.source_event} -> {self.target_packing_type} ({self.quantity}{self.unit})"
-
-
-class PlantLotSetting(models.Model):
-    LOT_MODE_AUTO = "auto"
-    LOT_MODE_MANUAL = "manual"
-    LOT_MODE_CHOICES = [
-        (LOT_MODE_AUTO, "توليد أوتوماتيكي"),
-        (LOT_MODE_MANUAL, "إدخال يدوي من إدارة محددة"),
-    ]
-
-    plant = models.OneToOneField(Plant, on_delete=models.CASCADE, related_name="lot_setting")
-    lot_mode = models.CharField(max_length=10, choices=LOT_MODE_CHOICES, default=LOT_MODE_AUTO)
-    sampling_department = models.ForeignKey(
-        "plants.Department", on_delete=models.PROTECT, null=True, blank=True,
-        related_name="lot_sampling_plants",
-        help_text="الإدارة المسؤولة عن سحب العينات لهذا المصنع"
-    )
-    reset_threshold = models.IntegerField(default=9999)
-    current_cycle = models.IntegerField(default=1)
-    current_sequence = models.IntegerField(default=0)
-
-    class Meta:
-        db_table = "factory_plant_lot_settings"
-
-    def __str__(self):
-        return f"{self.plant.plant_code} - C{self.current_cycle}"
-
-    @transaction.atomic
-    def next_sequence(self):
-        setting = PlantLotSetting.objects.select_for_update().get(pk=self.pk)
-        next_seq = setting.current_sequence + 1
-        if next_seq > setting.reset_threshold:
-            setting.current_cycle += 1
-            next_seq = 1
-        setting.current_sequence = next_seq
-        setting.save(update_fields=["current_cycle", "current_sequence"])
-        return setting.current_cycle, setting.current_sequence
-
+# ============================================================
+# 4) الطن (Ton) — الوحدة الأساسية للتتبع، مع الترقيم الذري
+# ============================================================
 
 class Ton(models.Model):
-    plant = models.ForeignKey(Plant, on_delete=models.CASCADE, related_name="tons")
+    plant = models.ForeignKey(Plant, on_delete=models.CASCADE, related_name="factory_tons")
     output_reading = models.ForeignKey(
-        OutputReading, on_delete=models.PROTECT, null=True, blank=True, related_name="tons",
-        help_text="العينة اللي الطن ده جزء منها"
+        OutputReading, on_delete=models.CASCADE, related_name="tons", null=True, blank=True
     )
-    cycle_number = models.IntegerField()
-    sequence_number = models.IntegerField()
-    weight = models.DecimalField(max_digits=10, decimal_places=3)
-    code = models.CharField(max_length=50, blank=True)
+    weight = models.DecimalField(max_digits=10, decimal_places=3, default=Decimal("0"))
     production_date = models.DateField()
     production_shift = models.ForeignKey(
-        "employees.ShiftType", on_delete=models.SET_NULL, null=True, blank=True, related_name="tons"
+        ShiftType, on_delete=models.SET_NULL, null=True, blank=True,
+        db_column="production_shift_id", related_name="factory_tons",
     )
+
+    code = models.CharField(max_length=30, blank=True, default="")
+    cycle_number = models.PositiveIntegerField(default=0)
+    sequence_number = models.PositiveIntegerField(default=0)
+
     created_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:
         db_table = "factory_tons"
-        unique_together = (("plant", "cycle_number", "sequence_number"),)
+        unique_together = (("plant", "code"),)
+        ordering = ["-created_at"]
+
+    def __str__(self):
+        return self.code or f"Ton #{self.pk}"
 
     def save(self, *args, **kwargs):
-        if not self.pk and (self.cycle_number is None or self.sequence_number is None):
-            setting, _ = PlantLotSetting.objects.get_or_create(plant=self.plant)
-            self.cycle_number, self.sequence_number = setting.next_sequence()
-        if not self.code:
-            self.code = f"C{self.cycle_number}({self.sequence_number})"
+        creating = self._state.adding
+        if creating and not self.code:
+            with transaction.atomic():
+                lot_setting, _ = PlantLotSetting.objects.select_for_update().get_or_create(plant=self.plant)
+
+                lot_setting.current_sequence += 1
+                lot_setting.cumulative_weight += self.weight or Decimal("0")
+
+                if lot_setting.lot_mode == PlantLotSetting.LOT_MODE_WEIGHT_BASED:
+                    threshold_crossed = (
+                        lot_setting.reset_threshold > 0
+                        and lot_setting.cumulative_weight > lot_setting.reset_threshold * lot_setting.current_cycle
+                    )
+                    if threshold_crossed:
+                        lot_setting.current_cycle += 1
+
+                lot_setting.save(update_fields=["current_sequence", "cumulative_weight", "current_cycle"])
+
+                self.sequence_number = lot_setting.current_sequence
+                self.cycle_number = lot_setting.current_cycle
+                self.code = f"C{self.cycle_number}({self.sequence_number})"
+
         super().save(*args, **kwargs)
-
-    def __str__(self):
-        return self.code
-
-
-class RepresentativeSample(models.Model):
-    plant = models.ForeignKey(Plant, on_delete=models.CASCADE, related_name="representative_samples")
-    cycle_number = models.IntegerField()
-    code = models.CharField(max_length=150, blank=True)
-    tons = models.ManyToManyField(Ton, related_name="representative_samples")
-    weight = models.DecimalField(max_digits=10, decimal_places=3, null=True, blank=True)
-    created_at = models.DateTimeField(auto_now_add=True)
-
-    class Meta:
-        db_table = "factory_representative_samples"
-
-    def refresh_derived_fields(self):
-        ton_list = list(self.tons.order_by("sequence_number"))
-        if not ton_list:
-            return
-        self.weight = sum(t.weight for t in ton_list)
-        if len(ton_list) == 1:
-            self.code = ton_list[0].code
-        else:
-            joined = "+".join(str(t.sequence_number) for t in ton_list)
-            self.code = f"C{self.cycle_number}({joined})"
-        self.save(update_fields=["weight", "code"])
-
-    def apply_chemical_result(self, test, result, user=None):
-        """
-        بتتسجل مرة واحدة على العينة، وتتوزع تلقائي على كل الأطنان المكوّنة ليها
-        (غير اللي عندهم استثناء is_overridden=True بالفعل)
-        """
-        for ton in self.tons.all():
-            existing = SampleChemicalResult.objects.filter(ton=ton, test=test).first()
-            if existing and existing.is_overridden:
-                continue
-            SampleChemicalResult.objects.update_or_create(
-                ton=ton, test=test,
-                defaults={"representative_sample": self, "result": result, "is_overridden": False},
-            )
-
-    def __str__(self):
-        return self.code
 
 
 class TonPhysicalResult(models.Model):
@@ -257,12 +206,57 @@ class TonPhysicalResult(models.Model):
         unique_together = (("ton", "test"),)
 
     def __str__(self):
-        return f"{self.ton.code} - {self.test}: {self.result}"
+        return f"{self.ton} - {self.test}: {self.result}"
+
+
+# ============================================================
+# 5) العينة الممثلة (RepresentativeSample)
+# ============================================================
+
+class RepresentativeSample(models.Model):
+    plant = models.ForeignKey(Plant, on_delete=models.CASCADE, related_name="factory_representative_samples")
+    cycle_number = models.PositiveIntegerField(default=0)
+    code = models.CharField(max_length=40, blank=True, default="")
+    weight = models.DecimalField(max_digits=10, decimal_places=3, default=Decimal("0"))
+    tons = models.ManyToManyField(Ton, related_name="representative_samples", blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        db_table = "factory_representative_samples"
+        ordering = ["-created_at"]
+
+    def __str__(self):
+        return self.code or f"RepSample #{self.pk}"
+
+    def refresh_derived_fields(self):
+        tons = list(self.tons.all().order_by("sequence_number"))
+        self.weight = sum((t.weight for t in tons), Decimal("0"))
+        if tons:
+            self.cycle_number = tons[0].cycle_number
+            seq_part = "+".join(str(t.sequence_number) for t in tons)
+            self.code = f"C{self.cycle_number}({seq_part})"
+        else:
+            self.code = f"C{self.cycle_number}()"
+        self.save(update_fields=["weight", "cycle_number", "code"])
+
+    def apply_chemical_result(self, test, result, user=None):
+        for ton in self.tons.all():
+            SampleChemicalResult.objects.update_or_create(
+                ton=ton,
+                test=test,
+                defaults={
+                    "representative_sample": self,
+                    "result": result,
+                    "is_overridden": False,
+                },
+            )
 
 
 class SampleChemicalResult(models.Model):
-    representative_sample = models.ForeignKey(RepresentativeSample, on_delete=models.CASCADE, related_name="chemical_results")
     ton = models.ForeignKey(Ton, on_delete=models.CASCADE, related_name="chemical_results")
+    representative_sample = models.ForeignKey(
+        RepresentativeSample, on_delete=models.SET_NULL, null=True, blank=True, related_name="chemical_results"
+    )
     test = models.ForeignKey(TestDefinition, on_delete=models.PROTECT, related_name="sample_chemical_results")
     result = models.DecimalField(max_digits=10, decimal_places=3, null=True, blank=True)
     is_overridden = models.BooleanField(default=False)
@@ -272,47 +266,136 @@ class SampleChemicalResult(models.Model):
         unique_together = (("ton", "test"),)
 
     def __str__(self):
-        flag = " (معدّل)" if self.is_overridden else ""
-        return f"{self.ton.code} - {self.test}: {self.result}{flag}"
+        return f"{self.ton} - {self.test}: {self.result}"
+
+
+# ============================================================
+# 6) قرار الجريد (التصنيف) لكل طن
+# ============================================================
+
+class GradeReason(models.Model):
+    REASON_LOCAL = "local"
+    REASON_NON_CONFORMING = "non_conforming"
+    REASON_TYPE_CHOICES = [
+        (REASON_LOCAL, "محلي"),
+        (REASON_NON_CONFORMING, "غير مطابق"),
+    ]
+
+    plant = models.ForeignKey(Plant, on_delete=models.CASCADE, related_name="factory_grade_reasons")
+    text = models.CharField(max_length=255)
+    reason_type = models.CharField(max_length=20, choices=REASON_TYPE_CHOICES)
+
+    class Meta:
+        db_table = "factory_grade_reasons"
+
+    def __str__(self):
+        return self.text
 
 
 class TonGradeAssignment(models.Model):
-    """
-    قرار الجريد النهائي لكل طن - وبمجرد ما يتحدد، الكمية بتتضاف تلقائي لرصيد الأرضية
-    """
     ton = models.OneToOneField(Ton, on_delete=models.CASCADE, related_name="grade_assignment")
     grade = models.ForeignKey(Grade, on_delete=models.PROTECT, related_name="ton_assignments")
-    assigned_by = models.ForeignKey(
-        settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, related_name="ton_grade_assignments"
+    reason = models.ForeignKey(
+        GradeReason, on_delete=models.SET_NULL, null=True, blank=True, related_name="ton_assignments"
     )
-    assigned_at = models.DateTimeField(auto_now_add=True)
-    notes = models.TextField(blank=True)
+    assigned_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True, related_name="grade_assignments"
+    )
+    assigned_at = models.DateTimeField(auto_now=True)
+    notes = models.TextField(blank=True, default="")
 
     class Meta:
         db_table = "factory_ton_grade_assignments"
 
-    def save(self, *args, **kwargs):
-        is_new = self.pk is None
-        super().save(*args, **kwargs)
-        if is_new:
-            FloorStockMovement.objects.create(
-                plant=self.ton.plant, grade=self.grade,
-                movement_type=FloorStockMovement.MOVEMENT_IN_PRODUCTION,
-                quantity=self.ton.weight, ton=self.ton,
-            )
-            FloorStockBalance.adjust(self.ton.plant, self.grade, self.ton.weight)
+    def __str__(self):
+        return f"{self.ton} -> {self.grade}"
+
+
+# ============================================================
+# 7) حجم مجموعة العينة الممثلة الافتراضي
+# ============================================================
+
+class RepresentativeGroupSize(models.Model):
+    plant = models.ForeignKey(Plant, on_delete=models.CASCADE, related_name="factory_group_sizes")
+    packing_type = models.ForeignKey(PackingType, on_delete=models.CASCADE, related_name="group_sizes")
+    default_group_size = models.PositiveSmallIntegerField(default=4)
+
+    class Meta:
+        db_table = "factory_representative_group_sizes"
+        unique_together = (("plant", "packing_type"),)
 
     def __str__(self):
-        return f"{self.ton.code} → {self.grade}"
+        return f"{self.plant} - {self.packing_type}: {self.default_group_size}"
 
+
+# ============================================================
+# 8) التعبئة والتحويل (Packing)
+# ============================================================
+
+class PackingEvent(models.Model):
+    plant = models.ForeignKey(Plant, on_delete=models.CASCADE, related_name="factory_packing_events")
+    output_reading = models.ForeignKey(
+        OutputReading, on_delete=models.CASCADE, related_name="packing_events"
+    )
+    packing_type = models.ForeignKey(PackingType, on_delete=models.PROTECT, related_name="packing_events")
+    quantity = models.DecimalField(max_digits=10, decimal_places=2)
+    unit = models.CharField(max_length=20, default="بيج باج")
+    packed_at = models.DateTimeField()
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        db_table = "factory_packing_events"
+        ordering = ["-packed_at"]
+
+    def __str__(self):
+        return f"{self.output_reading} - {self.quantity} {self.unit}"
+
+
+class PackingConversion(models.Model):
+    plant = models.ForeignKey(Plant, on_delete=models.CASCADE, related_name="factory_packing_conversions")
+    source_event = models.ForeignKey(PackingEvent, on_delete=models.CASCADE, related_name="conversions_out")
+    target_packing_type = models.ForeignKey(PackingType, on_delete=models.PROTECT, related_name="conversions_in")
+    quantity = models.DecimalField(max_digits=10, decimal_places=2)
+    unit = models.CharField(max_length=20, default="شكارة")
+    converted_at = models.DateTimeField()
+    created_at = models.DateTimeField(auto_now_add=True)
+    notes = models.TextField(blank=True, default="")
+
+    class Meta:
+        db_table = "factory_packing_conversions"
+        ordering = ["-converted_at"]
+
+    def __str__(self):
+        return f"{self.source_event} -> {self.target_packing_type}: {self.quantity} {self.unit}"
+
+
+class QualityConformityResult(models.Model):
+    reading = models.ForeignKey(OutputReading, on_delete=models.CASCADE, related_name="conformity_results")
+    conformity_rule = models.ForeignKey(ConformityRule, on_delete=models.PROTECT, related_name="results")
+    grade = models.ForeignKey(Grade, on_delete=models.SET_NULL, null=True, blank=True, related_name="conformity_results")
+    quality_grade = models.ForeignKey(
+        "shared_definitions.QualityGrade", on_delete=models.PROTECT, related_name="conformity_results"
+    )
+    notes = models.TextField(blank=True, default="")
+
+    class Meta:
+        db_table = "factory_quality_conformity_results"
+
+    def __str__(self):
+        return f"{self.reading} - {self.conformity_rule}"
+
+
+# ============================================================
+# 9) المخزون الأرضي (Floor Stock) — موجود بالداتابيز، لم يكن موثقًا سابقًا
+# ============================================================
 
 class FloorStockBalance(models.Model):
     """
-    الرصيد الحالي للمنتج النهائي في المصنع - لكل جريد لوحده، لحد وقت التسليم للمخزن
+    رصيد المخزون الأرضي الحالي لكل (مصنع + جريد). سطر واحد لكل توليفة.
     """
-    plant = models.ForeignKey(Plant, on_delete=models.CASCADE, related_name="floor_stock_balances")
-    grade = models.ForeignKey(Grade, on_delete=models.PROTECT, related_name="floor_stock_balances")
-    quantity = models.DecimalField(max_digits=12, decimal_places=3, default=0)
+    plant = models.ForeignKey(Plant, on_delete=models.CASCADE, related_name="factory_floor_stock_balances")
+    grade = models.ForeignKey(Grade, on_delete=models.CASCADE, related_name="floor_stock_balances")
+    quantity = models.DecimalField(max_digits=12, decimal_places=2, default=Decimal("0"))
     updated_at = models.DateTimeField(auto_now=True)
 
     class Meta:
@@ -320,37 +403,34 @@ class FloorStockBalance(models.Model):
         unique_together = (("plant", "grade"),)
 
     def __str__(self):
-        return f"{self.plant.plant_code} - {self.grade}: {self.quantity}"
-
-    @classmethod
-    @transaction.atomic
-    def adjust(cls, plant, grade, delta):
-        balance, _ = cls.objects.select_for_update().get_or_create(plant=plant, grade=grade)
-        balance.quantity += delta
-        balance.save(update_fields=["quantity", "updated_at"])
-        return balance
+        return f"{self.plant} - {self.grade}: {self.quantity}"
 
 
 class FloorStockMovement(models.Model):
-    """سجل كل حركة زيادة/نقصان على رصيد الأرضية - للتتبع الكامل"""
-    MOVEMENT_IN_PRODUCTION = "in_production"
-    MOVEMENT_OUT_HANDOVER = "out_handover"
+    """
+    سجل حركات المخزون الأرضي (إضافة/سحب) لكل (مصنع + جريد)، مع ربط اختياري
+    بالطن المصدر.
+    """
+    MOVEMENT_IN = "in"
+    MOVEMENT_OUT = "out"
     MOVEMENT_TYPE_CHOICES = [
-        (MOVEMENT_IN_PRODUCTION, "دخول - إنتاج"),
-        (MOVEMENT_OUT_HANDOVER, "خروج - تسليم للمخزن"),
+        (MOVEMENT_IN, "إضافة"),
+        (MOVEMENT_OUT, "سحب"),
     ]
 
-    plant = models.ForeignKey(Plant, on_delete=models.CASCADE, related_name="floor_stock_movements")
-    grade = models.ForeignKey(Grade, on_delete=models.PROTECT, related_name="floor_stock_movements")
-    movement_type = models.CharField(max_length=20, choices=MOVEMENT_TYPE_CHOICES)
-    quantity = models.DecimalField(max_digits=12, decimal_places=3)
-    ton = models.ForeignKey(Ton, on_delete=models.PROTECT, null=True, blank=True, related_name="floor_stock_movements")
-    occurred_at = models.DateTimeField(auto_now_add=True)
-    notes = models.TextField(blank=True)
+    plant = models.ForeignKey(Plant, on_delete=models.CASCADE, related_name="factory_floor_stock_movements")
+    grade = models.ForeignKey(Grade, on_delete=models.CASCADE, related_name="floor_stock_movements")
+    ton = models.ForeignKey(
+        Ton, on_delete=models.SET_NULL, null=True, blank=True, related_name="floor_stock_movements"
+    )
+    movement_type = models.CharField(max_length=10, choices=MOVEMENT_TYPE_CHOICES)
+    quantity = models.DecimalField(max_digits=12, decimal_places=2)
+    occurred_at = models.DateTimeField()
+    notes = models.TextField(blank=True, default="")
 
     class Meta:
         db_table = "factory_floor_stock_movements"
         ordering = ["-occurred_at"]
 
     def __str__(self):
-        return f"{self.plant.plant_code} - {self.get_movement_type_display()} - {self.grade}: {self.quantity}"
+        return f"{self.plant} - {self.grade}: {self.movement_type} {self.quantity}"

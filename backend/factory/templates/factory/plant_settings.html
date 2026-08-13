@@ -1,0 +1,12 @@
+{% extends "admin/base_site.html" %}
+{% block content %}
+<h1>إعدادات المصنع - {{ plant.plant_name }}</h1>
+
+<div style="margin-top: 20px; display: flex; flex-direction: column; gap: 10px; max-width: 400px;">
+{% for link in links %}
+    <a class="button" href="{{ link.url }}" style="text-align: center; padding: 12px; font-size: 14px;">
+        {{ link.title }}
+    </a>
+{% endfor %}
+</div>
+{% endblock %}

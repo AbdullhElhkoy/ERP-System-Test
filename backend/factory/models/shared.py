@@ -11,9 +11,17 @@ class TestDefinition(models.Model):
         (CATEGORY_PHYSICAL, "فيزيائي"),
     ]
 
+    SCOPE_REACTION = "reaction"
+    SCOPE_FINAL_PRODUCT = "final_product"
+    SCOPE_CHOICES = [
+        (SCOPE_REACTION, "التفاعل (Reaction)"),
+        (SCOPE_FINAL_PRODUCT, "المنتج النهائي (Final Product)"),
+    ]
+
     plant = models.ForeignKey(Plant, on_delete=models.CASCADE, related_name="factory_test_definitions")
     name = models.CharField(max_length=100)
     category = models.CharField(max_length=15, choices=CATEGORY_CHOICES)
+    scope = models.CharField(max_length=20, choices=SCOPE_CHOICES, default=SCOPE_FINAL_PRODUCT)
     unit = models.CharField(max_length=20, blank=True)
 
     class Meta:
@@ -22,7 +30,7 @@ class TestDefinition(models.Model):
 
     def __str__(self):
         return f"{self.name} ({self.unit})" if self.unit else self.name
-
+    
 
 class PackingLocation(models.Model):
     plant = models.ForeignKey(Plant, on_delete=models.CASCADE, related_name="factory_packing_locations")

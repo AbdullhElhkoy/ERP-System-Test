@@ -1,0 +1,517 @@
+{% extends "admin/base_site.html" %}
+
+{% block content %}
+{% csrf_token %}
+
+<style>
+  .excel-wrapper {
+    overflow-x: auto;
+    margin-top: 15px;
+    box-shadow: 0 2px 5px rgba(0,0,0,0.05);
+  }
+  
+  .excel-table {
+    border-collapse: collapse;
+    width: 100%;
+    font-size: 12px;
+    text-align: center;
+    background-color: #fff;
+  }
+
+  .excel-table th {
+    background-color: #f1f5f9;
+    color: #334155;
+    font-weight: 700;
+    padding: 8px 4px;
+    border: 1px solid #cbd5e1;
+    white-space: nowrap;
+  }
+
+  .excel-table td {
+    border: 1px solid #cbd5e1;
+    padding: 0 !important;
+    margin: 0;
+    height: 32px;
+  }
+
+  .excel-table input[type="text"],
+  .excel-table input[type="number"],
+  .excel-table input[type="date"],
+  .excel-table input[type="time"],
+  .excel-table select {
+    width: 100%;
+    height: 100%;
+    border: none;
+    outline: none;
+    background: transparent;
+    text-align: center;
+    font-size: 12px;
+    box-sizing: border-box;
+    padding: 2px;
+  }
+
+  .excel-table input:focus,
+  .excel-table select:focus {
+    background-color: #e0f2fe !important;
+    box-shadow: inset 0 0 0 2px #0284c7;
+  }
+
+  .excel-table input[readonly] {
+    background-color: #f1f5f9 !important;
+    color: #64748b;
+    cursor: not-allowed;
+  }
+
+  .btn-mini {
+    background: none;
+    border: none;
+    cursor: pointer;
+    font-size: 11px;
+    padding: 0 2px;
+  }
+
+  tr.rep-row {
+    background-color: #f0f9ff !important;
+    font-weight: 600;
+  }
+
+  .disabled-cell {
+    background-color: #e2e8f0 !important;
+    color: #94a3b8;
+  }
+</style>
+
+<div style="margin-bottom: 20px;">
+    <h1>إدخال المنتج النهائي - {{ plant.plant_name }} - {{ packing_type.name }}</h1>
+</div>
+
+<div class="excel-wrapper">
+<table id="entry-table" class="excel-table">
+  <thead>
+    <tr>
+      <th style="min-width: 60px;">نوع الصف</th>
+      <th style="min-width: 100px;">الكود</th>
+      <th style="min-width: 110px;">مكان الإنتاج</th>
+      <th style="min-width: 120px;">تاريخ الإنتاج</th>
+      <th style="min-width: 50px;">الوردية</th>
+      <th style="min-width: 80px;">نوع المنتج</th>
+      <th style="min-width: 90px;">وقت السحب</th>
+      <th style="min-width: 110px;">QC Inspector</th>
+      <th style="min-width: 70px;">حالة السحب</th>
+      {% for t in chemical_tests %}<th data-test-id="{{ t.id }}" data-kind="chemical" style="min-width: 75px;">{{ t.name }} (كيميائي)</th>{% endfor %}
+      <th style="min-width: 110px;">Lab Chemist</th>
+      <th style="min-width: 110px;">Lab SHIFT HEAD</th>
+      {% for t in physical_tests %}<th data-test-id="{{ t.id }}" data-kind="physical" style="min-width: 75px;">{{ t.name }} (فيزيائي)</th>{% endfor %}
+      <th style="min-width: 90px;">وقت النتيجة</th>
+      <th style="min-width: 65px;">الوزن</th>
+      <th style="min-width: 90px;">الجريد</th>
+      <th style="min-width: 110px;">سبب المحلي</th>
+      <th style="min-width: 110px;">سبب غير المطابق</th>
+      <th style="min-width: 110px;">QC SHIFT HEAD</th>
+      <th style="min-width: 40px;">حذف</th>
+    </tr>
+  </thead>
+  <tbody id="entry-tbody"></tbody>
+</table>
+</div>
+
+<br>
+<div style="display:flex; gap:10px; margin-top:10px;">
+    <button id="add-ton" type="button" class="button">+ إضافة طن منفرد</button>
+    <button id="add-representative" type="button" class="button">+ إضافة عينة ممثلة ({{ default_group_size|default:4 }} أطنان)</button>
+    <button id="save-all" type="button" class="button default">حفظ الكل</button>
+</div>
+
+<!-- البيانات الممررة بأسلوب آمن عبر json_script -->
+{{ chemical_tests_json|json_script:"chemical-tests-data" }}
+{{ physical_tests_json|json_script:"physical-tests-data" }}
+{{ grades_json|json_script:"grades-data" }}
+{{ local_reasons_json|json_script:"local-reasons-data" }}
+{{ non_conforming_reasons_json|json_script:"non-conforming-reasons-data" }}
+{{ users_json|json_script:"users-data" }}
+{{ packing_locations_json|json_script:"locations-data" }}
+
+<script>
+const CHEMICAL_TESTS = JSON.parse(document.getElementById('chemical-tests-data').textContent);
+const PHYSICAL_TESTS = JSON.parse(document.getElementById('physical-tests-data').textContent);
+const GRADES = JSON.parse(document.getElementById('grades-data').textContent);
+const LOCAL_REASONS = JSON.parse(document.getElementById('local-reasons-data').textContent || '[]');
+const NON_CONFORMING_REASONS = JSON.parse(document.getElementById('non-conforming-reasons-data').textContent || '[]');
+const USERS = JSON.parse(document.getElementById('users-data').textContent || '[]');
+const LOCATIONS = JSON.parse(document.getElementById('locations-data').textContent || '[]');
+
+const NEXT_CYCLE = {{ next_cycle|default:1 }};
+const DEFAULT_GROUP_SIZE = {{ default_group_size|default:4 }};
+let globalSeqCounter = {{ next_sequence|default:1 }};
+let groupCounter = 0;
+
+function nextGroupLetter() {
+  groupCounter += 1;
+  return String.fromCharCode(64 + groupCounter);
+}
+
+function getTodayDate() { return new Date().toISOString().split('T')[0]; }
+function getCurrentTime() { const now = new Date(); return now.toTimeString().split(' ')[0].substring(0, 5); }
+
+function buildUserOptions() {
+  return `<option value="">-- اختر --</option>` + USERS.map(u => `<option value="${u.id}">${u.name}</option>`).join("");
+}
+
+function buildLocationOptions() {
+  return `<option value="">-- اختر --</option>` + LOCATIONS.map(l => `<option value="${l.id}">${l.name}</option>`).join("");
+}
+
+function buildGradeOptions() {
+  return `<option value="">-- اختر --</option>` + GRADES.map(g => `<option value="${g.id}" data-classification="${g.classification}">${g.code}</option>`).join("");
+}
+
+function toggleReasonFields(gradeSelect) {
+  const tr = gradeSelect.closest('tr');
+  const selectedOption = gradeSelect.options[gradeSelect.selectedIndex];
+  const classification = selectedOption ? selectedOption.getAttribute('data-classification') : '';
+
+  const localSelect = tr.querySelector('.local-reason');
+  const nonConfSelect = tr.querySelector('.non-conforming-reason');
+
+  if (localSelect) {
+    localSelect.disabled = (classification !== 'local');
+    if (localSelect.disabled) localSelect.value = '';
+  }
+  if (nonConfSelect) {
+    nonConfSelect.disabled = (classification !== 'non_conforming');
+    if (nonConfSelect.disabled) nonConfSelect.value = '';
+  }
+}
+
+// إعادة تسلسل كافة الأطنان المضافة لتفادي أي ثغرات أو قفزات أرقام عند الإضافة أو الحذف
+function resequenceAll() {
+  let seq = globalSeqCounter;
+  const groups = {};
+
+  document.querySelectorAll("#entry-tbody tr").forEach(tr => {
+    if (tr.dataset.rowType === "ton") {
+      tr.dataset.seq = seq;
+      const codeInput = tr.querySelector(".ton-code input");
+      if (codeInput) codeInput.value = `C${NEXT_CYCLE}(${seq})`;
+      
+      const group = tr.dataset.groupLetter;
+      if (group) {
+        groups[group] = groups[group] || [];
+        groups[group].push(seq);
+      }
+      seq++;
+    }
+  });
+
+  // تحديث كود العينة الممثلة ومجموع الأوزان الخاص بها
+  Object.keys(groups).forEach(groupLetter => {
+    const repTr = document.querySelector(`tr[data-row-type="representative"][data-group="${groupLetter}"]`);
+    if (repTr) {
+      const seqs = groups[groupLetter];
+      const repCodeCell = repTr.querySelector(".rep-code");
+      if (repCodeCell) repCodeCell.textContent = seqs.length ? `C${NEXT_CYCLE}(${seqs.join("+")})` : "C()";
+      calculateGroupWeight(groupLetter);
+    }
+  });
+}
+
+// حساب مجموع أوزان الأطنان للعينات الممثلة تلقائياً
+function calculateGroupWeight(groupLetter) {
+  const tonRows = document.querySelectorAll(`tr[data-row-type="ton"][data-group-letter="${groupLetter}"]`);
+  let totalWeight = 0;
+  tonRows.forEach(tr => {
+    const val = parseFloat(tr.querySelector(".weight").value) || 0;
+    totalWeight += val;
+  });
+  const repTr = document.querySelector(`tr[data-row-type="representative"][data-group="${groupLetter}"]`);
+  if (repTr) {
+    const weightInput = repTr.querySelector(".rep-weight");
+    if (weightInput) weightInput.value = totalWeight ? totalWeight.toFixed(2) : "";
+  }
+}
+
+// دالة نسخ القيمة من العينة الممثلة لجميع الأطنان التابعة لها (مع إمكانية تعديل كل طن بشكل منفرد)
+function syncRepresentativeValueToTons(repTr, selector, targetSelector) {
+  const groupLetter = repTr.dataset.group;
+  const sourceElem = repTr.querySelector(selector);
+  if (!sourceElem) return;
+  const val = sourceElem.value;
+
+  const tonRows = document.querySelectorAll(`tr[data-row-type="ton"][data-group-letter="${groupLetter}"]`);
+  tonRows.forEach(tr => {
+    const targetElem = tr.querySelector(targetSelector);
+    if (targetElem) targetElem.value = val;
+  });
+}
+
+function addTonRow(groupLetter) {
+  const tbody = document.getElementById("entry-tbody");
+  const tr = document.createElement("tr");
+  tr.dataset.rowType = "ton";
+  if (groupLetter) tr.dataset.groupLetter = groupLetter;
+
+  let chemicalCells = CHEMICAL_TESTS.map(t => `<td><input type="number" step="any" class="chemical-input" data-test-id="${t.id}"></td>`).join(""); 
+  let physicalCells = PHYSICAL_TESTS.map(t => `<td><input type="number" step="any" class="physical-input" placeholder="تحت الاختبار" data-test-id="${t.id}"></td>`).join("");
+
+  tr.innerHTML = `
+    <td>عينة منفردة</td>
+    <td class="ton-code"><input type="text" readonly></td>
+    <td><select class="packing-location">${buildLocationOptions()}</select></td>
+    <td>
+      <div style="display:flex; align-items:center;">
+        <input type="date" class="production-date">
+        <button type="button" class="btn-mini" onclick="this.previousElementSibling.value=getTodayDate()" title="تاريخ اليوم">📅</button>
+      </div>
+    </td>
+    <td><select class="shift"><option value="A">A</option><option value="B">B</option><option value="C">C</option><option value="D">D</option></select></td>
+    <td><input type="text" class="product-type" value="{{ packing_type.name }}" readonly></td>
+    <td>
+      <div style="display:flex; align-items:center;">
+        <input type="time" class="sampling-time">
+        <button type="button" class="btn-mini" onclick="this.previousElementSibling.value=getCurrentTime()" title="الوقت الحالي">⏰</button>
+      </div>
+    </td>
+    <td><select class="qc-inspector">${buildUserOptions()}</select></td>
+    <td><select class="sampling-status"><option value="تم">تم</option><option value="لم يتم">لم يتم</option></select></td>
+    ${chemicalCells}
+    <td class="disabled-cell">-</td>
+    <td class="disabled-cell">-</td>
+    ${physicalCells}
+    <td>
+      <div style="display:flex; align-items:center;">
+        <input type="time" class="result-time">
+        <button type="button" class="btn-mini" onclick="this.previousElementSibling.value=getCurrentTime()" title="الوقت الحالي">⏰</button>
+      </div>
+    </td>
+    <td><input type="number" step="any" class="weight" oninput="if(this.closest('tr').dataset.groupLetter) calculateGroupWeight(this.closest('tr').dataset.groupLetter)"></td>
+    <td><select class="grade" onchange="toggleReasonFields(this)">${buildGradeOptions()}</select></td>
+    <td><select class="local-reason" disabled><option value="">-- اختر --</option>${LOCAL_REASONS.map(r => `<option value="${r.id}">${r.text}</option>`).join('')}</select></td>
+    <td><select class="non-conforming-reason" disabled><option value="">-- اختر --</option>${NON_CONFORMING_REASONS.map(r => `<option value="${r.id}">${r.text}</option>`).join('')}</select></td>
+    <td class="disabled-cell">-</td>
+    <td><button type="button" onclick="removeRow(this)" style="color:red; background:none; border:none; cursor:pointer; font-weight:bold;">X</button></td>
+  `;
+  
+  if (groupLetter) {
+    const groupTons = document.querySelectorAll(`tr[data-group-letter="${groupLetter}"]`);
+    if (groupTons.length > 0) {
+      groupTons[groupTons.length - 1].after(tr);
+    } else {
+      const repRow = document.querySelector(`tr[data-row-type="representative"][data-group="${groupLetter}"]`);
+      if (repRow) repRow.after(tr);
+      else tbody.appendChild(tr);
+    }
+  } else {
+    tbody.appendChild(tr);
+  }
+
+  resequenceAll();
+  return tr;
+}
+
+function addRepresentativeRow() {
+  const groupLetter = nextGroupLetter();
+  const tbody = document.getElementById("entry-tbody");
+  const tr = document.createElement("tr");
+  tr.dataset.rowType = "representative";
+  tr.dataset.group = groupLetter;
+  tr.classList.add("rep-row");
+
+  let chemicalCells = CHEMICAL_TESTS.map(t => `<td><input type="number" step="any" class="chemical-input" data-test-id="${t.id}" oninput="syncRepresentativeValueToTons(this.closest('tr'), '.chemical-input[data-test-id=\\'${t.id}\\']', '.chemical-input[data-test-id=\\'${t.id}\\']')"></td>`).join("");
+  let physicalCells = PHYSICAL_TESTS.map(() => `<td class="disabled-cell">-</td>`).join("");
+
+  tr.innerHTML = `
+    <td>عينة ممثلة</td>
+    <td class="rep-code" data-group="${groupLetter}" style="font-weight:bold;">C()</td>
+    <td><select class="packing-location" onchange="syncRepresentativeValueToTons(this.closest('tr'), '.packing-location', '.packing-location')">${buildLocationOptions()}</select></td>
+    <td>
+      <div style="display:flex; align-items:center;">
+        <input type="date" class="production-date" onchange="syncRepresentativeValueToTons(this.closest('tr'), '.production-date', '.production-date')">
+        <button type="button" class="btn-mini" onclick="this.previousElementSibling.value=getTodayDate(); syncRepresentativeValueToTons(this.closest('tr'), '.production-date', '.production-date')">📅</button>
+      </div>
+    </td>
+    <td><select class="shift" onchange="syncRepresentativeValueToTons(this.closest('tr'), '.shift', '.shift')"><option value="A">A</option><option value="B">B</option><option value="C">C</option><option value="D">D</option></select></td>
+    <td><input type="text" class="product-type" value="{{ packing_type.name }}" readonly></td>
+    <td>
+      <div style="display:flex; align-items:center;">
+        <input type="time" class="sampling-time" onchange="syncRepresentativeValueToTons(this.closest('tr'), '.sampling-time', '.sampling-time')">
+        <button type="button" class="btn-mini" onclick="this.previousElementSibling.value=getCurrentTime(); syncRepresentativeValueToTons(this.closest('tr'), '.sampling-time', '.sampling-time')" title="الوقت الحالي">⏰</button>
+      </div>
+    </td>
+    <td><select class="qc-inspector" onchange="syncRepresentativeValueToTons(this.closest('tr'), '.qc-inspector', '.qc-inspector')">${buildUserOptions()}</select></td>
+    <td><select class="sampling-status" onchange="syncRepresentativeValueToTons(this.closest('tr'), '.sampling-status', '.sampling-status')"><option value="تم">تم</option><option value="لم يتم">لم يتم</option></select></td>
+    ${chemicalCells}
+    <td><select class="lab-chemist" onchange="syncRepresentativeValueToTons(this.closest('tr'), '.lab-chemist', '.lab-chemist')">${buildUserOptions()}</select></td>
+    <td><select class="lab-shift-head" onchange="syncRepresentativeValueToTons(this.closest('tr'), '.lab-shift-head', '.lab-shift-head')">${buildUserOptions()}</select></td>
+    ${physicalCells}
+    <td>
+      <div style="display:flex; align-items:center;">
+        <input type="time" class="result-time" onchange="syncRepresentativeValueToTons(this.closest('tr'), '.result-time', '.result-time')">
+        <button type="button" class="btn-mini" onclick="this.previousElementSibling.value=getCurrentTime(); syncRepresentativeValueToTons(this.closest('tr'), '.result-time', '.result-time')" title="الوقت الحالي">⏰</button>
+      </div>
+    </td>
+    <td><input type="number" step="any" class="rep-weight" readonly placeholder="مجموع" style="font-weight:bold;"></td>
+    <td class="disabled-cell" colspan="3">-</td>
+    <td><select class="qc-shift-head"><option value="">لم تتم المراجعة</option><option value="reviewed">تمت مراجعته</option></select></td>
+    <td>
+      <button type="button" onclick="removeRow(this)" style="color:red; border:none; background:none; cursor:pointer; font-weight:bold;">X</button>
+    </td>
+  `;
+  tbody.appendChild(tr);
+
+  for (let i = 0; i < DEFAULT_GROUP_SIZE; i++) {
+    addTonRow(groupLetter);
+  }
+}
+
+function removeRow(btn) {
+  const tr = btn.closest('tr');
+  const group = tr.dataset.group || tr.dataset.groupLetter;
+  
+  if (tr.dataset.rowType === "representative") {
+    document.querySelectorAll(`tr[data-group-letter="${group}"]`).forEach(t => t.remove());
+    tr.remove();
+  } else {
+    tr.remove();
+  }
+  resequenceAll();
+}
+
+document.getElementById("add-ton").addEventListener("click", () => addTonRow(null));
+document.getElementById("add-representative").addEventListener("click", addRepresentativeRow);
+
+/* التنقل بالكيبورد بأسلوب Excel (Enter / الأسهم) */
+document.addEventListener('keydown', function (e) {
+  const activeElement = document.activeElement;
+  if (!activeElement || (activeElement.tagName !== 'INPUT' && activeElement.tagName !== 'SELECT')) return;
+
+  const cell = activeElement.closest('td');
+  if (!cell) return;
+
+  const row = cell.closest('tr');
+  const cellIndex = Array.from(row.children).indexOf(cell);
+
+  let targetRow = null;
+  let targetCell = null;
+
+  if (e.key === 'Enter' || e.key === 'ArrowDown') {
+    e.preventDefault();
+    targetRow = row.nextElementSibling;
+    if (targetRow) targetCell = targetRow.children[cellIndex];
+  } else if (e.key === 'ArrowUp') {
+    e.preventDefault();
+    targetRow = row.previousElementSibling;
+    if (targetRow) targetCell = targetRow.children[cellIndex];
+  } else if (e.key === 'ArrowLeft') {
+    targetCell = cell.nextElementSibling;
+  } else if (e.key === 'ArrowRight') {
+    targetCell = cell.previousElementSibling;
+  }
+
+  if (targetCell) {
+    const targetInput = targetCell.querySelector('input:not([readonly]), select:not([disabled])');
+    if (targetInput) {
+      targetInput.focus();
+      if (targetInput.select) targetInput.select();
+    }
+  }
+});
+
+/* دعم اللصق المباشر من Excel */
+document.getElementById("entry-table").addEventListener("paste", function(e) {
+  const active = document.activeElement;
+  if (!active || !active.closest("td")) return;
+  e.preventDefault();
+  const text = (e.clipboardData || window.clipboardData).getData("text");
+  const rows = text.split("\n").filter(r => r.length);
+  let startRow = active.closest("tr");
+  let startCellIndex = Array.from(active.closest("td").parentNode.children).indexOf(active.closest("td"));
+
+  rows.forEach((rowText, i) => {
+    let targetRow = startRow;
+    for (let k = 0; k < i; k++) {
+      targetRow = targetRow.nextElementSibling;
+      if (!targetRow) return;
+    }
+    if (!targetRow) return;
+    const cells = rowText.split("\t");
+    cells.forEach((val, j) => {
+      const cellIndex = startCellIndex + j;
+      const cell = targetRow.children[cellIndex];
+      if (!cell) return;
+      const input = cell.querySelector("input:not([readonly]), select:not([disabled])");
+      if (input) input.value = val.trim();
+    });
+  });
+});
+
+/* حفظ البيانات وإرسالها إلى السيرفر */
+document.getElementById("save-all").addEventListener("click", function() {
+  const rows = [];
+
+  document.querySelectorAll("#entry-tbody tr").forEach(tr => {
+    const rowType = tr.dataset.rowType;
+
+    if (rowType === "ton") {
+      const physical = {};
+      const chemical = {};
+      tr.querySelectorAll(".physical-input").forEach(inp => { if (inp.value !== "") physical[inp.dataset.testId] = inp.value; });
+      tr.querySelectorAll(".chemical-input").forEach(inp => { if (inp.value !== "") chemical[inp.dataset.testId] = inp.value; });
+
+      rows.push({
+        row_type: "ton",
+        group: tr.dataset.groupLetter || null,
+        packing_location_id: tr.querySelector(".packing-location") ? tr.querySelector(".packing-location").value : null,
+        production_date: tr.querySelector(".production-date").value,
+        shift: tr.querySelector(".shift").value,
+        product_type: tr.querySelector(".product-type").value,
+        sampling_time: tr.querySelector(".sampling-time").value,
+        qc_inspector_id: tr.querySelector(".qc-inspector").value || null,
+        sampling_status: tr.querySelector(".sampling-status").value,
+        physical: physical,
+        chemical: chemical,
+        result_time: tr.querySelector(".result-time").value,
+        weight: tr.querySelector(".weight").value,
+        grade_id: tr.querySelector(".grade").value || null,
+        local_reason_id: tr.querySelector(".local-reason") ? tr.querySelector(".local-reason").value : null,
+        non_conforming_reason_id: tr.querySelector(".non-conforming-reason") ? tr.querySelector(".non-conforming-reason").value : null,
+      });
+    } else if (rowType === "representative") {
+      const chemical = {};
+      tr.querySelectorAll(".chemical-input").forEach(inp => { if (inp.value !== "") chemical[inp.dataset.testId] = inp.value; });
+
+      rows.push({
+        row_type: "representative",
+        group: tr.dataset.group,
+        packing_location_id: tr.querySelector(".packing-location") ? tr.querySelector(".packing-location").value : null,
+        production_date: tr.querySelector(".production-date").value,
+        shift: tr.querySelector(".shift").value,
+        product_type: tr.querySelector(".product-type").value,
+        sampling_time: tr.querySelector(".sampling-time").value,
+        qc_inspector_id: tr.querySelector(".qc-inspector").value || null,
+        sampling_status: tr.querySelector(".sampling-status").value,
+        chemical: chemical,
+        lab_chemist_id: tr.querySelector(".lab-chemist").value || null,
+        lab_shift_head_id: tr.querySelector(".lab-shift-head").value || null,
+        qc_shift_head: tr.querySelector(".qc-shift-head").value || null,
+      });
+    }
+  });
+
+  fetch(window.location.href, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "X-CSRFToken": document.querySelector("[name=csrfmiddlewaretoken]").value
+    },
+    body: JSON.stringify({rows: rows}),
+  }).then(r => r.json()).then(data => {
+    if (data.status === "ok") {
+      alert("تم الحفظ بنجاح: " + data.rows_saved + " صف");
+      location.reload();
+    } else {
+      alert("حدث خطأ أثناء الحفظ: " + (data.message || "تأكد من صحة البيانات المتبوعة"));
+    }
+  });
+});
+</script>
+{% endblock %}

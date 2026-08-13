@@ -4,9 +4,10 @@ from .final_product import (
     OutputPoint, OutputPointTest, OutputReading, OutputAnalysisResult,
     QualityConformityResult, PackingEvent, PackingConversion,
     PlantLotSetting, Ton, RepresentativeSample, TonPhysicalResult,
-    SampleChemicalResult, TonGradeAssignment,
+    SampleChemicalResult, TonGradeAssignment, GradeReason, RepresentativeGroupSize,
 )
 from .plant_proxy import FactoryPlant
+from .dynamic_fields import FieldDefinition, PackingTypeField
 
 __all__ = [
     "TestDefinition", "PackingLocation", "PackingType", "ConformityRule", "Grade",
@@ -15,5 +16,6 @@ __all__ = [
     "QualityConformityResult", "PackingEvent", "PackingConversion",
     "PlantLotSetting", "Ton", "RepresentativeSample", "TonPhysicalResult",
     "SampleChemicalResult", "TonGradeAssignment",
-    "FactoryPlant",
+    "FactoryPlant","GradeReason",
+    "RepresentativeGroupSize", "FieldDefinition", "PackingTypeField",
 ]

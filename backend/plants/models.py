@@ -67,7 +67,7 @@ class OrgPosition(models.Model):
     )
     hierarchy_level = models.IntegerField(
         db_column="hierarchy_level",
-        validators=[MinValueValidator(1), MaxValueValidator(10)],
+        validators=[MinValueValidator(0), MaxValueValidator(10)],
     )
 
     class Meta:
