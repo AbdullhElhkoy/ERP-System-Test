@@ -101,22 +101,16 @@ def process_reading_grid(request):
     selected_stage_ids = [int(s) for s in request.GET.getlist("stages")]
     selected_stages = ProcessStage.objects.filter(plant=plant, pk__in=selected_stage_ids)
 
-    stages_json = json.dumps(
-        [{"id": s.pk, "name": s.name, "order": s.order} for s in stages],
-        ensure_ascii=False,
-    )
-    tests_json = json.dumps(
-        [
-            {
-                "id": t.pk,
-                "name": t.name,
-                "category": t.category,
-                "unit": t.unit,
-            }
-            for t in tests
-        ],
-        ensure_ascii=False,
-    )
+    stages_json = [{"id": s.pk, "name": s.name, "order": s.order} for s in stages]
+    tests_json = [
+        {
+            "id": t.pk,
+            "name": t.name,
+            "category": t.category,
+            "unit": t.unit,
+        }
+        for t in tests
+    ]
 
     context = {
         "plant": plant,
