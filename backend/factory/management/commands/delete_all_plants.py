@@ -4,15 +4,26 @@
 الاستخدام:
     python manage.py delete_all_plants            # يعرض المصانع ويطلب التأكيد
     python manage.py delete_all_plants --yes      # بدون تأكيد
-    python manage.py delete_all_plants --yes --keep-positions  # يحذف كل المصانع لكن يحفظ المناصب التي لا تخص مصنعاً
+    python manage.py delete_all_plants --yes --keep-positions  # يحذف كل المصانع لكن يحفظ المناصب
+
+المنهجية:
+    - يُجمع كل الموديلات التي تشير (مباشرة أو عبر سلسلة FKs) إلى Plant من التطبيقات:
+      factory, orders, raw_materials.
+    - تُحذف في جولات: كل نموذج يُحذف أولاً، وأي نموذج يُرجع ProtectedError
+      يُؤجَّل إلى الجولة التالية (يُحذف النموذج المرجع إليه أولاً)، حتى لا يعتمد
+      الأمر على قائمة يدوية قد تنسى بعض الموديلات.
 """
 
-from django.core.management.base import BaseCommand, CommandError
+from django.core.management.base import BaseCommand
 from django.db import transaction
-from django.db.models import ForeignKey
+from django.db.models import ForeignKey, OneToOneField
 from django.apps import apps
+from django.db.utils import ProgrammingError, OperationalError
+from django.db.models.deletion import ProtectedError
 
 from plants.models import Plant, OrgPosition, DepartmentPlantScope
+
+SHARED_LABELS = {"factory.FieldDefinition", "factory.FactoryPlant"}
 
 
 class Command(BaseCommand):
@@ -42,63 +53,57 @@ class Command(BaseCommand):
                 self.stdout.write(self.style.WARNING("تم الإلغاء."))
                 return
 
+        labels = self._collect_related_models()
+        labels.append("plants.OrgPosition")
+        labels.append("plants.DepartmentPlantScope")
+
         with transaction.atomic():
-            plant_ids = [p.pk for p in plants]
+            remaining = set(labels)
+            deleted = set()
+            while remaining:
+                progressed = False
+                for label in list(remaining):
+                    if label in deleted:
+                        continue
+                    try:
+                        n = apps.get_model(label).objects.all().delete()[0]
+                    except ProtectedError as e:
+                        # أضف أي موديل يحمي من حذف — يُحذف قبل هذا
+                        for obj in e.protected_objects:
+                            remaining.add(obj._meta.label_lower)
+                        continue
+                    except (ProgrammingError, OperationalError) as e:
+                        self.stdout.write(
+                            self.style.WARNING(
+                                f"تخطي {label} (الجدول غير موجود؟): {e}"
+                            )
+                        )
+                        n = 0
+                    deleted.add(label)
+                    remaining.discard(label)
+                    progressed = True
+                    if n:
+                        self.stdout.write(f"حذف {label}: {n}")
+                if not progressed:
+                    self.stdout.write(
+                        self.style.ERROR(
+                            "لم يتبقَّ سجلات محمية من المصانع القديمة — تحقق من "
+                            "الموديلات: " + ", ".join(sorted(remaining))
+                        )
+                    )
+                    break
 
-            # 1) حذف السجلات المحمية بـ PROTECT في orders
-            self._delete_for_plant("orders.OrderPlantAllocation", "plant", plant_ids)
-            self._delete_for_plant("orders.OrderPlantAllocationChangeLog", "from_plant", plant_ids)
-            self._delete_for_plant("orders.OrderPlantAllocationChangeLog", "to_plant", plant_ids)
-            self._delete_for_plant("orders.OrderMovement", "source_plant", plant_ids)
-
-            # 2) حذف السجلات المحمية بـ PROTECT في raw_materials
-            self._delete_for_plant("raw_materials.MaterialStorage", "plant", plant_ids)
-            self._delete_for_plant("raw_materials.RawMaterialDelivery", "plant", plant_ids)
-            self._delete_for_plant("raw_materials.InventoryTransaction", "plant", plant_ids)
-            self._delete_for_plant("raw_materials.RawMaterialSample", "plant", plant_ids)
-
-            # 3) حذف بيانات factory يدوياً بترتيب التبعية (بعض FKs محمية PROTECT)
-            #    وتمنع الحذف التلقائي CASCADE بين قراءات السحب ونقاط السحب.
-            factory_models = [
-                "factory.FloorStockMovement",
-                "factory.PackingConversion",
-                "factory.PackingEvent",
-                "factory.QualityConformityResult",
-                "factory.TonGradeAssignment",
-                "factory.SampleChemicalResult",
-                "factory.RepresentativeSample",
-                "factory.Ton",
-                "factory.OutputReading",
-                "factory.OutputPoint",
-                "factory.Grade",
-                "factory.GradeReason",
-                "factory.ConformityRule",
-                "factory.TestDefinition",
-                "factory.RepresentativeGroupSize",
-                "factory.PackingTypeField",
-                "factory.PackingLocation",
-                "factory.PackingType",
-                "factory.PlantLotSetting",
-                "factory.ProcessReading",
-                "factory.ProcessStage",
-            ]
-            for label in factory_models:
-                self._delete_all(label)
-
-            # 4) حذف مناصب المصنع (لا تحذف تلقائياً لـ DO_NOTHING)
-            #    يُحذف الكل وليس المرتبط بالمصانع فقط، لأن المناصب قد تُترك أيتاماً
-            #    بعد حذف المصانع في جولة سابقة.
+            # حذف المناصب (لا تحذف تلقائياً لـ DO_NOTHING)
             if not options["keep_positions"]:
                 n = OrgPosition.objects.all().delete()[0]
-                self.stdout.write(f"حذف OrgPosition: {n}")
-            n = DepartmentPlantScope.objects.filter(plant_id__in=plant_ids).delete()[0]
-            self.stdout.write(f"حذف DepartmentPlantScope: {n}")
+                if n:
+                    self.stdout.write(f"حذف OrgPosition: {n}")
 
-            # 5) حذف المصانع نفسها
-            n = Plant.objects.filter(pk__in=plant_ids).delete()[0]
-            self.stdout.write(f"حذف المصانع والبيانات المرتبطة: {n}")
+            # حذف المصانع نفسها
+            n = Plant.objects.filter(pk__in=[p.pk for p in plants]).delete()[0]
+            self.stdout.write(f"حذف المصانع: {n}")
 
-            # 5) إنشاء مصنع جديد فارغ
+            # إنشاء مصنع جديد فارغ
             new_plant = Plant.objects.create(plant_name="مصنع جديد")
             self.stdout.write(
                 self.style.SUCCESS(
@@ -106,15 +111,38 @@ class Command(BaseCommand):
                 )
             )
 
-    def _delete_all(self, model_label):
-        Model = apps.get_model(model_label)
-        n = Model.objects.all().delete()[0]
-        if n:
-            self.stdout.write(f"حذف {model_label}: {n}")
+    def _collect_related_models(self):
+        """كل الموديلات (من التطبيقات factory/orders/raw_materials) التي تشير إلى Plant
+        عبر سلسلة FKs (مباشرة أو غير مباشرة)، عدا المشتركة للشركة."""
+        plant_label = "plants.plant"
+        related = set()
+        frontier = {plant_label}
+        seen = set()
 
-    def _delete_for_plant(self, model_label, fk_field, plant_ids):
-        Model = apps.get_model(model_label)
-        filter_kwargs = {f"{fk_field}_id__in": plant_ids}
-        n = Model.objects.filter(**filter_kwargs).delete()[0]
-        if n:
-            self.stdout.write(f"حذف {model_label}: {n}")
+        def fk_targets(label):
+            out = set()
+            try:
+                model = apps.get_model(label)
+            except LookupError:
+                return out
+            for f in model._meta.get_fields():
+                if isinstance(f, (ForeignKey, OneToOneField)) and f.related_model is not None:
+                    t = f.related_model
+                    if not t._meta.proxy:
+                        out.add(t._meta.label_lower)
+            return out
+
+        while frontier:
+            current = frontier.pop()
+            if current in seen:
+                continue
+            seen.add(current)
+            for app_label in ("factory", "orders", "raw_materials"):
+                for model in apps.get_app_config(app_label).get_models():
+                    label = model._meta.label_lower
+                    if model._meta.proxy or label in SHARED_LABELS:
+                        continue
+                    if current in fk_targets(label):
+                        related.add(label)
+                        frontier.add(label)
+        return sorted(related)
