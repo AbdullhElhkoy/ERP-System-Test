@@ -33,4 +33,11 @@
     <a class="button" href="{{ link.url }}">{{ link.title }}</a>
 {% endfor %}
 </div>
+
+<div class="group-title">🏢 إعدادات مشتركة (لكل الشركة)</div>
+<div class="links-wrap">
+{% for link in company_groups %}
+    <a class="button" href="{{ link.url }}">{{ link.title }}</a>
+{% endfor %}
+</div>
 {% endblock %}

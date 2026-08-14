@@ -113,9 +113,11 @@ class FactoryPlantAdmin(admin.ModelAdmin):
             admin_url("outputpoint", "نقاط السحب (Output Points)"),
             admin_url("representativegroupsize", "حجم مجموعة العينة الممثلة"),
             admin_url("plantlotsetting", "إعدادات الدفعات (Plant Lot Settings)"),
-            admin_url("fielddefinition", "الحقول الديناميكية (Field Definitions)"),
-            admin_url("packingtypefield", "ربط الحقول بأنواع التعبئة (Packing Type Fields)"),
         ]
+        final_product_groups.append((
+            f"/admin/factory/packingtypefield/?packing_type__plant__id__exact={plant.pk}",
+            "ربط الحقول بأنواع التعبئة (Packing Type Fields)",
+        ))
         data_groups = [
             admin_url("outputreading", "قراءات السحب (Output Readings)"),
             admin_url("ton", "الأطنان (Tons)"),
@@ -128,6 +130,9 @@ class FactoryPlantAdmin(admin.ModelAdmin):
             admin_url("floorstockmovement", "حركات المخزون الأرضي (Floor Movements)"),
             admin_url("processreading", "قراءات التفاعل (Process Readings)"),
         ]
+        company_groups = [
+            ("/admin/factory/fielddefinition/", "مكتبة الحقول الديناميكية (لكل الشركة)"),
+        ]
 
         context = {
             **self.admin_site.each_context(request),
@@ -136,6 +141,7 @@ class FactoryPlantAdmin(admin.ModelAdmin):
             "reaction_groups": [{"url": u, "title": t} for u, t in reaction_groups],
             "final_product_groups": [{"url": u, "title": t} for u, t in final_product_groups],
             "data_groups": [{"url": u, "title": t} for u, t in data_groups],
+            "company_groups": [{"url": u, "title": t} for u, t in company_groups],
         }
         return render(request, "factory/plant_settings.html", context)
 
@@ -356,9 +362,10 @@ class OutputReadingAdmin(PlantScopedAdminMixin, admin.ModelAdmin):
 
 
 @admin.register(QualityConformityResult)
-class QualityConformityResultAdmin(admin.ModelAdmin):
+class QualityConformityResultAdmin(PlantScopedAdminMixin, admin.ModelAdmin):
+    plant_lookup_field = "plant"
     list_display = ("reading", "conformity_rule", "grade", "quality_grade")
-    list_filter = ("quality_grade",)
+    list_filter = ("plant", "quality_grade")
 
 
 @admin.register(PackingEvent)
@@ -376,9 +383,10 @@ class PackingConversionAdmin(PlantScopedAdminMixin, admin.ModelAdmin):
 
 
 @admin.register(PlantLotSetting)
-class PlantLotSettingAdmin(admin.ModelAdmin):
+class PlantLotSettingAdmin(PlantScopedAdminMixin, admin.ModelAdmin):
+    plant_lookup_field = "plant"
     list_display = ("plant", "lot_mode", "sampling_department", "current_cycle", "current_sequence", "reset_threshold")
-    list_filter = ("lot_mode",)
+    list_filter = ("plant", "lot_mode")
 
 
 class TonPhysicalResultInline(admin.TabularInline):
@@ -415,9 +423,10 @@ class RepresentativeSampleAdmin(PlantScopedAdminMixin, admin.ModelAdmin):
 
 
 @admin.register(TonGradeAssignment)
-class TonGradeAssignmentAdmin(admin.ModelAdmin):
+class TonGradeAssignmentAdmin(PlantScopedAdminMixin, admin.ModelAdmin):
+    plant_lookup_field = "plant"
     list_display = ("ton", "grade", "reason", "assigned_by", "assigned_at")
-    list_filter = ("grade", "reason")
+    list_filter = ("plant", "grade", "reason")
     readonly_fields = ("assigned_by", "assigned_at")
 
     def save_model(self, request, obj, form, change):
@@ -449,7 +458,8 @@ class FieldDefinitionAdmin(admin.ModelAdmin):
 
 
 @admin.register(PackingTypeField)
-class PackingTypeFieldAdmin(admin.ModelAdmin):
+class PackingTypeFieldAdmin(PlantScopedAdminMixin, admin.ModelAdmin):
+    plant_lookup_field = "packing_type__plant"
     list_display = ("packing_type", "field", "order", "is_required")
     list_filter = ("packing_type", "field__category")
 
