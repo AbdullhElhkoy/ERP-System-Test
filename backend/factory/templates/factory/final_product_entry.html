@@ -119,8 +119,7 @@
 
 <br>
 <div style="display:flex; gap:10px; margin-top:10px;">
-    <button id="add-ton" type="button" class="button">+ إضافة طن منفرد</button>
-    <button id="add-representative" type="button" class="button">+ إضافة عينة ممثلة ({{ default_group_size|default:4 }} أطنان)</button>
+    <button id="add-representative" type="button" class="button">+ إضافة عينة ممثلة</button>
     <button id="save-all" type="button" class="button default">حفظ الكل</button>
 </div>
 
@@ -376,6 +375,7 @@ function addRepresentativeRow() {
     <td class="disabled-cell" colspan="4">-</td>
     <td><select class="qc-shift-head"><option value="">لم تتم المراجعة</option><option value="reviewed">تمت مراجعته</option></select></td>
     <td>
+      <button type="button" onclick="addTonRow(this.closest('tr').dataset.group)" style="color:#0284c7; border:none; background:none; cursor:pointer; font-weight:bold;" title="إضافة طن لهذه العينة">+ طن</button>
       <button type="button" onclick="removeRow(this)" style="color:red; border:none; background:none; cursor:pointer; font-weight:bold;">X</button>
     </td>
   `;
@@ -399,7 +399,6 @@ function removeRow(btn) {
   resequenceAll();
 }
 
-document.getElementById("add-ton").addEventListener("click", () => addTonRow(null));
 document.getElementById("add-representative").addEventListener("click", addRepresentativeRow);
 
 /* التنقل بالكيبورد بأسلوب Excel (Enter / الأسهم) */
