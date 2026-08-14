@@ -98,7 +98,7 @@ class FactoryPlantAdmin(admin.ModelAdmin):
             return error
 
         def admin_url(model, label):
-            return f"/admin/factory/{model}/?plant_id={plant.pk}", label
+            return f"/admin/factory/{model}/", label
 
         reaction_groups = [
             admin_url("processstage", "مراحل التفاعل (Process Stages)"),
@@ -115,9 +115,10 @@ class FactoryPlantAdmin(admin.ModelAdmin):
             admin_url("plantlotsetting", "إعدادات الدفعات (Plant Lot Settings)"),
         ]
         final_product_groups.append((
-            f"/admin/factory/packingtypefield/?plant_id={plant.pk}",
+            "/admin/factory/packingtypefield/",
             "ربط الحقول بأنواع التعبئة (Packing Type Fields)",
         ))
+        locked_spec = ("#", "المواصفة (معطلة حالياً)")
         data_groups = [
             admin_url("outputreading", "قراءات السحب (Output Readings)"),
             admin_url("ton", "الأطنان (Tons)"),
@@ -139,7 +140,10 @@ class FactoryPlantAdmin(admin.ModelAdmin):
             "plant": plant,
             "dashboard_url": f"/admin/factory/factoryplant/dashboard/{plant.pk}/",
             "reaction_groups": [{"url": u, "title": t} for u, t in reaction_groups],
-            "final_product_groups": [{"url": u, "title": t} for u, t in final_product_groups],
+            "final_product_groups": [
+                *[{"url": u, "title": t} for u, t in final_product_groups],
+                {"url": locked_spec[0], "title": locked_spec[1], "locked": True},
+            ],
             "data_groups": [{"url": u, "title": t} for u, t in data_groups],
             "company_groups": [{"url": u, "title": t} for u, t in company_groups],
         }
@@ -305,8 +309,17 @@ class ConformityRuleAdmin(PlantScopedAdminMixin, admin.ModelAdmin):
 @admin.register(Grade)
 class GradeAdmin(PlantScopedAdminMixin, admin.ModelAdmin):
     plant_lookup_field = "plant"
-    list_display = ("code", "plant", "classification", "is_active")
-    list_filter = ("plant", "classification", "is_active")
+    list_display = ("code", "classification", "parent", "is_active", "plant")
+    list_filter = ("plant", "classification", "parent", "is_active")
+    list_editable = ("is_active",)
+    search_fields = ("code",)
+
+    def formfield_for_foreignkey(self, db_field, request, **kwargs):
+        if db_field.name == "parent" and request.resolver_match:
+            plant_id = self._context_plant_id(request)
+            if plant_id:
+                kwargs["queryset"] = Grade.objects.filter(plant_id=plant_id, parent__isnull=True)
+        return super().formfield_for_foreignkey(db_field, request, **kwargs)
 
 
 class ProcessStageTestInline(admin.TabularInline):
@@ -444,8 +457,8 @@ class RepresentativeSampleAdmin(PlantScopedAdminMixin, admin.ModelAdmin):
 @admin.register(TonGradeAssignment)
 class TonGradeAssignmentAdmin(PlantScopedAdminMixin, admin.ModelAdmin):
     plant_lookup_field = "ton__plant"
-    list_display = ("ton", "grade", "reason", "assigned_by", "assigned_at")
-    list_filter = ("grade", "reason")
+    list_display = ("ton", "primary_grade", "secondary_grade", "reason", "assigned_by", "assigned_at")
+    list_filter = ("primary_grade", "secondary_grade", "reason")
     readonly_fields = ("assigned_by", "assigned_at")
 
     def plant(self, obj):
@@ -490,14 +503,14 @@ class PackingTypeFieldAdmin(PlantScopedAdminMixin, admin.ModelAdmin):
 @admin.register(FloorStockBalance)
 class FloorStockBalanceAdmin(PlantScopedAdminMixin, admin.ModelAdmin):
     plant_lookup_field = "plant"
-    list_display = ("plant", "grade", "quantity", "updated_at")
-    list_filter = ("plant", "grade")
+    list_display = ("plant", "grade", "status", "quantity", "updated_at")
+    list_filter = ("plant", "grade", "status")
     readonly_fields = ("quantity", "updated_at")
 
 
 @admin.register(FloorStockMovement)
 class FloorStockMovementAdmin(PlantScopedAdminMixin, admin.ModelAdmin):
     plant_lookup_field = "plant"
-    list_display = ("plant", "grade", "movement_type", "quantity", "ton", "occurred_at")
-    list_filter = ("plant", "grade", "movement_type")
+    list_display = ("plant", "grade", "status", "movement_type", "quantity", "ton", "occurred_at")
+    list_filter = ("plant", "grade", "status", "movement_type")
     search_fields = ("ton__code",)

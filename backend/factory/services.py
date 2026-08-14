@@ -88,21 +88,32 @@ def _resolve_test(test_id):
 
 
 def _apply_grade(ton, row, user):
-    grade_id = row.get("grade_id")
-    if not grade_id:
+    primary_id = row.get("primary_grade_id") or row.get("grade_id")
+    secondary_id = row.get("secondary_grade_id") or None
+    if not primary_id:
         return
-    grade = Grade.objects.filter(pk=grade_id).first()
-    if not grade:
+    primary = Grade.objects.filter(pk=primary_id).first()
+    if not primary:
         return
+    secondary = Grade.objects.filter(pk=secondary_id).first() if secondary_id else None
     reason_id = row.get("local_reason_id") or row.get("non_conforming_reason_id") or None
     TonGradeAssignment.objects.update_or_create(
         ton=ton,
         defaults={
-            "grade": grade,
+            "primary_grade": primary,
+            "secondary_grade": secondary,
             "reason_id": reason_id,
             "assigned_by": user,
         },
     )
+
+
+def ton_grade(ton):
+    """الجريد الفعلي للطن (الثانوي إن وجد وإلا الأساسي) أو None."""
+    if not hasattr(ton, "grade_assignment"):
+        return None
+    assignment = ton.grade_assignment
+    return assignment.secondary_grade or assignment.primary_grade
 
 
 def _apply_ton_physical_results(ton, row):
@@ -131,18 +142,21 @@ def _apply_conformity_results(reading, grade, plant):
         )
 
 
-def _apply_floor_stock_in(ton, grade, plant, occurred_at=None):
-    """إضافة وزن الطن إلى رصيد المخزون الأرضي للمصنع + الجريد."""
+def _apply_floor_stock_in(ton, grade, plant, occurred_at=None, status=FloorStockBalance.STATUS_GRADED):
+    """إضافة وزن الطن إلى رصيد المخزون الأرضي للمصنع + الجريد + الحالة."""
     if not grade:
         return
     occurred_at = occurred_at or timezone.now()
     with transaction.atomic():
-        balance, _ = FloorStockBalance.objects.get_or_create(plant=plant, grade=grade)
+        balance, _ = FloorStockBalance.objects.get_or_create(
+            plant=plant, grade=grade, status=status
+        )
         balance.quantity += ton.weight or Decimal("0")
         balance.save(update_fields=["quantity"])
         FloorStockMovement.objects.create(
             plant=plant,
             grade=grade,
+            status=status,
             ton=ton,
             movement_type=FloorStockMovement.MOVEMENT_IN,
             quantity=ton.weight or Decimal("0"),
@@ -150,14 +164,14 @@ def _apply_floor_stock_in(ton, grade, plant, occurred_at=None):
         )
 
 
-def _apply_floor_stock_out(plant, grade, quantity, occurred_at=None, ton=None, notes=""):
+def _apply_floor_stock_out(plant, grade, quantity, occurred_at=None, ton=None, notes="", status=FloorStockBalance.STATUS_GRADED):
     """خصم كمية من رصيد المخزون الأرضي عند التسليم أو التحويل."""
     if not grade or not quantity:
         return
     occurred_at = occurred_at or timezone.now()
     qty = Decimal(str(quantity))
     with transaction.atomic():
-        balance = FloorStockBalance.objects.filter(plant=plant, grade=grade).first()
+        balance = FloorStockBalance.objects.filter(plant=plant, grade=grade, status=status).first()
         if not balance:
             return
         balance.quantity = max(balance.quantity - qty, Decimal("0"))
@@ -165,6 +179,7 @@ def _apply_floor_stock_out(plant, grade, quantity, occurred_at=None, ton=None, n
         FloorStockMovement.objects.create(
             plant=plant,
             grade=grade,
+            status=status,
             ton=ton,
             movement_type=FloorStockMovement.MOVEMENT_OUT,
             quantity=qty,
@@ -281,9 +296,13 @@ def save_final_product_rows(plant, packing_type, rows, user):
 
         _apply_ton_physical_results(ton, row)
         _apply_grade(ton, row, user)
-        grade = ton.grade_assignment.grade if hasattr(ton, "grade_assignment") else None
+        grade = ton_grade(ton)
+        if grade:
+            ton.status = Ton.STATUS_GRADED
+            ton.save(update_fields=["status"])
         _apply_conformity_results(reading, grade, plant)
-        _apply_floor_stock_in(ton, grade, plant, occurred_at=reading.sampled_at)
+        stock_status = FloorStockBalance.STATUS_GRADED if grade else FloorStockBalance.STATUS_WAITING_NOT_SAMPLED
+        _apply_floor_stock_in(ton, grade, plant, occurred_at=reading.sampled_at, status=stock_status)
         _create_packing_event(reading, packing_type, row)
 
         if group_letter:

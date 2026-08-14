@@ -22,6 +22,14 @@ class PlantScopedAdminMixin:
                 pass
         return None
 
+    def lookup_allowed(self, lookup, value, request=None):
+        allowed = super().lookup_allowed(lookup, value, request)
+        if allowed:
+            return True
+        if lookup == f"{self.plant_lookup_field}__plant_id":
+            return True
+        return False
+
     def get_queryset(self, request):
         qs = super().get_queryset(request)
         plant_id = self._context_plant_id(request)

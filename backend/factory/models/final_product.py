@@ -159,6 +159,15 @@ class OutputAnalysisResult(models.Model):
 # ============================================================
 
 class Ton(models.Model):
+    STATUS_UNDER_TEST = "under_test"
+    STATUS_SAMPLED = "sampled"
+    STATUS_GRADED = "graded"
+    STATUS_CHOICES = [
+        (STATUS_UNDER_TEST, "تحت الاختبار (لم يُسحب)"),
+        (STATUS_SAMPLED, "تم سحب العينة"),
+        (STATUS_GRADED, "أخذ الجريد"),
+    ]
+
     plant = models.ForeignKey(Plant, on_delete=models.CASCADE, related_name="factory_tons")
     output_reading = models.ForeignKey(
         OutputReading, on_delete=models.CASCADE, related_name="tons", null=True, blank=True
@@ -168,6 +177,10 @@ class Ton(models.Model):
     production_shift = models.ForeignKey(
         ShiftType, on_delete=models.SET_NULL, null=True, blank=True,
         db_column="production_shift_id", related_name="factory_tons",
+    )
+    status = models.CharField(
+        max_length=20, choices=STATUS_CHOICES, default=STATUS_UNDER_TEST,
+        help_text="حالة الطن: تحت الاختبار حتى تُسحب العينة وتظهر النتيجة",
     )
 
     code = models.CharField(max_length=30, blank=True, default="")
@@ -308,7 +321,14 @@ class GradeReason(models.Model):
 
 class TonGradeAssignment(models.Model):
     ton = models.OneToOneField(Ton, on_delete=models.CASCADE, related_name="grade_assignment")
-    grade = models.ForeignKey(Grade, on_delete=models.PROTECT, related_name="ton_assignments")
+    primary_grade = models.ForeignKey(
+        Grade, on_delete=models.PROTECT, related_name="ton_primary_assignments",
+        help_text="الجريد الأساسي (تصدير / محلي / غير مطابق)",
+    )
+    secondary_grade = models.ForeignKey(
+        Grade, on_delete=models.SET_NULL, null=True, blank=True, related_name="ton_secondary_assignments",
+        help_text="الجريد الثانوي التابع للأساسي (اختياري)",
+    )
     reason = models.ForeignKey(
         GradeReason, on_delete=models.SET_NULL, null=True, blank=True, related_name="ton_assignments"
     )
@@ -322,7 +342,9 @@ class TonGradeAssignment(models.Model):
         db_table = "factory_ton_grade_assignments"
 
     def __str__(self):
-        return f"{self.ton} -> {self.grade}"
+        if self.secondary_grade_id:
+            return f"{self.ton} -> {self.primary_grade} / {self.secondary_grade}"
+        return f"{self.ton} -> {self.primary_grade}"
 
 
 # ============================================================
@@ -405,24 +427,50 @@ class QualityConformityResult(models.Model):
 
 class FloorStockBalance(models.Model):
     """
-    رصيد المخزون الأرضي الحالي لكل (مصنع + جريد). سطر واحد لكل توليفة.
+    رصيد المخزون الأرضي الحالي لكل (مصنع + جريد + حالة).
+    سطر واحد لكل توليفة. القسمان المنتظران للجريد لا يحملان جريداً (grade=None).
     """
+    STATUS_GRADED = "graded"
+    STATUS_WAITING_NOT_SAMPLED = "waiting_not_sampled"
+    STATUS_WAITING_SAMPLED = "waiting_sampled"
+    STATUS_CHOICES = [
+        (STATUS_GRADED, "أخذ الجريد"),
+        (STATUS_WAITING_NOT_SAMPLED, "في انتظار الجريد (لم يُسحب للمعمل)"),
+        (STATUS_WAITING_SAMPLED, "في انتظار الجريد (تم السحب للمعمل)"),
+    ]
+
     plant = models.ForeignKey(Plant, on_delete=models.CASCADE, related_name="factory_floor_stock_balances")
-    grade = models.ForeignKey(Grade, on_delete=models.CASCADE, related_name="floor_stock_balances")
+    grade = models.ForeignKey(
+        Grade, on_delete=models.CASCADE, null=True, blank=True, related_name="floor_stock_balances",
+        help_text="الجريد فقط لقسم \"أخذ الجريد\"، يبقى فارغاً للأقسام المنتظرة",
+    )
+    status = models.CharField(max_length=30, choices=STATUS_CHOICES, default=STATUS_GRADED)
     quantity = models.DecimalField(max_digits=12, decimal_places=2, default=Decimal("0"))
     updated_at = models.DateTimeField(auto_now=True)
 
     class Meta:
         db_table = "factory_floor_stock_balances"
-        unique_together = (("plant", "grade"),)
+        constraints = [
+            models.UniqueConstraint(
+                fields=["plant", "grade", "status"],
+                condition=models.Q(status="graded"),
+                name="uniq_floorstock_plant_grade_graded",
+            ),
+            models.UniqueConstraint(
+                fields=["plant", "status"],
+                condition=models.Q(status__in=["waiting_not_sampled", "waiting_sampled"]),
+                name="uniq_floorstock_plant_waiting_status",
+            ),
+        ]
 
     def __str__(self):
-        return f"{self.plant} - {self.grade}: {self.quantity}"
+        grade_label = f" - {self.grade}" if self.grade_id else ""
+        return f"{self.plant}{grade_label} [{self.get_status_display()}]: {self.quantity}"
 
 
 class FloorStockMovement(models.Model):
     """
-    سجل حركات المخزون الأرضي (إضافة/سحب) لكل (مصنع + جريد)، مع ربط اختياري
+    سجل حركات المخزون الأرضي (إضافة/سحب) لكل (مصنع + جريد + حالة)، مع ربط اختياري
     بالطن المصدر.
     """
     MOVEMENT_IN = "in"
@@ -433,7 +481,12 @@ class FloorStockMovement(models.Model):
     ]
 
     plant = models.ForeignKey(Plant, on_delete=models.CASCADE, related_name="factory_floor_stock_movements")
-    grade = models.ForeignKey(Grade, on_delete=models.CASCADE, related_name="floor_stock_movements")
+    grade = models.ForeignKey(
+        Grade, on_delete=models.CASCADE, null=True, blank=True, related_name="floor_stock_movements"
+    )
+    status = models.CharField(
+        max_length=30, choices=FloorStockBalance.STATUS_CHOICES, default=FloorStockBalance.STATUS_GRADED
+    )
     ton = models.ForeignKey(
         Ton, on_delete=models.SET_NULL, null=True, blank=True, related_name="floor_stock_movements"
     )
@@ -447,4 +500,5 @@ class FloorStockMovement(models.Model):
         ordering = ["-occurred_at"]
 
     def __str__(self):
-        return f"{self.plant} - {self.grade}: {self.movement_type} {self.quantity}"
+        grade_label = f" - {self.grade}" if self.grade_id else ""
+        return f"{self.plant}{grade_label} [{self.get_status_display()}]: {self.movement_type} {self.quantity}"

@@ -6,6 +6,7 @@
     .group-title { font-size: 15px; font-weight: bold; margin: 22px 0 8px; color: #333; border-bottom: 2px solid #79aec8; padding-bottom: 4px; }
     .links-wrap { display: flex; flex-direction: column; gap: 8px; max-width: 480px; }
     .links-wrap a { text-align: center; padding: 10px; font-size: 14px; }
+    .links-wrap a.locked { opacity: .55; cursor: not-allowed; pointer-events: none; background: #eee; color: #666; }
 </style>
 
 <div class="settings-nav">
@@ -23,7 +24,7 @@
 <div class="group-title">📦 Final Product Settings (إعدادات المنتج النهائي)</div>
 <div class="links-wrap">
 {% for link in final_product_groups %}
-    <a class="button" href="{{ link.url }}">{{ link.title }}</a>
+    <a class="button{% if link.locked %} locked{% endif %}" href="{{ link.url }}">{{ link.title }}</a>
 {% endfor %}
 </div>
 
