@@ -5,6 +5,7 @@ from .final_product import (
     QualityConformityResult, PackingEvent, PackingConversion,
     PlantLotSetting, Ton, RepresentativeSample, TonPhysicalResult,
     SampleChemicalResult, TonGradeAssignment, GradeReason, RepresentativeGroupSize,
+    FloorStockBalance, FloorStockMovement,
 )
 from .plant_proxy import FactoryPlant
 from .dynamic_fields import FieldDefinition, PackingTypeField
@@ -18,4 +19,5 @@ __all__ = [
     "SampleChemicalResult", "TonGradeAssignment",
     "FactoryPlant","GradeReason",
     "RepresentativeGroupSize", "FieldDefinition", "PackingTypeField",
+    "FloorStockBalance", "FloorStockMovement",
 ]

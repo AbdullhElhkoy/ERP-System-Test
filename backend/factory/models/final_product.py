@@ -112,6 +112,8 @@ class OutputReading(models.Model):
 
     notes = models.TextField(blank=True, default="")
 
+    dynamic_data = models.JSONField(blank=True, default=dict, help_text="قيم الحقول الديناميكية المفعّلة لنوع التعبئة")
+
     sampled_by = models.ForeignKey(
         settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True,
         related_name="factory_readings_sampled",

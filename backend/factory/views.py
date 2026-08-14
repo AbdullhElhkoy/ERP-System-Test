@@ -23,6 +23,8 @@ from .models import (
     PackingType,
     PackingLocation,
     Grade,
+    FieldDefinition,
+    PackingTypeField,
 )
 from .services import save_final_product_rows
 
@@ -163,6 +165,21 @@ def final_product_entry_grid(request, plant_id, packing_slug):
     ]
     locations_list = list(PackingLocation.objects.filter(plant=plant).values("id", "name"))
 
+    dynamic_fields_list = []
+    if packing_type:
+        configs = PackingTypeField.objects.filter(packing_type=packing_type, field__is_active=True).select_related("field")
+        for cfg in configs:
+            f = cfg.field
+            dynamic_fields_list.append({
+                "id": f.id,
+                "key": f.key,
+                "name": f.name,
+                "field_type": f.field_type,
+                "unit": f.unit,
+                "choices": f.choices or [],
+                "is_required": cfg.is_required,
+            })
+
     context = {
         "plant": plant,
         "packing_type": packing_type,
@@ -176,6 +193,7 @@ def final_product_entry_grid(request, plant_id, packing_slug):
         "non_conforming_reasons_json": json.dumps(non_conforming_list, ensure_ascii=False),
         "users_json": json.dumps(users_list, ensure_ascii=False),
         "packing_locations_json": json.dumps(locations_list, ensure_ascii=False),
+        "dynamic_fields_json": json.dumps(dynamic_fields_list, ensure_ascii=False),
         "next_cycle": lot_setting.current_cycle,
         "next_sequence": lot_setting.current_sequence + 1,
         "default_group_size": default_group_size,

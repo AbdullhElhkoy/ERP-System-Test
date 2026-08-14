@@ -14,10 +14,17 @@ from django.utils import timezone
 from django.utils.dateparse import parse_date, parse_time
 
 from .models import (
+    ConformityRule,
+    FieldDefinition,
+    FloorStockBalance,
+    FloorStockMovement,
     OutputPoint,
     OutputReading,
+    PackingEvent,
     PackingLocation,
+    PackingTypeField,
     Grade,
+    QualityConformityResult,
     RepresentativeSample,
     SampleChemicalResult,
     TestDefinition,
@@ -108,6 +115,91 @@ def _apply_ton_physical_results(ton, row):
             )
 
 
+def _apply_conformity_results(reading, grade, plant):
+    """تطبيق قواعد المطابقة تلقائياً حسب تصنيف الجريد المسند للطن."""
+    if not grade:
+        return
+    rules = ConformityRule.objects.filter(plant=plant, quality_grade=grade.classification)
+    for rule in rules:
+        QualityConformityResult.objects.update_or_create(
+            reading=reading,
+            conformity_rule=rule,
+            defaults={
+                "grade": grade,
+                "quality_grade": grade.classification,
+            },
+        )
+
+
+def _apply_floor_stock_in(ton, grade, plant, occurred_at=None):
+    """إضافة وزن الطن إلى رصيد المخزون الأرضي للمصنع + الجريد."""
+    if not grade:
+        return
+    occurred_at = occurred_at or timezone.now()
+    with transaction.atomic():
+        balance, _ = FloorStockBalance.objects.get_or_create(plant=plant, grade=grade)
+        balance.quantity += ton.weight or Decimal("0")
+        balance.save(update_fields=["quantity"])
+        FloorStockMovement.objects.create(
+            plant=plant,
+            grade=grade,
+            ton=ton,
+            movement_type=FloorStockMovement.MOVEMENT_IN,
+            quantity=ton.weight or Decimal("0"),
+            occurred_at=occurred_at,
+        )
+
+
+def _apply_floor_stock_out(plant, grade, quantity, occurred_at=None, ton=None, notes=""):
+    """خصم كمية من رصيد المخزون الأرضي عند التسليم أو التحويل."""
+    if not grade or not quantity:
+        return
+    occurred_at = occurred_at or timezone.now()
+    qty = Decimal(str(quantity))
+    with transaction.atomic():
+        balance = FloorStockBalance.objects.filter(plant=plant, grade=grade).first()
+        if not balance:
+            return
+        balance.quantity = max(balance.quantity - qty, Decimal("0"))
+        balance.save(update_fields=["quantity"])
+        FloorStockMovement.objects.create(
+            plant=plant,
+            grade=grade,
+            ton=ton,
+            movement_type=FloorStockMovement.MOVEMENT_OUT,
+            quantity=qty,
+            occurred_at=occurred_at,
+            notes=notes,
+        )
+
+
+def _collect_dynamic_values(row):
+    """استخراج قيم الحقول الديناميكية المرسلة من الشاشة."""
+    dynamic = row.get("dynamic") or {}
+    if isinstance(dynamic, dict):
+        return {str(k): v for k, v in dynamic.items() if v not in (None, "")}
+    return {}
+
+
+def _create_packing_event(reading, packing_type, row):
+    """إنشاء حدث تعبئة تلقائياً إذا أُرسلت كمية تعبئة للطن."""
+    qty_raw = row.get("packed_quantity")
+    if qty_raw in (None, ""):
+        return
+    qty = _as_decimal(qty_raw)
+    if qty is None or not packing_type:
+        return
+    unit = row.get("pack_unit") or "بيج باج"
+    PackingEvent.objects.create(
+        plant=reading.plant,
+        output_reading=reading,
+        packing_type=packing_type,
+        quantity=qty,
+        unit=unit,
+        packed_at=reading.sampled_at,
+    )
+
+
 def _apply_solo_chemical_results(ton, rep_sample, row):
     for test_id, val in (row.get("chemical") or {}).items():
         test = _resolve_test(test_id)
@@ -173,6 +265,7 @@ def save_final_product_rows(plant, packing_type, rows, user):
             analyzed_by_id=source.get("lab_chemist_id") or None,
             lab_shift_head_id=source.get("lab_shift_head_id") or None,
             reviewed_by=user if source.get("qc_shift_head") == "reviewed" else None,
+            dynamic_data=_collect_dynamic_values(row),
         )
 
         ton = Ton.objects.create(
@@ -188,6 +281,10 @@ def save_final_product_rows(plant, packing_type, rows, user):
 
         _apply_ton_physical_results(ton, row)
         _apply_grade(ton, row, user)
+        grade = ton.grade_assignment.grade if hasattr(ton, "grade_assignment") else None
+        _apply_conformity_results(reading, grade, plant)
+        _apply_floor_stock_in(ton, grade, plant, occurred_at=reading.sampled_at)
+        _create_packing_event(reading, packing_type, row)
 
         if group_letter:
             tons_by_group.setdefault(group_letter, []).append(ton)

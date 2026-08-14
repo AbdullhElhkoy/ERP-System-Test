@@ -38,6 +38,8 @@ SampleChemicalResult = getattr(models, "SampleChemicalResult", None)
 TonGradeAssignment = getattr(models, "TonGradeAssignment", None)
 GradeReason = getattr(models, "GradeReason", None)
 RepresentativeGroupSize = getattr(models, "RepresentativeGroupSize", None)
+FloorStockBalance = getattr(models, "FloorStockBalance", None)
+FloorStockMovement = getattr(models, "FloorStockMovement", None)
 
 User = get_user_model()
 
@@ -408,3 +410,19 @@ class FieldDefinitionAdmin(admin.ModelAdmin):
 class PackingTypeFieldAdmin(admin.ModelAdmin):
     list_display = ("packing_type", "field", "order", "is_required")
     list_filter = ("packing_type", "field__category")
+
+
+@admin.register(FloorStockBalance)
+class FloorStockBalanceAdmin(PlantScopedAdminMixin, admin.ModelAdmin):
+    plant_lookup_field = "plant"
+    list_display = ("plant", "grade", "quantity", "updated_at")
+    list_filter = ("plant", "grade")
+    readonly_fields = ("quantity", "updated_at")
+
+
+@admin.register(FloorStockMovement)
+class FloorStockMovementAdmin(PlantScopedAdminMixin, admin.ModelAdmin):
+    plant_lookup_field = "plant"
+    list_display = ("plant", "grade", "movement_type", "quantity", "ton", "occurred_at")
+    list_filter = ("plant", "grade", "movement_type")
+    search_fields = ("ton__code",)

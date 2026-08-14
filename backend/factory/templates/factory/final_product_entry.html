@@ -103,6 +103,7 @@
       <th style="min-width: 110px;">Lab SHIFT HEAD</th>
       {% for t in physical_tests %}<th data-test-id="{{ t.id }}" data-kind="physical" style="min-width: 75px;">{{ t.name }} (فيزيائي)</th>{% endfor %}
       <th style="min-width: 90px;">وقت النتيجة</th>
+      <th style="min-width: 90px;">كمية التعبئة</th>
       <th style="min-width: 65px;">الوزن</th>
       <th style="min-width: 90px;">الجريد</th>
       <th style="min-width: 110px;">سبب المحلي</th>
@@ -130,6 +131,7 @@
 {{ non_conforming_reasons_json|json_script:"non-conforming-reasons-data" }}
 {{ users_json|json_script:"users-data" }}
 {{ packing_locations_json|json_script:"locations-data" }}
+{{ dynamic_fields_json|json_script:"dynamic-fields-data" }}
 
 <script>
 const CHEMICAL_TESTS = JSON.parse(document.getElementById('chemical-tests-data').textContent);
@@ -139,6 +141,7 @@ const LOCAL_REASONS = JSON.parse(document.getElementById('local-reasons-data').t
 const NON_CONFORMING_REASONS = JSON.parse(document.getElementById('non-conforming-reasons-data').textContent || '[]');
 const USERS = JSON.parse(document.getElementById('users-data').textContent || '[]');
 const LOCATIONS = JSON.parse(document.getElementById('locations-data').textContent || '[]');
+const DYNAMIC_FIELDS = JSON.parse(document.getElementById('dynamic-fields-data').textContent || '[]');
 
 const NEXT_CYCLE = {{ next_cycle|default:1 }};
 const DEFAULT_GROUP_SIZE = {{ default_group_size|default:4 }};
@@ -163,6 +166,32 @@ function buildLocationOptions() {
 
 function buildGradeOptions() {
   return `<option value="">-- اختر --</option>` + GRADES.map(g => `<option value="${g.id}" data-classification="${g.classification}">${g.code}</option>`).join("");
+}
+
+function buildDynamicCell(f, oninput) {
+  const attrs = oninput ? ` oninput="${oninput}"` : "";
+  if (f.field_type === 'choice') {
+    const opts = ['<option value="">-- اختر --</option>'].concat(
+      (f.choices || []).map(c => `<option value="${c}">${c}</option>`)
+    ).join("");
+    return `<td><select class="dynamic-input" data-dynamic-key="${f.key}"${attrs}>${opts}</select></td>`;
+  }
+  if (f.field_type === 'date') {
+    return `<td><input type="date" class="dynamic-input" data-dynamic-key="${f.key}"${attrs}></td>`;
+  }
+  const step = (f.field_type === 'integer' || f.field_type === 'number') ? 'step="any"' : '';
+  const type = (f.field_type === 'integer' || f.field_type === 'number') ? 'number' : 'text';
+  return `<td><input type="${type}" ${step} class="dynamic-input" data-dynamic-key="${f.key}"${attrs}></td>`;
+}
+
+function dynamicCells(oninput) {
+  return DYNAMIC_FIELDS.map(f => buildDynamicCell(f, oninput)).join("");
+}
+
+function collectDynamicValues(tr) {
+  const dynamic = {};
+  tr.querySelectorAll('.dynamic-input').forEach(inp => { if (inp.value !== "") dynamic[inp.dataset.dynamicKey] = inp.value; });
+  return dynamic;
 }
 
 function toggleReasonFields(gradeSelect) {
@@ -283,6 +312,8 @@ function addTonRow(groupLetter) {
         <button type="button" class="btn-mini" onclick="this.previousElementSibling.value=getCurrentTime()" title="الوقت الحالي">⏰</button>
       </div>
     </td>
+    ${dynamicCells()}
+    <td><input type="number" step="any" class="packed-quantity" placeholder="كمية"></td>
     <td><input type="number" step="any" class="weight" oninput="if(this.closest('tr').dataset.groupLetter) calculateGroupWeight(this.closest('tr').dataset.groupLetter)"></td>
     <td><select class="grade" onchange="toggleReasonFields(this)">${buildGradeOptions()}</select></td>
     <td><select class="local-reason" disabled><option value="">-- اختر --</option>${LOCAL_REASONS.map(r => `<option value="${r.id}">${r.text}</option>`).join('')}</select></td>
@@ -349,6 +380,8 @@ function addRepresentativeRow() {
         <button type="button" class="btn-mini" onclick="this.previousElementSibling.value=getCurrentTime(); syncRepresentativeValueToTons(this.closest('tr'), '.result-time', '.result-time')" title="الوقت الحالي">⏰</button>
       </div>
     </td>
+    ${DYNAMIC_FIELDS.map(() => '<td class="disabled-cell">-</td>').join('')}
+    <td class="disabled-cell">-</td>
     <td><input type="number" step="any" class="rep-weight" readonly placeholder="مجموع" style="font-weight:bold;"></td>
     <td class="disabled-cell" colspan="3">-</td>
     <td><select class="qc-shift-head"><option value="">لم تتم المراجعة</option><option value="reviewed">تمت مراجعته</option></select></td>
@@ -470,6 +503,8 @@ document.getElementById("save-all").addEventListener("click", function() {
         physical: physical,
         chemical: chemical,
         result_time: tr.querySelector(".result-time").value,
+        dynamic: collectDynamicValues(tr),
+        packed_quantity: tr.querySelector(".packed-quantity") ? tr.querySelector(".packed-quantity").value : null,
         weight: tr.querySelector(".weight").value,
         grade_id: tr.querySelector(".grade").value || null,
         local_reason_id: tr.querySelector(".local-reason") ? tr.querySelector(".local-reason").value : null,
