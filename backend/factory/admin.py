@@ -326,6 +326,7 @@ class ProcessStageTestInline(admin.TabularInline):
 class ProcessStageAdmin(PlantScopedAdminMixin, admin.ModelAdmin):
     plant_lookup_field = "plant"
     list_display = ("order", "name", "code", "test_count", "is_active", "plant")
+    list_display_links = ("name",)
     list_editable = ("order", "is_active")
     list_filter = ("plant", "is_active")
     ordering = ("plant", "order", "pk")
