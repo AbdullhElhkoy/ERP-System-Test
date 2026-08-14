@@ -105,7 +105,8 @@
       <th style="min-width: 90px;">وقت النتيجة</th>
       <th style="min-width: 90px;">كمية التعبئة</th>
       <th style="min-width: 65px;">الوزن</th>
-      <th style="min-width: 90px;">الجريد</th>
+      <th style="min-width: 90px;">الجريد الأساسي</th>
+      <th style="min-width: 90px;">الجريد الثانوي</th>
       <th style="min-width: 110px;">سبب المحلي</th>
       <th style="min-width: 110px;">سبب غير المطابق</th>
       <th style="min-width: 110px;">QC SHIFT HEAD</th>
@@ -315,7 +316,8 @@ function addTonRow(groupLetter) {
     ${dynamicCells()}
     <td><input type="number" step="any" class="packed-quantity" placeholder="كمية"></td>
     <td><input type="number" step="any" class="weight" oninput="if(this.closest('tr').dataset.groupLetter) calculateGroupWeight(this.closest('tr').dataset.groupLetter)"></td>
-    <td><select class="grade" onchange="toggleReasonFields(this)">${buildGradeOptions()}</select></td>
+    <td><select class="grade primary-grade" onchange="toggleReasonFields(this)">${buildGradeOptions()}</select></td>
+    <td><select class="grade secondary-grade">${buildGradeOptions()}</select></td>
     <td><select class="local-reason" disabled><option value="">-- اختر --</option>${LOCAL_REASONS.map(r => `<option value="${r.id}">${r.text}</option>`).join('')}</select></td>
     <td><select class="non-conforming-reason" disabled><option value="">-- اختر --</option>${NON_CONFORMING_REASONS.map(r => `<option value="${r.id}">${r.text}</option>`).join('')}</select></td>
     <td class="disabled-cell">-</td>
@@ -383,7 +385,7 @@ function addRepresentativeRow() {
     ${DYNAMIC_FIELDS.map(() => '<td class="disabled-cell">-</td>').join('')}
     <td class="disabled-cell">-</td>
     <td><input type="number" step="any" class="rep-weight" readonly placeholder="مجموع" style="font-weight:bold;"></td>
-    <td class="disabled-cell" colspan="3">-</td>
+    <td class="disabled-cell" colspan="4">-</td>
     <td><select class="qc-shift-head"><option value="">لم تتم المراجعة</option><option value="reviewed">تمت مراجعته</option></select></td>
     <td>
       <button type="button" onclick="removeRow(this)" style="color:red; border:none; background:none; cursor:pointer; font-weight:bold;">X</button>
@@ -506,7 +508,9 @@ document.getElementById("save-all").addEventListener("click", function() {
         dynamic: collectDynamicValues(tr),
         packed_quantity: tr.querySelector(".packed-quantity") ? tr.querySelector(".packed-quantity").value : null,
         weight: tr.querySelector(".weight").value,
-        grade_id: tr.querySelector(".grade").value || null,
+        grade_id: tr.querySelector(".primary-grade") ? tr.querySelector(".primary-grade").value : null,
+        primary_grade_id: tr.querySelector(".primary-grade") ? tr.querySelector(".primary-grade").value : null,
+        secondary_grade_id: tr.querySelector(".secondary-grade") ? tr.querySelector(".secondary-grade").value : null,
         local_reason_id: tr.querySelector(".local-reason") ? tr.querySelector(".local-reason").value : null,
         non_conforming_reason_id: tr.querySelector(".non-conforming-reason") ? tr.querySelector(".non-conforming-reason").value : null,
       });
