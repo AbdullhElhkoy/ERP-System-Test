@@ -75,6 +75,16 @@
     font-weight: 600;
   }
 
+  tr.rep-row.rep-selected {
+    background-color: #bae6fd !important;
+    box-shadow: inset 0 0 0 2px #0284c7;
+  }
+
+  tr.rep-row.rep-selected td:first-child::before {
+    content: "◀ ";
+    color: #0284c7;
+  }
+
   .disabled-cell {
     background-color: #e2e8f0 !important;
     color: #94a3b8;
@@ -118,8 +128,10 @@
 </div>
 
 <br>
-<div style="display:flex; gap:10px; margin-top:10px;">
+<div style="display:flex; gap:10px; margin-top:10px; align-items:center;">
     <button id="add-representative" type="button" class="button">+ إضافة عينة ممثلة</button>
+    <button id="add-ton-to-rep" type="button" class="button">+ طن</button>
+    <button id="delete-representative" type="button" class="button" style="color:#b91c1c;">حذف ممثله</button>
     <button id="save-all" type="button" class="button default">حفظ الكل</button>
 </div>
 
@@ -375,8 +387,7 @@ function addRepresentativeRow() {
     <td class="disabled-cell" colspan="4">-</td>
     <td><select class="qc-shift-head"><option value="">لم تتم المراجعة</option><option value="reviewed">تمت مراجعته</option></select></td>
     <td>
-      <button type="button" onclick="addTonRow(this.closest('tr').dataset.group)" style="color:#0284c7; border:none; background:none; cursor:pointer; font-weight:bold;" title="إضافة طن لهذه العينة">+ طن</button>
-      <button type="button" onclick="removeRow(this)" style="color:red; border:none; background:none; cursor:pointer; font-weight:bold;">X</button>
+      <button type="button" onclick="selectRepresentative(this.closest('tr')); removeRow(this)" style="color:red; border:none; background:none; cursor:pointer; font-weight:bold;">X</button>
     </td>
   `;
   tbody.appendChild(tr);
@@ -399,7 +410,53 @@ function removeRow(btn) {
   resequenceAll();
 }
 
+let selectedRepresentative = null;
+
+function selectRepresentative(tr) {
+  document.querySelectorAll('tr.rep-row').forEach(r => r.classList.remove('rep-selected'));
+  selectedRepresentative = tr;
+  if (tr) tr.classList.add('rep-selected');
+}
+
+function getTargetRepresentative() {
+  if (selectedRepresentative && document.body.contains(selectedRepresentative)) {
+    return selectedRepresentative;
+  }
+  const reps = document.querySelectorAll('tr[data-row-type="representative"]');
+  return reps.length ? reps[reps.length - 1] : null;
+}
+
+function addTonToRepresentative() {
+  const rep = getTargetRepresentative();
+  if (!rep) {
+    alert("لا توجد عينة ممثلة — أضف واحدة أولاً");
+    return;
+  }
+  selectRepresentative(rep);
+  addTonRow(rep.dataset.group);
+}
+
+function deleteRepresentative() {
+  const rep = getTargetRepresentative();
+  if (!rep) {
+    alert("لا توجد عينة ممثلة لحذفها");
+    return;
+  }
+  if (!confirm("حذف العينة الممثلة وجميع أطنانها؟")) return;
+  const group = rep.dataset.group;
+  document.querySelectorAll(`tr[data-group-letter="${group}"]`).forEach(t => t.remove());
+  rep.remove();
+  selectedRepresentative = null;
+  resequenceAll();
+}
+
 document.getElementById("add-representative").addEventListener("click", addRepresentativeRow);
+document.getElementById("add-ton-to-rep").addEventListener("click", addTonToRepresentative);
+document.getElementById("delete-representative").addEventListener("click", deleteRepresentative);
+document.getElementById("entry-tbody").addEventListener("click", function(e) {
+  const tr = e.target.closest('tr.rep-row');
+  if (tr && !e.target.closest('button')) selectRepresentative(tr);
+});
 
 /* التنقل بالكيبورد بأسلوب Excel (Enter / الأسهم) */
 document.addEventListener('keydown', function (e) {
