@@ -39,7 +39,7 @@ def process_reading_grid(request):
         messages.error(request, "لازم تدخل مصنع الأول")
         return redirect("admin:factory_factoryplant_changelist")
     stages = ProcessStage.objects.filter(plant=plant, is_active=True)
-    tests = TestDefinition.objects.filter(plant=plant, scope=TestDefinition.SCOPE_REACTION)
+    tests = TestDefinition.objects.filter(plant=plant, scopes__contains=[TestDefinition.SCOPE_REACTION])
 
     if request.method == "POST":
         if request.content_type == "application/json":
@@ -149,10 +149,12 @@ def final_product_entry_grid(request, plant_id, packing_slug):
             return JsonResponse({"status": "error", "message": str(e)}, status=400)
 
     chemical_tests = TestDefinition.objects.filter(
-        plant=plant, category=TestDefinition.CATEGORY_CHEMICAL, scope=TestDefinition.SCOPE_FINAL_PRODUCT
+        plant=plant, category=TestDefinition.CATEGORY_CHEMICAL,
+        scopes__contains=[TestDefinition.SCOPE_FINAL_PRODUCT]
     )
     physical_tests = TestDefinition.objects.filter(
-        plant=plant, category=TestDefinition.CATEGORY_PHYSICAL, scope=TestDefinition.SCOPE_FINAL_PRODUCT
+        plant=plant, category=TestDefinition.CATEGORY_PHYSICAL,
+        scopes__contains=[TestDefinition.SCOPE_FINAL_PRODUCT]
     )
 
     lot_setting, _ = PlantLotSetting.objects.get_or_create(plant=plant)

@@ -1,5 +1,6 @@
 import json
 
+from django import forms
 from django.contrib import admin
 from django.contrib.auth import get_user_model
 from django.http import JsonResponse
@@ -216,8 +217,8 @@ class FactoryPlantAdmin(admin.ModelAdmin):
         if request.method == "POST":
             return self._save_final_product_entry(request, plant, packing_type)
 
-        chemical_tests = TestDefinition.objects.filter(plant=plant, category="chemical", scope="final_product")
-        physical_tests = TestDefinition.objects.filter(plant=plant, category="physical", scope="final_product")
+        chemical_tests = TestDefinition.objects.filter(plant=plant, category="chemical", scopes__contains=[TestDefinition.SCOPE_FINAL_PRODUCT])
+        physical_tests = TestDefinition.objects.filter(plant=plant, category="physical", scopes__contains=[TestDefinition.SCOPE_FINAL_PRODUCT])
         grades = Grade.objects.filter(plant=plant, is_active=True)
         
         local_reasons = GradeReason.objects.filter(plant=plant, reason_type="local")
@@ -272,11 +273,29 @@ class FactoryPlantAdmin(admin.ModelAdmin):
         return JsonResponse({"status": "ok", "rows_saved": saved_count})
 
 
+class TestDefinitionForm(forms.ModelForm):
+    scopes = forms.MultipleChoiceField(
+        choices=TestDefinition.SCOPE_CHOICES,
+        widget=forms.CheckboxSelectMultiple,
+        required=True,
+        label="النطاقات",
+    )
+
+    class Meta:
+        model = TestDefinition
+        fields = "__all__"
+
+
 @admin.register(TestDefinition)
 class TestDefinitionAdmin(PlantScopedAdminMixin, admin.ModelAdmin):
     plant_lookup_field = "plant"
-    list_display = ("name", "plant", "category", "scope", "unit")
-    list_filter = ("plant", "category", "scope")
+    list_display = ("name", "plant", "category", "scopes_display", "unit")
+    list_filter = ("plant", "category")
+    form = TestDefinitionForm
+    fieldsets = (
+        (None, {"fields": ("plant", "name", "category", "unit")}),
+        ("النطاقات (يمكن اختيار أكثر من واحدة)", {"fields": ("scopes",), "classes": ("wide",)}),
+    )
 
 
 @admin.register(PackingLocation)
@@ -330,7 +349,7 @@ class ProcessStageTestInline(admin.TabularInline):
         formset = super().get_formset(request, obj, **kwargs)
         if obj is not None:
             formset.form.base_fields["test"].queryset = TestDefinition.objects.filter(
-                plant=obj.plant, scope=TestDefinition.SCOPE_REACTION
+                plant=obj.plant, scopes__contains=[TestDefinition.SCOPE_REACTION]
             )
         return formset
 

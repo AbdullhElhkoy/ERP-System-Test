@@ -21,12 +21,22 @@ class TestDefinition(models.Model):
     plant = models.ForeignKey(Plant, on_delete=models.CASCADE, related_name="factory_test_definitions")
     name = models.CharField(max_length=100)
     category = models.CharField(max_length=15, choices=CATEGORY_CHOICES)
-    scope = models.CharField(max_length=20, choices=SCOPE_CHOICES, default=SCOPE_FINAL_PRODUCT)
+    scopes = models.JSONField(default=list, verbose_name="النطاقات")
     unit = models.CharField(max_length=20, blank=True)
 
     class Meta:
         db_table = "factory_test_definitions"
         unique_together = (("plant", "name"),)
+
+    def scopes_display(self):
+        labels = dict(self.SCOPE_CHOICES)
+        return "، ".join(labels.get(s, s) for s in (self.scopes or []))
+
+    def is_reaction(self):
+        return self.SCOPE_REACTION in (self.scopes or [])
+
+    def is_final_product(self):
+        return self.SCOPE_FINAL_PRODUCT in (self.scopes or [])
 
     def __str__(self):
         return f"{self.name} ({self.unit})" if self.unit else self.name
