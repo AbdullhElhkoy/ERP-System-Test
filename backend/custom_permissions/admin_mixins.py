@@ -10,20 +10,24 @@ class PlantScopedAdminMixin:
     plant_lookup_field = "plant"
 
     def _context_plant_id(self, request):
-        """المصنع الحالي: من رابط الفلترة أو من جلسة السياق."""
-        raw = request.GET.get(f"{self.plant_lookup_field}__id__exact") or request.GET.get("plant__id__exact")
+        """المصنع الحالي: من جلسة السياق أولاً، أو من رابط الفلترة."""
+        session_id = request.session.get("factory_current_plant_id")
+        if session_id:
+            return session_id
+        raw = request.GET.get("plant_id") or request.GET.get("plant__plant_id__exact")
         if raw:
             try:
                 return int(raw)
             except (TypeError, ValueError):
                 pass
-        return request.session.get("factory_current_plant_id")
+        return None
 
     def get_queryset(self, request):
         qs = super().get_queryset(request)
         plant_id = self._context_plant_id(request)
         if plant_id:
-            return qs.filter(**{f"{self.plant_lookup_field}__id": plant_id})
+            filter_kwargs = {f"{self.plant_lookup_field}__plant_id": plant_id}
+            return qs.filter(**filter_kwargs)
         if request.user.is_superuser:
             return qs
         viewable_ids = get_viewable_plant_ids(request.user)

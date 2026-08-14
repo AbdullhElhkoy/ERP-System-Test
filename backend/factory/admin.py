@@ -98,7 +98,7 @@ class FactoryPlantAdmin(admin.ModelAdmin):
             return error
 
         def admin_url(model, label):
-            return f"/admin/factory/{model}/?plant__id__exact={plant.pk}", label
+            return f"/admin/factory/{model}/?plant_id={plant.pk}", label
 
         reaction_groups = [
             admin_url("processstage", "مراحل التفاعل (Process Stages)"),
@@ -115,7 +115,7 @@ class FactoryPlantAdmin(admin.ModelAdmin):
             admin_url("plantlotsetting", "إعدادات الدفعات (Plant Lot Settings)"),
         ]
         final_product_groups.append((
-            f"/admin/factory/packingtypefield/?packing_type__plant__id__exact={plant.pk}",
+            f"/admin/factory/packingtypefield/?plant_id={plant.pk}",
             "ربط الحقول بأنواع التعبئة (Packing Type Fields)",
         ))
         data_groups = [
