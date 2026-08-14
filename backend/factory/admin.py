@@ -363,9 +363,13 @@ class OutputReadingAdmin(PlantScopedAdminMixin, admin.ModelAdmin):
 
 @admin.register(QualityConformityResult)
 class QualityConformityResultAdmin(PlantScopedAdminMixin, admin.ModelAdmin):
-    plant_lookup_field = "plant"
+    plant_lookup_field = "reading__plant"
     list_display = ("reading", "conformity_rule", "grade", "quality_grade")
-    list_filter = ("plant", "quality_grade")
+    list_filter = ("quality_grade",)
+
+    def plant(self, obj):
+        return obj.reading.plant if obj.reading else None
+    plant.short_description = "المصنع"
 
 
 @admin.register(PackingEvent)
@@ -424,10 +428,14 @@ class RepresentativeSampleAdmin(PlantScopedAdminMixin, admin.ModelAdmin):
 
 @admin.register(TonGradeAssignment)
 class TonGradeAssignmentAdmin(PlantScopedAdminMixin, admin.ModelAdmin):
-    plant_lookup_field = "plant"
+    plant_lookup_field = "ton__plant"
     list_display = ("ton", "grade", "reason", "assigned_by", "assigned_at")
-    list_filter = ("plant", "grade", "reason")
+    list_filter = ("grade", "reason")
     readonly_fields = ("assigned_by", "assigned_at")
+
+    def plant(self, obj):
+        return obj.ton.plant if obj.ton else None
+    plant.short_description = "المصنع"
 
     def save_model(self, request, obj, form, change):
         if not obj.pk:
