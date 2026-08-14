@@ -328,17 +328,10 @@ class ConformityRuleAdmin(PlantScopedAdminMixin, admin.ModelAdmin):
 @admin.register(Grade)
 class GradeAdmin(PlantScopedAdminMixin, admin.ModelAdmin):
     plant_lookup_field = "plant"
-    list_display = ("code", "classification", "parent", "is_active", "plant")
-    list_filter = ("plant", "classification", "parent", "is_active")
+    list_display = ("code", "classification", "is_active", "plant")
+    list_filter = ("plant", "classification", "is_active")
     list_editable = ("is_active",)
     search_fields = ("code",)
-
-    def formfield_for_foreignkey(self, db_field, request, **kwargs):
-        if db_field.name == "parent" and request.resolver_match:
-            plant_id = self._context_plant_id(request)
-            if plant_id:
-                kwargs["queryset"] = Grade.objects.filter(plant_id=plant_id, parent__isnull=True)
-        return super().formfield_for_foreignkey(db_field, request, **kwargs)
 
 
 class ProcessStageTestInline(admin.TabularInline):

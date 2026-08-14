@@ -84,14 +84,6 @@ class Grade(models.Model):
     plant = models.ForeignKey(Plant, on_delete=models.CASCADE, related_name="factory_grades")
     code = models.CharField(max_length=20)
     classification = models.ForeignKey(QualityGrade, on_delete=models.PROTECT, related_name="grades")
-    parent = models.ForeignKey(
-        "self",
-        on_delete=models.CASCADE,
-        null=True,
-        blank=True,
-        related_name="children",
-        help_text="الجريد الأساسي الذي يتبع له هذا الثانوي (اتركه فارغاً إذا كان الجريد أساسياً)",
-    )
     is_active = models.BooleanField(default=True)
 
     class Meta:
@@ -99,6 +91,4 @@ class Grade(models.Model):
         unique_together = (("plant", "code"),)
 
     def __str__(self):
-        if self.parent_id:
-            return f"{self.parent.code} / {self.code}"
         return self.code
