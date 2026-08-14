@@ -253,7 +253,6 @@ class FactoryPlantAdmin(admin.ModelAdmin):
                 {
                     "id": getattr(g, "pk", getattr(g, "id", None)),
                     "code": g.code,
-                    "classification": getattr(g.classification, "code", str(g.classification)),
                 }
                 for g in primary_grades
             ],
@@ -261,7 +260,6 @@ class FactoryPlantAdmin(admin.ModelAdmin):
                 {
                     "id": getattr(g, "pk", getattr(g, "id", None)),
                     "code": g.code,
-                    "classification": getattr(g.classification, "code", str(g.classification)),
                 }
                 for g in secondary_grades
             ],
@@ -270,7 +268,6 @@ class FactoryPlantAdmin(admin.ModelAdmin):
                     "id": getattr(g, "pk", getattr(g, "id", None)),
                     "code": g.code,
                     "grade_type": g.grade_type,
-                    "classification": getattr(g.classification, "code", str(g.classification)),
                 }
                 for g in grades
             ],
@@ -347,8 +344,8 @@ class ConformityRuleAdmin(PlantScopedAdminMixin, admin.ModelAdmin):
 @admin.register(Grade)
 class GradeAdmin(PlantScopedAdminMixin, admin.ModelAdmin):
     plant_lookup_field = "plant"
-    list_display = ("code", "grade_type", "classification", "is_active", "plant")
-    list_filter = ("plant", "grade_type", "classification", "is_active")
+    list_display = ("code", "grade_type", "is_active", "plant")
+    list_filter = ("plant", "grade_type", "is_active")
     list_editable = ("is_active",)
     search_fields = ("code",)
 

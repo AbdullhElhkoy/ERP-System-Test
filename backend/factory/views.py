@@ -169,7 +169,6 @@ def final_product_entry_grid(request, plant_id, packing_slug):
         {
             "id": g.id,
             "code": g.code,
-            "classification": getattr(g.classification, "code", str(g.classification)),
         }
         for g in Grade.objects.filter(plant=plant, is_active=True)
     ]

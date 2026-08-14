@@ -97,7 +97,6 @@ class Grade(models.Model):
         verbose_name="نوع الجريد",
         help_text="أساسي = يظهر في عمود الجريد الأساسي، ثانوي = يظهر في عمود الجريد الثانوي",
     )
-    classification = models.ForeignKey(QualityGrade, on_delete=models.PROTECT, related_name="grades")
     is_active = models.BooleanField(default=True)
 
     class Meta:

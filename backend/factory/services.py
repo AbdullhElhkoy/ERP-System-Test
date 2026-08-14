@@ -300,7 +300,6 @@ def save_final_product_rows(plant, packing_type, rows, user):
         if grade:
             ton.status = Ton.STATUS_GRADED
             ton.save(update_fields=["status"])
-        _apply_conformity_results(reading, grade, plant)
         stock_status = FloorStockBalance.STATUS_GRADED if grade else FloorStockBalance.STATUS_WAITING_NOT_SAMPLED
         _apply_floor_stock_in(ton, grade, plant, occurred_at=reading.sampled_at, status=stock_status)
         _create_packing_event(reading, packing_type, row)
