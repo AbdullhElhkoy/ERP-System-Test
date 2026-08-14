@@ -38,7 +38,7 @@ def process_reading_grid(request):
     if not plant:
         messages.error(request, "لازم تدخل مصنع الأول")
         return redirect("admin:factory_factoryplant_changelist")
-    stages = ProcessStage.objects.filter(plant=plant)
+    stages = ProcessStage.objects.filter(plant=plant, is_active=True)
     tests = TestDefinition.objects.filter(plant=plant, scope=TestDefinition.SCOPE_REACTION)
 
     if request.method == "POST":
@@ -52,17 +52,20 @@ def process_reading_grid(request):
                         sampled_at_raw = row.get("sampled_at") or row.get("production_date")
                         sampled_at = parse_datetime(sampled_at_raw) if sampled_at_raw else None
                         stage_id = row.get("stage_id")
-                        stage = ProcessStage.objects.filter(pk=stage_id).first() if stage_id else None
+                        stage = ProcessStage.objects.filter(pk=stage_id, plant=plant).first() if stage_id else None
+                        if not stage:
+                            continue
                         reading = ProcessReading.objects.create(
                             plant=plant,
                             stage=stage,
-                            sampled_at=sampled_at
+                            sampled_at=sampled_at or timezone.now(),
+                            notes=row.get("notes", ""),
                         )
                         test_results = {**row.get("chemical", {}), **row.get("physical", {})}
                         for test_id, val_raw in test_results.items():
                             if val_raw != "" and val_raw is not None:
                                 try:
-                                    test_obj = TestDefinition.objects.get(pk=test_id)
+                                    test_obj = TestDefinition.objects.get(pk=test_id, plant=plant)
                                     ProcessAnalysisResult.objects.create(
                                         reading=reading,
                                         test=test_obj,
@@ -98,10 +101,29 @@ def process_reading_grid(request):
     selected_stage_ids = [int(s) for s in request.GET.getlist("stages")]
     selected_stages = ProcessStage.objects.filter(plant=plant, pk__in=selected_stage_ids)
 
+    stages_json = json.dumps(
+        [{"id": s.pk, "name": s.name, "order": s.order} for s in stages],
+        ensure_ascii=False,
+    )
+    tests_json = json.dumps(
+        [
+            {
+                "id": t.pk,
+                "name": t.name,
+                "category": t.category,
+                "unit": t.unit,
+            }
+            for t in tests
+        ],
+        ensure_ascii=False,
+    )
+
     context = {
         "plant": plant,
         "stages": stages,
         "tests": tests,
+        "stages_json": stages_json,
+        "tests_json": tests_json,
         "selected_stage_ids": selected_stage_ids,
         "selected_stages": selected_stages,
         "dashboard_url": f"/admin/factory/factoryplant/dashboard/{plant.pk}/",

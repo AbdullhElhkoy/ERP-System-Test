@@ -1,59 +1,291 @@
 {% extends "admin/base_site.html" %}
+
 {% block content %}
-<h1>إدخال قراءات التفاعل - {{ plant.plant_name }}</h1>
-<p>
-    <a class="button" href="{{ dashboard_url }}">← لوحة المصنع</a>
-</p>
+{% csrf_token %}
 
-<form method="get" style="margin-top:20px;">
-    <p><strong>اختار المراحل:</strong></p>
-    {% for stage in stages %}
-    <label style="margin-left:15px; display:inline-block;">
-        <input type="checkbox" name="stages" value="{{ stage.pk }}"
-        {% if stage.pk in selected_stage_ids %}checked{% endif %}>
-        {{ stage.order }} - {{ stage.name }}
-    </label>
-    {% empty %}
-    <p>لا توجد مراحل تفاعل لهذا المصنع — أضفها من Factory Settings.</p>
-    {% endfor %}
-    <br><br>
-    <button type="submit">تحميل الجدول</button>
-</form>
+<style>
+  .excel-wrapper {
+    overflow-x: auto;
+    margin-top: 15px;
+    box-shadow: 0 2px 5px rgba(0,0,0,0.05);
+  }
 
-{% if selected_stages %}
-<form method="post" style="margin-top:20px;">
-    {% csrf_token %}
-    {% for s in selected_stage_ids %}
-    <input type="hidden" name="stages" value="{{ s }}">
-    {% endfor %}
+  .excel-table {
+    border-collapse: collapse;
+    width: 100%;
+    font-size: 12px;
+    text-align: center;
+    background-color: #fff;
+  }
 
-    <label><strong>تاريخ ووقت العينة (لكل المراحل المختارة):</strong></label>
-    <input type="datetime-local" name="sampled_at" required>
+  .excel-table th {
+    background-color: #f1f5f9;
+    color: #334155;
+    font-weight: 700;
+    padding: 8px 4px;
+    border: 1px solid #cbd5e1;
+    white-space: nowrap;
+  }
 
-    <table border="1" cellpadding="6" style="margin-top:15px; border-collapse:collapse;">
-        <thead>
-            <tr>
-                <th>المرحلة</th>
-                {% for test in tests %}
-                <th>{{ test.name }}{% if test.unit %} ({{ test.unit }}){% endif %}</th>
-                {% endfor %}
-            </tr>
-        </thead>
-        <tbody>
-            {% for stage in selected_stages %}
-            <tr>
-                <td><strong>{{ stage.order }}</strong> - {{ stage.name }}</td>
-                {% for test in tests %}
-                <td>
-                    <input type="number" step="0.001" name="cell_{{ stage.pk }}_{{ test.pk }}" style="width:90px;">
-                </td>
-                {% endfor %}
-            </tr>
-            {% endfor %}
-        </tbody>
-    </table>
+  .excel-table td {
+    border: 1px solid #cbd5e1;
+    padding: 0 !important;
+    margin: 0;
+    height: 32px;
+  }
 
-    <button type="submit" style="margin-top:15px;">حفظ الكل</button>
-</form>
-{% endif %}
+  .excel-table input[type="text"],
+  .excel-table input[type="number"],
+  .excel-table input[type="date"],
+  .excel-table input[type="time"],
+  .excel-table select,
+  .excel-table textarea {
+    width: 100%;
+    height: 100%;
+    border: none;
+    outline: none;
+    background: transparent;
+    text-align: center;
+    font-size: 12px;
+    box-sizing: border-box;
+    padding: 2px;
+    resize: none;
+  }
+
+  .excel-table input:focus,
+  .excel-table select:focus,
+  .excel-table textarea:focus {
+    background-color: #e0f2fe !important;
+    box-shadow: inset 0 0 0 2px #0284c7;
+  }
+
+  .excel-table input[readonly] {
+    background-color: #f1f5f9 !important;
+    color: #64748b;
+    cursor: not-allowed;
+  }
+
+  .btn-mini {
+    background: none;
+    border: none;
+    cursor: pointer;
+    font-size: 11px;
+    padding: 0 2px;
+  }
+
+  .disabled-cell {
+    background-color: #e2e8f0 !important;
+    color: #94a3b8;
+  }
+
+  .group-header th {
+    background-color: #e0f2fe;
+    color: #0369a1;
+  }
+</style>
+
+<div style="margin-bottom: 20px;">
+    <h1>إدخال قراءات التفاعل - {{ plant.plant_name }}</h1>
+    <p>
+        <a class="button" href="{{ dashboard_url }}">← لوحة المصنع</a>
+    </p>
+</div>
+
+<div class="excel-wrapper">
+<table id="entry-table" class="excel-table">
+  <thead>
+    <tr>
+      <th style="min-width: 130px;">المرحلة</th>
+      <th style="min-width: 110px;">تاريخ السحب</th>
+      <th style="min-width: 90px;">وقت السحب</th>
+      <th style="min-width: 50px;">الوردية</th>
+      <th style="min-width: 140px;">ملاحظات</th>
+      {% for t in tests %}<th data-test-id="{{ t.id }}" data-category="{{ t.category }}" style="min-width: 80px;">{{ t.name }}{% if t.unit %} ({{ t.unit }}){% endif %}</th>{% endfor %}
+      <th style="min-width: 40px;">حذف</th>
+    </tr>
+  </thead>
+  <tbody id="entry-tbody"></tbody>
+</table>
+</div>
+
+<br>
+<div style="display:flex; gap:10px; margin-top:10px;">
+    <button id="add-row" type="button" class="button">+ إضافة قراءة</button>
+    <button id="save-all" type="button" class="button default">حفظ الكل</button>
+</div>
+
+<!-- البيانات الممررة بأسلوب آمن عبر json_script -->
+{{ stages_json|json_script:"stages-data" }}
+{{ tests_json|json_script:"tests-data" }}
+
+<script>
+const STAGES = JSON.parse(document.getElementById('stages-data').textContent);
+const TESTS = JSON.parse(document.getElementById('tests-data').textContent);
+
+function getTodayDate() { return new Date().toISOString().split('T')[0]; }
+function getCurrentTime() { const now = new Date(); return now.toTimeString().split(' ')[0].substring(0, 5); }
+
+function buildStageOptions() {
+  return `<option value="">-- اختر المرحلة --</option>` + STAGES.map(s => `<option value="${s.id}">${s.order} - ${s.name}</option>`).join("");
+}
+
+function addRow() {
+  const tbody = document.getElementById("entry-tbody");
+  const tr = document.createElement("tr");
+
+  let testCells = TESTS.map(t => {
+    if (t.category === 'physical') {
+      return `<td><input type="number" step="any" class="test-input" data-test-id="${t.id}" placeholder="تحت الاختبار"></td>`;
+    }
+    return `<td><input type="number" step="any" class="test-input" data-test-id="${t.id}"></td>`;
+  }).join("");
+
+  tr.innerHTML = `
+    <td><select class="stage-select">${buildStageOptions()}</select></td>
+    <td>
+      <div style="display:flex; align-items:center;">
+        <input type="date" class="sampling-date" value="${getTodayDate()}">
+        <button type="button" class="btn-mini" onclick="this.previousElementSibling.value=getTodayDate()" title="تاريخ اليوم">📅</button>
+      </div>
+    </td>
+    <td>
+      <div style="display:flex; align-items:center;">
+        <input type="time" class="sampling-time" value="${getCurrentTime()}">
+        <button type="button" class="btn-mini" onclick="this.previousElementSibling.value=getCurrentTime()" title="الوقت الحالي">⏰</button>
+      </div>
+    </td>
+    <td><select class="shift"><option value="A">A</option><option value="B">B</option><option value="C">C</option><option value="D">D</option></select></td>
+    <td><input type="text" class="notes" placeholder="ملاحظات"></td>
+    ${testCells}
+    <td><button type="button" onclick="removeRow(this)" style="color:red; background:none; border:none; cursor:pointer; font-weight:bold;">X</button></td>
+  `;
+  tbody.appendChild(tr);
+  const stageSelect = tr.querySelector('.stage-select');
+  if (stageSelect) stageSelect.focus();
+}
+
+function removeRow(btn) {
+  btn.closest('tr').remove();
+}
+
+document.getElementById("add-row").addEventListener("click", addRow);
+
+/* التنقل بالكيبورد بأسلوب Excel (Enter / الأسهم) */
+document.addEventListener('keydown', function (e) {
+  const activeElement = document.activeElement;
+  if (!activeElement || (activeElement.tagName !== 'INPUT' && activeElement.tagName !== 'SELECT')) return;
+
+  const cell = activeElement.closest('td');
+  if (!cell) return;
+
+  const row = cell.closest('tr');
+  const cellIndex = Array.from(row.children).indexOf(cell);
+
+  let targetRow = null;
+  let targetCell = null;
+
+  if (e.key === 'Enter' || e.key === 'ArrowDown') {
+    e.preventDefault();
+    targetRow = row.nextElementSibling;
+    if (targetRow) targetCell = targetRow.children[cellIndex];
+  } else if (e.key === 'ArrowUp') {
+    e.preventDefault();
+    targetRow = row.previousElementSibling;
+    if (targetRow) targetCell = targetRow.children[cellIndex];
+  } else if (e.key === 'ArrowLeft') {
+    targetCell = cell.nextElementSibling;
+  } else if (e.key === 'ArrowRight') {
+    targetCell = cell.previousElementSibling;
+  }
+
+  if (targetCell) {
+    const targetInput = targetCell.querySelector('input:not([readonly]), select:not([disabled])');
+    if (targetInput) {
+      targetInput.focus();
+      if (targetInput.select) targetInput.select();
+    }
+  }
+});
+
+/* دعم اللصق المباشر من Excel */
+document.getElementById("entry-table").addEventListener("paste", function(e) {
+  const active = document.activeElement;
+  if (!active || !active.closest("td")) return;
+  e.preventDefault();
+  const text = (e.clipboardData || window.clipboardData).getData("text");
+  const rows = text.split("\n").filter(r => r.length);
+  let startRow = active.closest("tr");
+  let startCellIndex = Array.from(active.closest("td").parentNode.children).indexOf(active.closest("td"));
+
+  rows.forEach((rowText, i) => {
+    let targetRow = startRow;
+    for (let k = 0; k < i; k++) {
+      targetRow = targetRow.nextElementSibling;
+      if (!targetRow) return;
+    }
+    if (!targetRow) return;
+    const cells = rowText.split("\t");
+    cells.forEach((val, j) => {
+      const cellIndex = startCellIndex + j;
+      const cell = targetRow.children[cellIndex];
+      if (!cell) return;
+      const input = cell.querySelector("input:not([readonly]), select:not([disabled])");
+      if (input) input.value = val.trim();
+    });
+  });
+});
+
+/* حفظ البيانات وإرسالها إلى السيرفر */
+document.getElementById("save-all").addEventListener("click", function() {
+  const rows = [];
+
+  document.querySelectorAll("#entry-tbody tr").forEach(tr => {
+    const stage_id = tr.querySelector(".stage-select").value;
+    if (!stage_id) return;
+
+    const chemical = {};
+    const physical = {};
+    tr.querySelectorAll(".test-input").forEach(inp => {
+      if (inp.value === "") return;
+      const test = TESTS.find(t => String(t.id) === String(inp.dataset.testId));
+      if (test && test.category === 'physical') physical[inp.dataset.testId] = inp.value;
+      else chemical[inp.dataset.testId] = inp.value;
+    });
+
+    const date = tr.querySelector(".sampling-date").value;
+    const time = tr.querySelector(".sampling-time").value;
+    const sampled_at = (date && time) ? `${date}T${time}` : (date ? date : null);
+
+    rows.push({
+      stage_id: stage_id,
+      sampled_at: sampled_at,
+      shift: tr.querySelector(".shift").value,
+      notes: tr.querySelector(".notes").value,
+      chemical: chemical,
+      physical: physical,
+    });
+  });
+
+  if (rows.length === 0) {
+    alert("لا توجد صفوف مكتملة (كل صف لازم يختار مرحلة)");
+    return;
+  }
+
+  fetch(window.location.href, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "X-CSRFToken": document.querySelector("[name=csrfmiddlewaretoken]").value
+    },
+    body: JSON.stringify({rows: rows}),
+  }).then(r => r.json()).then(data => {
+    if (data.status === "ok") {
+      alert("تم الحفظ بنجاح: " + data.rows_saved + " قراءة");
+      location.reload();
+    } else {
+      alert("حدث خطأ أثناء الحفظ: " + (data.message || "تأكد من صحة البيانات"));
+    }
+  });
+});
+</script>
 {% endblock %}
