@@ -240,6 +240,20 @@ class FactoryPlantAdmin(admin.ModelAdmin):
 
         locations = PackingLocation.objects.filter(plant=plant)
 
+        dynamic_fields_list = []
+        configs = PackingTypeField.objects.filter(packing_type=packing_type, field__is_active=True).select_related("field")
+        for cfg in configs:
+            f = cfg.field
+            dynamic_fields_list.append({
+                "id": f.id,
+                "key": f.key,
+                "name": f.name,
+                "field_type": f.field_type,
+                "unit": f.unit,
+                "choices": f.choices or [],
+                "is_required": cfg.is_required,
+            })
+
         context = {
             **self.admin_site.each_context(request),
             "plant": plant,
@@ -275,6 +289,7 @@ class FactoryPlantAdmin(admin.ModelAdmin):
             "non_conforming_reasons_json": [{"id": getattr(r, "pk", getattr(r, "id", None)), "text": r.text} for r in non_conforming_reasons],
             "users_json": formatted_users,
             "packing_locations_json": [{"id": getattr(l, "pk", getattr(l, "id", None)), "name": l.name} for l in locations],
+            "dynamic_fields_json": dynamic_fields_list,
             "shift_choices": ["A", "B", "C", "D"],
             "next_cycle": lot_setting.current_cycle,
             "next_sequence": lot_setting.current_sequence + 1,
