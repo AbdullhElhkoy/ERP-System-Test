@@ -113,7 +113,6 @@
       <th style="min-width: 110px;">Lab SHIFT HEAD</th>
       {% for t in physical_tests %}<th data-test-id="{{ t.id }}" data-kind="physical" style="min-width: 75px;">{{ t.name }} (فيزيائي)</th>{% endfor %}
       <th style="min-width: 90px;">وقت النتيجة</th>
-      <th style="min-width: 90px;">كمية التعبئة</th>
       <th style="min-width: 65px;">الوزن</th>
       <th style="min-width: 90px;">الجريد الأساسي</th>
       <th style="min-width: 90px;">الجريد الثانوي</th>
@@ -313,7 +312,6 @@ function addTonRow(groupLetter) {
       </div>
     </td>
     ${dynamicCells()}
-    <td><input type="number" step="any" class="packed-quantity" placeholder="كمية"></td>
     <td><input type="number" step="any" class="weight" oninput="if(this.closest('tr').dataset.groupLetter) calculateGroupWeight(this.closest('tr').dataset.groupLetter)"></td>
     <td><select class="grade primary-grade">${buildPrimaryGradeOptions()}</select></td>
     <td><select class="grade secondary-grade">${buildSecondaryGradeOptions()}</select></td>
@@ -382,7 +380,6 @@ function addRepresentativeRow() {
       </div>
     </td>
     ${DYNAMIC_FIELDS.map(() => '<td class="disabled-cell">-</td>').join('')}
-    <td class="disabled-cell">-</td>
     <td><input type="number" step="any" class="rep-weight" readonly placeholder="مجموع" style="font-weight:bold;"></td>
     <td class="disabled-cell" colspan="4">-</td>
     <td><select class="qc-shift-head"><option value="">لم تتم المراجعة</option><option value="reviewed">تمت مراجعته</option></select></td>
@@ -550,7 +547,6 @@ document.getElementById("save-all").addEventListener("click", function() {
         chemical: chemical,
         result_time: tr.querySelector(".result-time").value,
         dynamic: collectDynamicValues(tr),
-        packed_quantity: tr.querySelector(".packed-quantity") ? tr.querySelector(".packed-quantity").value : null,
         weight: tr.querySelector(".weight").value,
         grade_id: tr.querySelector(".primary-grade") ? tr.querySelector(".primary-grade").value : null,
         primary_grade_id: tr.querySelector(".primary-grade") ? tr.querySelector(".primary-grade").value : null,
