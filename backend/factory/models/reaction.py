@@ -5,15 +5,19 @@ from .shared import TestDefinition
 
 class ProcessStage(models.Model):
     plant = models.ForeignKey(Plant, on_delete=models.CASCADE, related_name="factory_process_stages")
-    code = models.CharField(max_length=20)
-    name = models.CharField(max_length=100)
+    code = models.CharField(max_length=20, blank=True, default="", help_text="اختياري — يُفضل استخدامه ككود إضافي فقط")
+    name = models.CharField(max_length=100, verbose_name="اسم المرحلة")
+    order = models.PositiveIntegerField(default=0, verbose_name="الترتيب")
+    is_active = models.BooleanField(default=True, verbose_name="مفعّلة")
 
     class Meta:
         db_table = "factory_process_stages"
-        unique_together = (("plant", "code"),)
+        ordering = ["plant", "order", "pk"]
+        verbose_name = "مرحلة تفاعل"
+        verbose_name_plural = "مراحل التفاعل"
 
     def __str__(self):
-        return f"{self.code} - {self.name}"
+        return self.name
 
 
 class ProcessStageTest(models.Model):

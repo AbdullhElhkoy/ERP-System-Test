@@ -313,13 +313,27 @@ class ProcessStageTestInline(admin.TabularInline):
     model = ProcessStageTest
     extra = 1
 
+    def get_formset(self, request, obj=None, **kwargs):
+        formset = super().get_formset(request, obj, **kwargs)
+        if obj is not None:
+            formset.form.base_fields["test"].queryset = TestDefinition.objects.filter(
+                plant=obj.plant, scope=TestDefinition.SCOPE_REACTION
+            )
+        return formset
+
 
 @admin.register(ProcessStage)
 class ProcessStageAdmin(PlantScopedAdminMixin, admin.ModelAdmin):
     plant_lookup_field = "plant"
-    list_display = ("code", "name", "plant")
-    list_filter = ("plant",)
+    list_display = ("order", "name", "code", "test_count", "is_active", "plant")
+    list_editable = ("order", "is_active")
+    list_filter = ("plant", "is_active")
+    ordering = ("plant", "order", "pk")
     inlines = [ProcessStageTestInline]
+
+    def test_count(self, obj):
+        return obj.stage_tests.count()
+    test_count.short_description = "عدد الاختبارات"
 
 
 class ProcessAnalysisResultInline(admin.TabularInline):
