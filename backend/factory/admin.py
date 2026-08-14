@@ -68,6 +68,8 @@ class FactoryPlantAdmin(admin.ModelAdmin):
             path("data/<int:plant_id>/", self.admin_site.admin_view(self.data), name="factory_data"),
             path("data-packings/<int:packing_type_id>/", self.admin_site.admin_view(self.data_packings), name="factory_data_packings"),
             path("data-reading/<int:reading_id>/", self.admin_site.admin_view(self.data_reading), name="factory_data_reading"),
+            path("data-reaction-readings/<int:stage_id>/", self.admin_site.admin_view(self.data_reaction_readings), name="factory_data_reaction_readings"),
+            path("data-reaction-reading/<int:reading_id>/", self.admin_site.admin_view(self.data_reaction_reading), name="factory_data_reaction_reading"),
             path("reports/<int:plant_id>/", self.admin_site.admin_view(self.reports), name="factory_reports"),
             path("data-analysis/<int:plant_id>/", self.admin_site.admin_view(self.data_analysis), name="factory_data_analysis"),
         ]
@@ -184,15 +186,17 @@ class FactoryPlantAdmin(admin.ModelAdmin):
         return render(request, "factory/reports.html", context)
 
     def data(self, request, plant_id):
-        """صفحة داتا: اختيار نوع التعبئة (بنفس تقسيم الإدخال) لعرض/تعديل البيانات السابقة."""
+        """صفحة داتا: اختيار مرحلة تفاعل أو نوع تعبئة (بنفس تقسيم الإدخال) لعرض/تعديل البيانات السابقة."""
         plant, error = self._get_plant_or_redirect(request, plant_id)
         if error:
             return error
+        reaction_stages = ProcessStage.objects.filter(plant=plant)
         final_product_packing = PackingType.objects.filter(plant=plant)
         context = {
             **self.admin_site.each_context(request),
             "plant": plant,
             "dashboard_url": f"/admin/factory/factoryplant/dashboard/{plant.pk}/",
+            "reaction_stages": reaction_stages,
             "final_product_packing": final_product_packing,
         }
         return render(request, "factory/data.html", context)
@@ -300,6 +304,104 @@ class FactoryPlantAdmin(admin.ModelAdmin):
             "dashboard_url": f"/admin/factory/factoryplant/dashboard/{plant.pk}/",
         }
         return render(request, "factory/data_analysis.html", context)
+
+    def data_reaction_readings(self, request, stage_id):
+        """قائمة قراءات التفاعل السابقة لمرحلة محددة."""
+        plant = self._current_plant(request)
+        if not plant:
+            self.message_user(request, "لازم تدخل مصنع الأول")
+            return redirect("admin:factory_factoryplant_changelist")
+
+        stage = ProcessStage.objects.filter(pk=stage_id, plant=plant).first()
+        if not stage:
+            self.message_user(request, "المرحلة غير موجودة لهذا المصنع")
+            return redirect("admin:factory_data", plant_id=plant.pk)
+
+        readings = ProcessReading.objects.filter(plant=plant, stage=stage).prefetch_related("results").order_by("-sampled_at")
+
+        reading_summaries = []
+        for reading in readings:
+            results_text = ", ".join(
+                f"{r.test.name}: {r.result}" for r in reading.results.all().select_related("test")
+            )
+            reading_summaries.append({
+                "reading": reading,
+                "results_text": results_text,
+            })
+
+        context = {
+            **self.admin_site.each_context(request),
+            "plant": plant,
+            "dashboard_url": f"/admin/factory/factoryplant/dashboard/{plant.pk}/",
+            "stage": stage,
+            "reading_summaries": reading_summaries,
+        }
+        return render(request, "factory/data_reaction_readings.html", context)
+
+    def data_reaction_reading(self, request, reading_id):
+        """عرض/تعديل قراءة تفاعل واحدة سابقة. لا إضافة من هنا."""
+        plant = self._current_plant(request)
+        if not plant:
+            self.message_user(request, "لازم تدخل مصنع الأول")
+            return redirect("admin:factory_factoryplant_changelist")
+
+        reading = ProcessReading.objects.filter(pk=reading_id, plant=plant).select_related("stage").first()
+        if not reading:
+            self.message_user(request, "القراءة غير موجودة")
+            return redirect("admin:factory_data", plant_id=plant.pk)
+
+        tests = TestDefinition.objects.filter(
+            plant=plant, scopes__contains=[TestDefinition.SCOPE_REACTION]
+        ).order_by("id")
+
+        if request.method == "POST":
+            try:
+                payload = json.loads(request.body)
+            except json.JSONDecodeError:
+                return JsonResponse({"status": "error", "message": "بيانات غير صالحة"}, status=400)
+
+            notes = payload.get("notes", reading.notes)
+            sampled_at_raw = payload.get("sampled_at") or reading.sampled_at.strftime("%Y-%m-%dT%H:%M")
+            from django.utils.dateparse import parse_datetime
+            parsed = parse_datetime(sampled_at_raw)
+            reading.sampled_at = parsed or reading.sampled_at
+            reading.notes = notes
+            reading.save()
+
+            result_map = payload.get("results", {})
+            for test in tests:
+                val_raw = result_map.get(str(test.pk))
+                existing = ProcessAnalysisResult.objects.filter(reading=reading, test=test).first()
+                if val_raw in (None, ""):
+                    if existing:
+                        existing.delete()
+                    continue
+                try:
+                    from decimal import Decimal, InvalidOperation
+                    val = Decimal(str(val_raw))
+                    ProcessAnalysisResult.objects.update_or_create(
+                        reading=reading, test=test, defaults={"result": val}
+                    )
+                except (InvalidOperation, ValueError):
+                    continue
+
+            return JsonResponse({"status": "ok"})
+
+        results = {
+            r.test_id: (str(r.result) if r.result is not None else "")
+            for r in ProcessAnalysisResult.objects.filter(reading=reading).select_related("test")
+        }
+
+        context = {
+            **self.admin_site.each_context(request),
+            "plant": plant,
+            "dashboard_url": f"/admin/factory/factoryplant/dashboard/{plant.pk}/",
+            "reading": reading,
+            "tests": tests,
+            "results": results,
+            "tests_json": json.dumps([{"id": t.id, "name": t.name, "unit": t.unit or ""} for t in tests], ensure_ascii=False),
+        }
+        return render(request, "factory/data_reaction_reading.html", context)
 
     def enter_plant(self, request, plant_id):
         plant, error = self._get_plant_or_redirect(request, plant_id)

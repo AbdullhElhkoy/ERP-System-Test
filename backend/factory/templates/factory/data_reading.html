@@ -103,9 +103,12 @@
 <button id="save-all" type="button" class="button default">حفظ التعديلات</button>
 </form>
 
+{{ chemical_tests_json|json_script:"chemical-tests-data" }}
+{{ physical_tests_json|json_script:"physical-tests-data" }}
+
 <script>
-const CHEMICAL_TESTS = {{ chemical_tests_json|safe }};
-const PHYSICAL_TESTS = {{ physical_tests_json|safe }};
+const CHEMICAL_TESTS = JSON.parse(document.getElementById('chemical-tests-data').textContent);
+const PHYSICAL_TESTS = JSON.parse(document.getElementById('physical-tests-data').textContent);
 
 function getVal(id) {
   const el = document.getElementById(id);
@@ -142,11 +145,17 @@ document.getElementById("save-all").addEventListener("click", function() {
     });
   });
 
+  const csrfEl = document.querySelector('[name=csrfmiddlewaretoken]');
+  if (!csrfEl) {
+    alert("خطأ: لا يوجد رمز حماية (CSRF) في الصفحة — أعد تحميل الصفحة");
+    return;
+  }
+
   fetch(window.location.pathname, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
-      "X-CSRFToken": document.querySelector('[name=csrfmiddlewaretoken]').value,
+      "X-CSRFToken": csrfEl.value,
     },
     body: JSON.stringify({ rows: rows }),
   }).then(r => r.json()).then(data => {
@@ -155,7 +164,7 @@ document.getElementById("save-all").addEventListener("click", function() {
     } else {
       alert("خطأ: " + (data.message || "حدث خطأ"));
     }
-  }).catch(() => alert("خطأ في الاتصال"));
+  }).catch(() => alert("خطأ في الاتصال بالخادم — تأكد من اتصالك"));
 });
 </script>
 {% endblock %}

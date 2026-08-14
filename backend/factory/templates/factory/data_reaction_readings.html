@@ -1,0 +1,43 @@
+{% extends "admin/base_site.html" %}
+{% block content %}
+<style>
+    .de-nav { display: flex; align-items: center; gap: 12px; margin-bottom: 18px; }
+    .de-nav .title { font-size: 20px; font-weight: bold; }
+    .excel-table { border-collapse: collapse; width: 100%; font-size: 12px; text-align: center; background-color: #fff; }
+    .excel-table th { background-color: #f1f5f9; color: #334155; font-weight: 700; padding: 8px 4px; border: 1px solid #cbd5e1; white-space: nowrap; }
+    .excel-table td { border: 1px solid #cbd5e1; padding: 6px 8px; }
+</style>
+
+<div class="de-nav">
+    <div class="title">🗄️ Data - {{ plant.plant_name }} - 🧪 {{ stage.name }}</div>
+    <a class="button" href="{% url 'admin:factory_data' plant.pk %}">← اختيار مرحلة/نوع آخر</a>
+    <a class="button" href="{{ dashboard_url }}">← لوحة المصنع</a>
+</div>
+
+{% if reading_summaries %}
+<table class="excel-table">
+    <thead>
+        <tr>
+            <th>المرحلة</th>
+            <th>تاريخ/وقت السحب</th>
+            <th>النتائج</th>
+            <th>ملاحظات</th>
+            <th>تعديل</th>
+        </tr>
+    </thead>
+    <tbody>
+        {% for item in reading_summaries %}
+        <tr>
+            <td>{{ item.reading.stage.name }}</td>
+            <td>{{ item.reading.sampled_at|date:"Y-m-d H:i" }}</td>
+            <td>{{ item.results_text|default:"—" }}</td>
+            <td>{{ item.reading.notes|default:"—" }}</td>
+            <td><a class="button" href="{% url 'admin:factory_data_reaction_reading' item.reading.pk %}">تعديل</a></td>
+        </tr>
+        {% endfor %}
+    </tbody>
+</table>
+{% else %}
+<p>لا توجد قراءات سابقة لهذه المرحلة.</p>
+{% endif %}
+{% endblock %}

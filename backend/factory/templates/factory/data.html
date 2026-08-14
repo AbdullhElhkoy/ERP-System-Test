@@ -14,6 +14,16 @@
     <a class="button" href="{{ dashboard_url }}">← لوحة المصنع</a>
 </div>
 
+<div class="group-title">🧪 Reaction (البيانات السابقة للتفاعل)</div>
+<p class="hint">اختر المرحلة لعرض/تعديل القراءات المسجلة سابقاً لها. لا إضافة جديدة من هنا.</p>
+<div class="links-wrap">
+    {% for stage in reaction_stages %}
+    <a class="button" href="{% url 'admin:factory_data_reaction_readings' stage.pk %}">⚗️ {{ stage.name }}</a>
+    {% empty %}
+    <p>لا توجد مراحل تفاعل — أضفها من Factory Settings ← Reaction Settings.</p>
+    {% endfor %}
+</div>
+
 <div class="group-title">📦 Final Product (البيانات السابقة للمنتج النهائي)</div>
 <p class="hint">اختر نوع التعبئة لعرض/تعديل القراءات المسجلة سابقاً له. لا إضافة جديدة من هنا.</p>
 <div class="links-wrap">
