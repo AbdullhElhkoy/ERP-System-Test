@@ -1,0 +1,26 @@
+{% extends "admin/base_site.html" %}
+{% block content %}
+<style>
+    .de-nav { display: flex; align-items: center; gap: 12px; margin-bottom: 18px; }
+    .de-nav .title { font-size: 20px; font-weight: bold; }
+    .group-title { font-size: 15px; font-weight: bold; margin: 22px 0 8px; color: #333; border-bottom: 2px solid #79aec8; padding-bottom: 4px; }
+    .links-wrap { display: flex; flex-direction: column; gap: 8px; max-width: 480px; }
+    .links-wrap a { text-align: center; padding: 10px; font-size: 14px; }
+    .hint { font-size: 12px; color: #888; margin: 0 0 6px; }
+</style>
+
+<div class="de-nav">
+    <div class="title">🗄️ Data - {{ plant.plant_name }}</div>
+    <a class="button" href="{{ dashboard_url }}">← لوحة المصنع</a>
+</div>
+
+<div class="group-title">📦 Final Product (البيانات السابقة للمنتج النهائي)</div>
+<p class="hint">اختر نوع التعبئة لعرض/تعديل القراءات المسجلة سابقاً له. لا إضافة جديدة من هنا.</p>
+<div class="links-wrap">
+    {% for packing in final_product_packing %}
+    <a class="button" href="{% url 'admin:factory_data_packings' packing.pk %}">📦 {{ packing.name }}</a>
+    {% empty %}
+    <p>لا توجد أنواع تعبئة — أضفها من Factory Settings ← Final Product Settings.</p>
+    {% endfor %}
+</div>
+{% endblock %}

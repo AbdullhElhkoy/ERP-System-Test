@@ -65,6 +65,9 @@ class FactoryPlantAdmin(admin.ModelAdmin):
             path("final-product-entry/<int:packing_type_id>/", self.admin_site.admin_view(self.final_product_entry), name="factory_final_product_entry"),
             path("settings/<int:plant_id>/", self.admin_site.admin_view(self.plant_settings), name="factory_plant_settings"),
             path("data-entry/<int:plant_id>/", self.admin_site.admin_view(self.data_entry), name="factory_data_entry"),
+            path("data/<int:plant_id>/", self.admin_site.admin_view(self.data), name="factory_data"),
+            path("data-packings/<int:packing_type_id>/", self.admin_site.admin_view(self.data_packings), name="factory_data_packings"),
+            path("data-reading/<int:reading_id>/", self.admin_site.admin_view(self.data_reading), name="factory_data_reading"),
             path("reports/<int:plant_id>/", self.admin_site.admin_view(self.reports), name="factory_reports"),
             path("data-analysis/<int:plant_id>/", self.admin_site.admin_view(self.data_analysis), name="factory_data_analysis"),
         ]
@@ -88,6 +91,7 @@ class FactoryPlantAdmin(admin.ModelAdmin):
             "dashboard_url": f"/admin/factory/factoryplant/dashboard/{plant.pk}/",
             "settings_url": f"/admin/factory/factoryplant/settings/{plant.pk}/",
             "data_entry_url": f"/admin/factory/factoryplant/data-entry/{plant.pk}/",
+            "data_url": f"/admin/factory/factoryplant/data/{plant.pk}/",
             "reports_url": f"/admin/factory/factoryplant/reports/{plant.pk}/",
             "data_analysis_url": f"/admin/factory/factoryplant/data-analysis/{plant.pk}/",
         }
@@ -178,6 +182,113 @@ class FactoryPlantAdmin(admin.ModelAdmin):
             "dashboard_url": f"/admin/factory/factoryplant/dashboard/{plant.pk}/",
         }
         return render(request, "factory/reports.html", context)
+
+    def data(self, request, plant_id):
+        """صفحة داتا: اختيار نوع التعبئة (بنفس تقسيم الإدخال) لعرض/تعديل البيانات السابقة."""
+        plant, error = self._get_plant_or_redirect(request, plant_id)
+        if error:
+            return error
+        final_product_packing = PackingType.objects.filter(plant=plant)
+        context = {
+            **self.admin_site.each_context(request),
+            "plant": plant,
+            "dashboard_url": f"/admin/factory/factoryplant/dashboard/{plant.pk}/",
+            "final_product_packing": final_product_packing,
+        }
+        return render(request, "factory/data.html", context)
+
+    def data_packings(self, request, packing_type_id):
+        """قائمة القراءات السابقة لنوع تعبئة محدد."""
+        plant = self._current_plant(request)
+        if not plant:
+            self.message_user(request, "لازم تدخل مصنع الأول")
+            return redirect("admin:factory_factoryplant_changelist")
+
+        packing_type = PackingType.objects.filter(pk=packing_type_id, plant=plant).first()
+        if not packing_type:
+            self.message_user(request, "نوع التعبئة غير موجود لهذا المصنع")
+            return redirect("admin:factory_data", plant_id=plant.pk)
+
+        readings = (
+            OutputReading.objects.filter(plant=plant, packing_type=packing_type)
+            .select_related("output_point", "packing_location", "sampled_by", "analyzed_by", "lab_shift_head", "reviewed_by")
+            .order_by("-sampled_at")
+        )
+
+        reading_summaries = []
+        for reading in readings:
+            tons = list(reading.tons.all())
+            assignments = TonGradeAssignment.objects.filter(ton__in=tons) if tons else []
+            grade_text = ""
+            if assignments:
+                codes = [f"{a.primary_grade.code}" + (f"/{a.secondary_grade.code}" if a.secondary_grade else "") for a in assignments]
+                grade_text = ", ".join(sorted(set(codes)))
+            reading_summaries.append({
+                "reading": reading,
+                "ton_count": len(tons),
+                "total_weight": sum((t.weight for t in tons), __import__("decimal").Decimal("0")),
+                "grade_text": grade_text,
+            })
+
+        context = {
+            **self.admin_site.each_context(request),
+            "plant": plant,
+            "dashboard_url": f"/admin/factory/factoryplant/dashboard/{plant.pk}/",
+            "packing_type": packing_type,
+            "reading_summaries": reading_summaries,
+        }
+        return render(request, "factory/data_packings.html", context)
+
+    def data_reading(self, request, reading_id):
+        """عرض/تعديل قراءة واحدة سابقة. لا إضافة من هنا."""
+        plant = self._current_plant(request)
+        if not plant:
+            self.message_user(request, "لازم تدخل مصنع الأول")
+            return redirect("admin:factory_factoryplant_changelist")
+
+        reading = OutputReading.objects.filter(pk=reading_id, plant=plant).select_related(
+            "output_point", "packing_location", "packing_type", "sampled_by", "analyzed_by", "lab_shift_head", "reviewed_by"
+        ).first()
+        if not reading:
+            self.message_user(request, "القراءة غير موجودة")
+            return redirect("admin:factory_data", plant_id=plant.pk)
+
+        from .data_grid import build_reading_grid, save_reading_edits
+
+        if request.method == "POST":
+            try:
+                payload = json.loads(request.body)
+            except json.JSONDecodeError:
+                return JsonResponse({"status": "error", "message": "بيانات غير صالحة"}, status=400)
+            errors = save_reading_edits(plant, reading, payload.get("rows", []), request.user)
+            if errors:
+                return JsonResponse({"status": "error", "message": "; ".join(errors)}, status=400)
+            return JsonResponse({"status": "ok"})
+
+        grid = build_reading_grid(reading)
+        users_list = list(User.objects.filter(is_staff=True).values("id", "first_name", "last_name", "username"))
+        formatted_users = [
+            {
+                "id": u["id"],
+                "name": f"{u['first_name']} {u['last_name']}".strip() or u["username"]
+            } for u in users_list
+        ]
+        context = {
+            **self.admin_site.each_context(request),
+            "plant": plant,
+            "dashboard_url": f"/admin/factory/factoryplant/dashboard/{plant.pk}/",
+            "packing_type": reading.packing_type,
+            "reading": reading,
+            "grid": grid,
+            "chemical_tests": grid["chemical_tests"],
+            "physical_tests": grid["physical_tests"],
+            "chemical_tests_json": json.dumps([{"id": t.id, "name": t.name} for t in grid["chemical_tests"]], ensure_ascii=False),
+            "physical_tests_json": json.dumps([{"id": t.id, "name": t.name} for t in grid["physical_tests"]], ensure_ascii=False),
+            "packing_locations": list(PackingLocation.objects.filter(plant=plant)),
+            "shift_choices": ["A", "B", "C", "D"],
+            "users": formatted_users,
+        }
+        return render(request, "factory/data_reading.html", context)
 
     def data_analysis(self, request, plant_id):
         plant, error = self._get_plant_or_redirect(request, plant_id)

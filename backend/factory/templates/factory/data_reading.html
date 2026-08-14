@@ -1,0 +1,161 @@
+{% extends "admin/base_site.html" %}
+{% block content %}
+{% csrf_token %}
+{% load factory_tags %}
+<style>
+    .de-nav { display: flex; align-items: center; gap: 12px; margin-bottom: 18px; flex-wrap: wrap; }
+    .de-nav .title { font-size: 20px; font-weight: bold; }
+    .excel-table { border-collapse: collapse; width: 100%; font-size: 12px; text-align: center; background-color: #fff; }
+    .excel-table th { background-color: #f1f5f9; color: #334155; font-weight: 700; padding: 8px 4px; border: 1px solid #cbd5e1; white-space: nowrap; }
+    .excel-table td { border: 1px solid #cbd5e1; padding: 0 !important; margin: 0; height: 32px; }
+    .excel-table input[type="text"], .excel-table input[type="number"], .excel-table input[type="date"], .excel-table input[type="time"], .excel-table select {
+        width: 100%; height: 100%; border: none; outline: none; background: transparent; text-align: center; font-size: 12px; box-sizing: border-box; padding: 2px;
+    }
+    .excel-table input:focus, .excel-table select:focus { background-color: #e0f2fe !important; box-shadow: inset 0 0 0 2px #0284c7; }
+    .excel-table input[readonly] { background-color: #f1f5f9 !important; color: #64748b; }
+    .group-box { border: 1px solid #ccc; border-radius: 8px; padding: 12px; margin-bottom: 16px; }
+    .group-box h3 { margin: 0 0 8px; font-size: 15px; color: #334155; }
+    .group-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 10px; }
+    .group-grid label { display: block; font-size: 12px; color: #666; margin-bottom: 2px; }
+    .group-grid input, .group-grid select { width: 100%; box-sizing: border-box; font-size: 12px; }
+    .rep-row { background-color: #f0f9ff !important; font-weight: 600; }
+    .disabled-cell { background-color: #e2e8f0 !important; color: #94a3b8; }
+</style>
+
+<div class="de-nav">
+    <div class="title">🗄️ Data - {{ plant.plant_name }} - {{ packing_type.name }}</div>
+    <a class="button" href="{% url 'admin:factory_data_packings' packing_type.pk %}">← القراءات السابقة</a>
+    <a class="button" href="{{ dashboard_url }}">← لوحة المصنع</a>
+</div>
+
+<form id="data-form">
+<div class="group-box">
+    <h3>بيانات السحب (مشتركة)</h3>
+    <div class="group-grid">
+        <label>مكان الإنتاج
+            <select id="f-packing-location">
+                {% for loc in packing_locations %}<option value="{{ loc.id }}" {% if loc.id == reading.packing_location_id %}selected{% endif %}>{{ loc.name }}</option>{% endfor %}
+            </select>
+        </label>
+        <label>تاريخ الإنتاج <input type="date" id="f-production-date" value="{{ grid.rows.0.production_date }}"></label>
+        <label>الوردية <select id="f-shift">{% for s in shift_choices %}<option value="{{ s }}" {% if s == grid.rows.0.shift %}selected{% endif %}>{{ s }}</option>{% endfor %}</select></label>
+        <label>نوع المنتج <input type="text" id="f-product-type" value="{{ reading.product_name|default:packing_type.name }}" readonly></label>
+        <label>وقت السحب <input type="time" id="f-sampling-time" value="{{ grid.rows.0.sampling_time }}"></label>
+        <label>QC Inspector
+            <select id="f-qc-inspector"><option value="">— اختر —</option>{% for u in users %}<option value="{{ u.id }}" {% if u.id == reading.sampled_by_id %}selected{% endif %}>{{ u.name }}</option>{% endfor %}</select>
+        </label>
+        <label>حالة السحب
+            <select id="f-sampling-status"><option value="تم" {% if reading.sampling_status == 'تم' %}selected{% endif %}>تم</option><option value="لم يتم" {% if reading.sampling_status == 'لم يتم' %}selected{% endif %}>لم يتم</option></select>
+        </label>
+        <label>Lab Chemist
+            <select id="f-lab-chemist"><option value="">— اختر —</option>{% for u in users %}<option value="{{ u.id }}" {% if u.id == reading.analyzed_by_id %}selected{% endif %}>{{ u.name }}</option>{% endfor %}</select>
+        </label>
+        <label>Lab SHIFT HEAD
+            <select id="f-lab-shift-head"><option value="">— اختر —</option>{% for u in users %}<option value="{{ u.id }}" {% if u.id == reading.lab_shift_head_id %}selected{% endif %}>{{ u.name }}</option>{% endfor %}</select>
+        </label>
+        <label>وقت النتيجة <input type="time" id="f-result-time" value="{{ grid.rows.0.result_time }}"></label>
+        <label>مراجعة QC
+            <select id="f-qc-shift-head"><option value="">لم تتم المراجعة</option><option value="reviewed" {% if reading.reviewed_by_id %}selected{% endif %}>تمت مراجعته</option></select>
+        </label>
+    </div>
+</div>
+
+<div class="excel-wrapper">
+<table id="entry-table" class="excel-table">
+    <thead>
+        <tr>
+            <th>نوع الصف</th>
+            <th>الكود</th>
+            {% for t in chemical_tests %}<th>{{ t.name }} (كيميائي)</th>{% endfor %}
+            {% for t in physical_tests %}<th>{{ t.name }} (فيزيائي)</th>{% endfor %}
+            <th>الوزن</th>
+            <th>الجريد الأساسي</th>
+            <th>الجريد الثانوي</th>
+            <th>سبب المحلي</th>
+            <th>سبب غير المطابق</th>
+        </tr>
+    </thead>
+    <tbody id="entry-tbody">
+        {% for row in grid.rows %}
+        <tr class="ton-row" data-ton-id="{{ row.ton.pk }}">
+            <td>{% if row.rep %}عينة ممثلة{% else %}عينة منفردة{% endif %}</td>
+            <td>{{ row.ton.code }}</td>
+            {% for t in chemical_tests %}
+            <td><input type="number" step="any" class="chemical-input" data-test-id="{{ t.id }}" value="{{ row.chemical_values|get_item:t.id }}"></td>
+            {% endfor %}
+            {% for t in physical_tests %}
+            <td><input type="number" step="any" class="physical-input" data-test-id="{{ t.id }}" value="{{ row.physical_values|get_item:t.id }}"></td>
+            {% endfor %}
+            <td><input type="number" step="any" class="weight" value="{{ row.weight }}"></td>
+            <td><select class="primary-grade"><option value="">— اختر —</option>{% for g in grid.primary_grades %}<option value="{{ g.id }}" {% if g.id == row.primary_grade %}selected{% endif %}>{{ g.code }}</option>{% endfor %}</select></td>
+            <td><select class="secondary-grade"><option value="">— اختر —</option>{% for g in grid.secondary_grades %}<option value="{{ g.id }}" {% if g.id == row.secondary_grade %}selected{% endif %}>{{ g.code }}</option>{% endfor %}</select></td>
+            <td><select class="local-reason"><option value="">— اختر —</option>{% for r in grid.local_reasons %}<option value="{{ r.id }}" {% if r.id == row.local_reason %}selected{% endif %}>{{ r.text }}</option>{% endfor %}</select></td>
+            <td><select class="non-conforming-reason"><option value="">— اختر —</option>{% for r in grid.non_conforming_reasons %}<option value="{{ r.id }}" {% if r.id == row.non_conforming_reason %}selected{% endif %}>{{ r.text }}</option>{% endfor %}</select></td>
+        </tr>
+        {% empty %}
+        <tr><td colspan="100">لا توجد أطنان لهذه القراءة.</td></tr>
+        {% endfor %}
+    </tbody>
+</table>
+</div>
+
+<br>
+<button id="save-all" type="button" class="button default">حفظ التعديلات</button>
+</form>
+
+<script>
+const CHEMICAL_TESTS = {{ chemical_tests_json|safe }};
+const PHYSICAL_TESTS = {{ physical_tests_json|safe }};
+
+function getVal(id) {
+  const el = document.getElementById(id);
+  return el ? el.value : null;
+}
+
+document.getElementById("save-all").addEventListener("click", function() {
+  const rows = [];
+  document.querySelectorAll("tr.ton-row").forEach(tr => {
+    const chemical = {};
+    const physical = {};
+    tr.querySelectorAll(".chemical-input").forEach(inp => { if (inp.value !== "") chemical[inp.dataset.testId] = inp.value; });
+    tr.querySelectorAll(".physical-input").forEach(inp => { if (inp.value !== "") physical[inp.dataset.testId] = inp.value; });
+    rows.push({
+      row_type: "ton",
+      ton_id: tr.dataset.tonId,
+      weight: tr.querySelector(".weight").value,
+      primary_grade_id: tr.querySelector(".primary-grade").value,
+      secondary_grade_id: tr.querySelector(".secondary-grade").value,
+      local_reason_id: tr.querySelector(".local-reason").value,
+      non_conforming_reason_id: tr.querySelector(".non-conforming-reason").value,
+      chemical: chemical,
+      physical: physical,
+      production_date: getVal("f-production-date"),
+      shift: getVal("f-shift"),
+      sampling_time: getVal("f-sampling-time"),
+      sampling_status: getVal("f-sampling-status"),
+      qc_inspector_id: getVal("f-qc-inspector"),
+      lab_chemist_id: getVal("f-lab-chemist"),
+      lab_shift_head_id: getVal("f-lab-shift-head"),
+      result_time: getVal("f-result-time"),
+      qc_shift_head: getVal("f-qc-shift-head"),
+      packing_location_id: getVal("f-packing-location"),
+    });
+  });
+
+  fetch(window.location.pathname, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "X-CSRFToken": document.querySelector('[name=csrfmiddlewaretoken]').value,
+    },
+    body: JSON.stringify({ rows: rows }),
+  }).then(r => r.json()).then(data => {
+    if (data.status === "ok") {
+      alert("تم حفظ التعديلات بنجاح");
+    } else {
+      alert("خطأ: " + (data.message || "حدث خطأ"));
+    }
+  }).catch(() => alert("خطأ في الاتصال"));
+});
+</script>
+{% endblock %}

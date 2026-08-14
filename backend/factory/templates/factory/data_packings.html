@@ -1,0 +1,51 @@
+{% extends "admin/base_site.html" %}
+{% block content %}
+<style>
+    .de-nav { display: flex; align-items: center; gap: 12px; margin-bottom: 18px; }
+    .de-nav .title { font-size: 20px; font-weight: bold; }
+    .excel-table { border-collapse: collapse; width: 100%; font-size: 12px; text-align: center; background-color: #fff; }
+    .excel-table th { background-color: #f1f5f9; color: #334155; font-weight: 700; padding: 8px 4px; border: 1px solid #cbd5e1; white-space: nowrap; }
+    .excel-table td { border: 1px solid #cbd5e1; padding: 6px 8px; }
+</style>
+
+<div class="de-nav">
+    <div class="title">🗄️ Data - {{ plant.plant_name }} - {{ packing_type.name }}</div>
+    <a class="button" href="{% url 'admin:factory_data' plant.pk %}">← اختيار نوع آخر</a>
+    <a class="button" href="{{ dashboard_url }}">← لوحة المصنع</a>
+</div>
+
+{% if reading_summaries %}
+<table class="excel-table">
+    <thead>
+        <tr>
+            <th>الكود</th>
+            <th>تاريخ/وقت السحب</th>
+            <th>مكان الإنتاج</th>
+            <th>نوع المنتج</th>
+            <th>عدد الأطنان</th>
+            <th>إجمالي الوزن</th>
+            <th>الجريد</th>
+            <th>حالة السحب</th>
+            <th>تعديل</th>
+        </tr>
+    </thead>
+    <tbody>
+        {% for item in reading_summaries %}
+        <tr>
+            <td>{{ item.reading.sample_code|default:item.reading.pk }}</td>
+            <td>{{ item.reading.sampled_at|date:"Y-m-d H:i" }}</td>
+            <td>{{ item.reading.packing_location.name|default:"—" }}</td>
+            <td>{{ item.reading.product_name|default:"—" }}</td>
+            <td>{{ item.ton_count }}</td>
+            <td>{{ item.total_weight }}</td>
+            <td>{{ item.grade_text|default:"—" }}</td>
+            <td>{{ item.reading.sampling_status|default:"—" }}</td>
+            <td><a class="button" href="{% url 'admin:factory_data_reading' item.reading.pk %}">تعديل</a></td>
+        </tr>
+        {% endfor %}
+    </tbody>
+</table>
+{% else %}
+<p>لا توجد قراءات سابقة لنوع التعبئة هذا.</p>
+{% endif %}
+{% endblock %}
