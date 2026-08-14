@@ -159,7 +159,7 @@ class FactoryPlantAdmin(admin.ModelAdmin):
             "dashboard_url": f"/admin/factory/factoryplant/dashboard/{plant.pk}/",
             "reaction_stages": reaction_stages,
             "final_product_packing": final_product_packing,
-            "reaction_url": f"/process-reading/",
+            "reaction_url": f"/factory/process-reading/",
         }
         return render(request, "factory/data_entry.html", context)
 
