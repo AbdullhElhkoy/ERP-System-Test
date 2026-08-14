@@ -1,20 +1,11 @@
 {% extends "admin/base_site.html" %}
 {% block content %}
-<h1>إدخال قراءات التفاعل (جدول)</h1>
+<h1>إدخال قراءات التفاعل - {{ plant.plant_name }}</h1>
+<p>
+    <a class="button" href="{{ dashboard_url }}">← لوحة المصنع</a>
+</p>
 
-<form method="get">
-    <label><strong>المصنع:</strong></label>
-    <select name="plant" onchange="this.form.submit()">
-        <option value="">اختار مصنع</option>
-        {% for p in plants %}
-        <option value="{{ p.pk }}" {% if plant and plant.pk == p.pk %}selected{% endif %}>{{ p.plant_name }}</option>
-        {% endfor %}
-    </select>
-</form>
-
-{% if plant %}
 <form method="get" style="margin-top:20px;">
-    <input type="hidden" name="plant" value="{{ plant.pk }}">
     <p><strong>اختار المراحل:</strong></p>
     {% for stage in stages %}
     <label style="margin-left:15px; display:inline-block;">
@@ -22,16 +13,16 @@
         {% if stage.pk in selected_stage_ids %}checked{% endif %}>
         {{ stage.code }} - {{ stage.name }}
     </label>
+    {% empty %}
+    <p>لا توجد مراحل تفاعل لهذا المصنع — أضفها من Factory Settings.</p>
     {% endfor %}
     <br><br>
     <button type="submit">تحميل الجدول</button>
 </form>
-{% endif %}
 
 {% if selected_stages %}
 <form method="post" style="margin-top:20px;">
     {% csrf_token %}
-    <input type="hidden" name="plant" value="{{ plant.pk }}">
     {% for s in selected_stage_ids %}
     <input type="hidden" name="stages" value="{{ s }}">
     {% endfor %}

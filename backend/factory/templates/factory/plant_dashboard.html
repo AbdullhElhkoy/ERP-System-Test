@@ -1,0 +1,48 @@
+{% extends "admin/base_site.html" %}
+{% block content %}
+<style>
+    .plant-header { display: flex; align-items: center; gap: 15px; margin-bottom: 10px; }
+    .plant-header .title { font-size: 22px; font-weight: bold; }
+    .back-btn { font-size: 13px; }
+    .section-grid { display: flex; flex-wrap: wrap; gap: 16px; margin-top: 20px; }
+    .section-card {
+        flex: 1 1 220px; max-width: 240px;
+        border: 1px solid #ccc; border-radius: 8px;
+        padding: 20px; text-align: center; background: #f9f9f9;
+        cursor: pointer; text-decoration: none; color: inherit; display: block;
+        transition: box-shadow .2s, background .2s;
+    }
+    .section-card:hover { box-shadow: 0 4px 12px rgba(0,0,0,.15); background: #fff; }
+    .section-card .icon { font-size: 34px; display: block; margin-bottom: 10px; }
+    .section-card .label { font-size: 16px; font-weight: bold; }
+</style>
+
+<div class="plant-header">
+    <div class="title">🏭 {{ plant.plant_name }}</div>
+    <a class="button back-btn" href="{% url 'admin:factory_factoryplant_changelist' %}">← العودة لقائمة المصانع</a>
+</div>
+<p style="margin: 0;">السياق الحالي: <strong>{{ plant.plant_name }}</strong> — كل الصفحات هنا تخص هذا المصنع فقط.</p>
+
+<div class="section-grid">
+    <a class="section-card" href="{{ settings_url }}">
+        <span class="icon">⚙️</span>
+        <span class="label">Factory Settings</span>
+        <div style="font-size: 12px; color: #666; margin-top: 6px;">إعدادات التفاعل والمنتج النهائي</div>
+    </a>
+    <a class="section-card" href="{{ data_entry_url }}">
+        <span class="icon">📝</span>
+        <span class="label">Data Entry</span>
+        <div style="font-size: 12px; color: #666; margin-top: 6px;">تسجيل بيانات التفاعل والمنتج النهائي</div>
+    </a>
+    <a class="section-card" href="{{ reports_url }}">
+        <span class="icon">📊</span>
+        <span class="label">Reports</span>
+        <div style="font-size: 12px; color: #666; margin-top: 6px;">التقارير (قريباً)</div>
+    </a>
+    <a class="section-card" href="{{ data_analysis_url }}">
+        <span class="icon">📈</span>
+        <span class="label">Data Analysis</span>
+        <div style="font-size: 12px; color: #666; margin-top: 6px;">تحليل البيانات (قريباً)</div>
+    </a>
+</div>
+{% endblock %}

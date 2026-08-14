@@ -1,0 +1,36 @@
+{% extends "admin/base_site.html" %}
+{% block content %}
+<style>
+    .de-nav { display: flex; align-items: center; gap: 12px; margin-bottom: 18px; }
+    .de-nav .title { font-size: 20px; font-weight: bold; }
+    .group-title { font-size: 15px; font-weight: bold; margin: 22px 0 8px; color: #333; border-bottom: 2px solid #79aec8; padding-bottom: 4px; }
+    .links-wrap { display: flex; flex-direction: column; gap: 8px; max-width: 480px; }
+    .links-wrap a { text-align: center; padding: 10px; font-size: 14px; }
+    .hint { font-size: 12px; color: #888; margin: 0 0 6px; }
+</style>
+
+<div class="de-nav">
+    <div class="title">📝 Data Entry - {{ plant.plant_name }}</div>
+    <a class="button" href="{{ dashboard_url }}">← لوحة المصنع</a>
+</div>
+
+<div class="group-title">🧪 Reaction (تسجيل بيانات التفاعل)</div>
+<p class="hint">المراحل هنا مأخوذة من إعدادات المصنع الحالي فقط.</p>
+<div class="links-wrap">
+    {% for stage in reaction_stages %}
+    <a class="button" href="{{ reaction_url }}?stage={{ stage.pk }}">⚗️ {{ stage.name }}</a>
+    {% empty %}
+    <p>لا توجد مراحل تفاعل — أضفها من Factory Settings ← Reaction Settings.</p>
+    {% endfor %}
+</div>
+
+<div class="group-title">📦 Final Product (تسجيل بيانات المنتج النهائي)</div>
+<p class="hint">أنواع التعبئة هنا مأخوذة من إعدادات المصنع الحالي فقط.</p>
+<div class="links-wrap">
+    {% for packing in final_product_packing %}
+    <a class="button" href="{% url 'admin:factory_final_product_entry' packing.pk %}">📦 {{ packing.name }}</a>
+    {% empty %}
+    <p>لا توجد أنواع تعبئة — أضفها من Factory Settings ← Final Product Settings.</p>
+    {% endfor %}
+</div>
+{% endblock %}

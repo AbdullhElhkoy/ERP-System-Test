@@ -1,12 +1,36 @@
 {% extends "admin/base_site.html" %}
 {% block content %}
-<h1>إعدادات المصنع - {{ plant.plant_name }}</h1>
+<style>
+    .settings-nav { display: flex; align-items: center; gap: 12px; margin-bottom: 18px; }
+    .settings-nav .title { font-size: 20px; font-weight: bold; }
+    .group-title { font-size: 15px; font-weight: bold; margin: 22px 0 8px; color: #333; border-bottom: 2px solid #79aec8; padding-bottom: 4px; }
+    .links-wrap { display: flex; flex-direction: column; gap: 8px; max-width: 480px; }
+    .links-wrap a { text-align: center; padding: 10px; font-size: 14px; }
+</style>
 
-<div style="margin-top: 20px; display: flex; flex-direction: column; gap: 10px; max-width: 400px;">
-{% for link in links %}
-    <a class="button" href="{{ link.url }}" style="text-align: center; padding: 12px; font-size: 14px;">
-        {{ link.title }}
-    </a>
+<div class="settings-nav">
+    <div class="title">⚙️ Factory Settings - {{ plant.plant_name }}</div>
+    <a class="button" href="{{ dashboard_url }}">← لوحة المصنع</a>
+</div>
+
+<div class="group-title">🧪 Reaction Settings (إعدادات التفاعل)</div>
+<div class="links-wrap">
+{% for link in reaction_groups %}
+    <a class="button" href="{{ link.url }}">{{ link.title }}</a>
+{% endfor %}
+</div>
+
+<div class="group-title">📦 Final Product Settings (إعدادات المنتج النهائي)</div>
+<div class="links-wrap">
+{% for link in final_product_groups %}
+    <a class="button" href="{{ link.url }}">{{ link.title }}</a>
+{% endfor %}
+</div>
+
+<div class="group-title">🗄️ بيانات المصنع (سجلات الإدخال)</div>
+<div class="links-wrap">
+{% for link in data_groups %}
+    <a class="button" href="{{ link.url }}">{{ link.title }}</a>
 {% endfor %}
 </div>
 {% endblock %}

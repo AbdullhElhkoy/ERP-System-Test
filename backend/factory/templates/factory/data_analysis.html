@@ -1,0 +1,20 @@
+{% extends "admin/base_site.html" %}
+{% block content %}
+<style>
+    .a-nav { display: flex; align-items: center; gap: 12px; margin-bottom: 18px; }
+    .a-nav .title { font-size: 20px; font-weight: bold; }
+    .placeholder { border: 1px dashed #ccc; padding: 40px; text-align: center; color: #888; border-radius: 8px; }
+</style>
+
+<div class="a-nav">
+    <div class="title">📈 Data Analysis - {{ plant.plant_name }}</div>
+    <a class="button" href="{{ dashboard_url }}">← لوحة المصنع</a>
+</div>
+
+<div class="placeholder">
+    <div style="font-size: 30px; margin-bottom: 10px;">📈</div>
+    صفحة تحليل البيانات قيد الإنشاء — ستشمل:
+    <br><br>
+    Production Analysis · Quality Analysis · Trend Analysis · Grade Analysis · Packing Analysis · Loss Analysis
+</div>
+{% endblock %}

@@ -33,10 +33,13 @@ User = get_user_model()
 
 @staff_member_required
 def process_reading_grid(request):
-    plant_id = request.GET.get("plant") or request.POST.get("plant")
+    plant_id = request.session.get("factory_current_plant_id")
     plant = Plant.objects.filter(pk=plant_id).first() if plant_id else None
-    stages = ProcessStage.objects.filter(plant=plant) if plant else ProcessStage.objects.none()
-    tests = TestDefinition.objects.filter(plant=plant, scope=TestDefinition.SCOPE_REACTION) if plant else TestDefinition.objects.none()
+    if not plant:
+        messages.error(request, "لازم تدخل مصنع الأول")
+        return redirect("admin:factory_factoryplant_changelist")
+    stages = ProcessStage.objects.filter(plant=plant)
+    tests = TestDefinition.objects.filter(plant=plant, scope=TestDefinition.SCOPE_REACTION)
 
     if request.method == "POST":
         if request.content_type == "application/json":
@@ -90,18 +93,18 @@ def process_reading_grid(request):
                         except InvalidOperation:
                             continue
         messages.success(request, "تم حفظ القراءات بنجاح")
-        return redirect(f"{request.path}?plant={plant_id}")
+        return redirect(request.path)
 
     selected_stage_ids = [int(s) for s in request.GET.getlist("stages")]
-    selected_stages = ProcessStage.objects.filter(plant=plant, pk__in=selected_stage_ids) if plant else ProcessStage.objects.none()
+    selected_stages = ProcessStage.objects.filter(plant=plant, pk__in=selected_stage_ids)
 
     context = {
-        "plants": Plant.objects.all(),
         "plant": plant,
         "stages": stages,
         "tests": tests,
         "selected_stage_ids": selected_stage_ids,
         "selected_stages": selected_stages,
+        "dashboard_url": f"/admin/factory/factoryplant/dashboard/{plant.pk}/",
     }
     return render(request, "factory/process_reading_grid.html", context)
 

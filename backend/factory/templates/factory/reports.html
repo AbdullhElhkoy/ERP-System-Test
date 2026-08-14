@@ -1,0 +1,20 @@
+{% extends "admin/base_site.html" %}
+{% block content %}
+<style>
+    .r-nav { display: flex; align-items: center; gap: 12px; margin-bottom: 18px; }
+    .r-nav .title { font-size: 20px; font-weight: bold; }
+    .placeholder { border: 1px dashed #ccc; padding: 40px; text-align: center; color: #888; border-radius: 8px; }
+</style>
+
+<div class="r-nav">
+    <div class="title">📊 Reports - {{ plant.plant_name }}</div>
+    <a class="button" href="{{ dashboard_url }}">← لوحة المصنع</a>
+</div>
+
+<div class="placeholder">
+    <div style="font-size: 30px; margin-bottom: 10px;">📊</div>
+    صفحة التقارير قيد الإنشاء — ستشمل:
+    <br><br>
+    Production Report · Batch Report · QC Report · Packing Report · Final Product Report · Daily Report
+</div>
+{% endblock %}
