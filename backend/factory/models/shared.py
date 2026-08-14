@@ -81,8 +81,22 @@ class ConformityRule(models.Model):
 
 
 class Grade(models.Model):
+    TYPE_PRIMARY = "primary"
+    TYPE_SECONDARY = "secondary"
+    TYPE_CHOICES = [
+        (TYPE_PRIMARY, "أساسي"),
+        (TYPE_SECONDARY, "ثانوي"),
+    ]
+
     plant = models.ForeignKey(Plant, on_delete=models.CASCADE, related_name="factory_grades")
     code = models.CharField(max_length=20)
+    grade_type = models.CharField(
+        max_length=10,
+        choices=TYPE_CHOICES,
+        default=TYPE_PRIMARY,
+        verbose_name="نوع الجريد",
+        help_text="أساسي = يظهر في عمود الجريد الأساسي، ثانوي = يظهر في عمود الجريد الثانوي",
+    )
     classification = models.ForeignKey(QualityGrade, on_delete=models.PROTECT, related_name="grades")
     is_active = models.BooleanField(default=True)
 

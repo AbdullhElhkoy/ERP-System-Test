@@ -127,7 +127,8 @@
 <!-- البيانات الممررة بأسلوب آمن عبر json_script -->
 {{ chemical_tests_json|json_script:"chemical-tests-data" }}
 {{ physical_tests_json|json_script:"physical-tests-data" }}
-{{ grades_json|json_script:"grades-data" }}
+{{ primary_grades_json|json_script:"primary-grades-data" }}
+{{ secondary_grades_json|json_script:"secondary-grades-data" }}
 {{ local_reasons_json|json_script:"local-reasons-data" }}
 {{ non_conforming_reasons_json|json_script:"non-conforming-reasons-data" }}
 {{ users_json|json_script:"users-data" }}
@@ -137,7 +138,8 @@
 <script>
 const CHEMICAL_TESTS = JSON.parse(document.getElementById('chemical-tests-data').textContent);
 const PHYSICAL_TESTS = JSON.parse(document.getElementById('physical-tests-data').textContent);
-const GRADES = JSON.parse(document.getElementById('grades-data').textContent);
+const PRIMARY_GRADES = JSON.parse(document.getElementById('primary-grades-data').textContent || '[]');
+const SECONDARY_GRADES = JSON.parse(document.getElementById('secondary-grades-data').textContent || '[]');
 const LOCAL_REASONS = JSON.parse(document.getElementById('local-reasons-data').textContent || '[]');
 const NON_CONFORMING_REASONS = JSON.parse(document.getElementById('non-conforming-reasons-data').textContent || '[]');
 const USERS = JSON.parse(document.getElementById('users-data').textContent || '[]');
@@ -165,8 +167,12 @@ function buildLocationOptions() {
   return `<option value="">-- اختر --</option>` + LOCATIONS.map(l => `<option value="${l.id}">${l.name}</option>`).join("");
 }
 
-function buildGradeOptions() {
-  return `<option value="">-- اختر --</option>` + GRADES.map(g => `<option value="${g.id}" data-classification="${g.classification}">${g.code}</option>`).join("");
+function buildPrimaryGradeOptions() {
+  return `<option value="">-- اختر --</option>` + PRIMARY_GRADES.map(g => `<option value="${g.id}" data-classification="${g.classification}">${g.code}</option>`).join("");
+}
+
+function buildSecondaryGradeOptions() {
+  return `<option value="">-- اختر --</option>` + SECONDARY_GRADES.map(g => `<option value="${g.id}" data-classification="${g.classification}">${g.code}</option>`).join("");
 }
 
 function buildDynamicCell(f, oninput) {
@@ -316,8 +322,8 @@ function addTonRow(groupLetter) {
     ${dynamicCells()}
     <td><input type="number" step="any" class="packed-quantity" placeholder="كمية"></td>
     <td><input type="number" step="any" class="weight" oninput="if(this.closest('tr').dataset.groupLetter) calculateGroupWeight(this.closest('tr').dataset.groupLetter)"></td>
-    <td><select class="grade primary-grade" onchange="toggleReasonFields(this)">${buildGradeOptions()}</select></td>
-    <td><select class="grade secondary-grade">${buildGradeOptions()}</select></td>
+    <td><select class="grade primary-grade" onchange="toggleReasonFields(this)">${buildPrimaryGradeOptions()}</select></td>
+    <td><select class="grade secondary-grade">${buildSecondaryGradeOptions()}</select></td>
     <td><select class="local-reason" disabled><option value="">-- اختر --</option>${LOCAL_REASONS.map(r => `<option value="${r.id}">${r.text}</option>`).join('')}</select></td>
     <td><select class="non-conforming-reason" disabled><option value="">-- اختر --</option>${NON_CONFORMING_REASONS.map(r => `<option value="${r.id}">${r.text}</option>`).join('')}</select></td>
     <td class="disabled-cell">-</td>

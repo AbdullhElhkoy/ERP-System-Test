@@ -220,6 +220,8 @@ class FactoryPlantAdmin(admin.ModelAdmin):
         chemical_tests = TestDefinition.objects.filter(plant=plant, category="chemical", scopes__contains=[TestDefinition.SCOPE_FINAL_PRODUCT])
         physical_tests = TestDefinition.objects.filter(plant=plant, category="physical", scopes__contains=[TestDefinition.SCOPE_FINAL_PRODUCT])
         grades = Grade.objects.filter(plant=plant, is_active=True)
+        primary_grades = grades.filter(grade_type=Grade.TYPE_PRIMARY)
+        secondary_grades = grades.filter(grade_type=Grade.TYPE_SECONDARY)
         
         local_reasons = GradeReason.objects.filter(plant=plant, reason_type="local")
         non_conforming_reasons = GradeReason.objects.filter(plant=plant, reason_type="non_conforming")
@@ -247,10 +249,27 @@ class FactoryPlantAdmin(admin.ModelAdmin):
             "grades": grades,
             "chemical_tests_json": [{"id": getattr(t, "pk", getattr(t, "id", None)), "name": t.name} for t in chemical_tests],
             "physical_tests_json": [{"id": getattr(t, "pk", getattr(t, "id", None)), "name": t.name} for t in physical_tests],
+            "primary_grades_json": [
+                {
+                    "id": getattr(g, "pk", getattr(g, "id", None)),
+                    "code": g.code,
+                    "classification": getattr(g.classification, "code", str(g.classification)),
+                }
+                for g in primary_grades
+            ],
+            "secondary_grades_json": [
+                {
+                    "id": getattr(g, "pk", getattr(g, "id", None)),
+                    "code": g.code,
+                    "classification": getattr(g.classification, "code", str(g.classification)),
+                }
+                for g in secondary_grades
+            ],
             "grades_json": [
                 {
                     "id": getattr(g, "pk", getattr(g, "id", None)),
                     "code": g.code,
+                    "grade_type": g.grade_type,
                     "classification": getattr(g.classification, "code", str(g.classification)),
                 }
                 for g in grades
@@ -328,8 +347,8 @@ class ConformityRuleAdmin(PlantScopedAdminMixin, admin.ModelAdmin):
 @admin.register(Grade)
 class GradeAdmin(PlantScopedAdminMixin, admin.ModelAdmin):
     plant_lookup_field = "plant"
-    list_display = ("code", "classification", "is_active", "plant")
-    list_filter = ("plant", "classification", "is_active")
+    list_display = ("code", "grade_type", "classification", "is_active", "plant")
+    list_filter = ("plant", "grade_type", "classification", "is_active")
     list_editable = ("is_active",)
     search_fields = ("code",)
 
