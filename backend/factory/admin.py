@@ -320,18 +320,11 @@ class PackingLocationAdmin(PlantScopedAdminMixin, admin.ModelAdmin):
     list_display = ("name", "plant")
     list_filter = ("plant",)
 
-class PackingTypeFieldInline(admin.TabularInline):
-    model = PackingTypeField
-    extra = 1
-    autocomplete_fields = ["field"]
-
-
 @admin.register(PackingType)
 class PackingTypeAdmin(PlantScopedAdminMixin, admin.ModelAdmin):
     plant_lookup_field = "plant"
     list_display = ("name", "plant")
     list_filter = ("plant",)
-    inlines = [PackingTypeFieldInline]
 
 
 @admin.register(ConformityRule)

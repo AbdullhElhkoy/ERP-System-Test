@@ -60,6 +60,7 @@ class PackingType(models.Model):
 
     class Meta:
         db_table = "factory_packing_types"
+        ordering = ["id"]
         unique_together = (("plant", "name"),)
 
     def __str__(self):
