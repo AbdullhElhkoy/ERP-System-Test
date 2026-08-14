@@ -25,6 +25,12 @@ FINAL_PRODUCT_MODELS = {
     "TonPhysicalResult",
     "SampleChemicalResult",
     "TonGradeAssignment",
+    "GradeReason",
+    "RepresentativeGroupSize",
+    "FieldDefinition",
+    "PackingTypeField",
+    "FloorStockBalance",
+    "FloorStockMovement",
 }
 
 
@@ -63,6 +69,12 @@ def get_app_list(self, request, app_label=None):
                     "add_url": None,
                     "view_only": False,
                 })
+
+            # بقية الموديلات (الإعدادات والبيانات) تظهر تحت قسم "Factory Data"
+            data_models = [m for m in app["models"] if m["object_name"] != "FactoryPlant"]
+            for entry in data_models:
+                entry["name"] = f"⚙ {entry['name']}"
+                entries.append(entry)
 
             new_list.append({**app, "name": "Factory", "app_label": "factory", "models": entries})
 
