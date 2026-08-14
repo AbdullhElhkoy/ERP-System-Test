@@ -95,8 +95,20 @@ class OutputReading(models.Model):
     product_name = models.CharField(max_length=100, blank=True, default="")
     sampled_at = models.DateTimeField()
 
-    # عمود مخزّن فعليًا (مش property) - نحتاج نحدد آلية تعبئته لاحقًا
+    # عمود مخزّن فعليًا - يُملأ تلقائيًا من كود الطن (S-<ton_code>) في services.py
     sample_code = models.CharField(max_length=100, blank=True, default="")
+
+    sampling_status = models.CharField(
+        max_length=20, blank=True, default="",
+        choices=[
+            ("تم", "تم"),
+            ("لم يتم", "لم يتم"),
+        ],
+        help_text="حالة سحب العينة من شاشة الإدخال",
+    )
+    result_time = models.TimeField(
+        null=True, blank=True, help_text="وقت ظهور النتيجة"
+    )
 
     notes = models.TextField(blank=True, default="")
 

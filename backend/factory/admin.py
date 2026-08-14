@@ -1,19 +1,15 @@
 import json
-from collections import Counter
-from datetime import datetime
-from decimal import Decimal, InvalidOperation
+
 from django.contrib import admin
 from django.contrib.auth import get_user_model
-from django.db import transaction
 from django.http import JsonResponse
 from django.shortcuts import redirect, render
 from django.urls import path
-from django.utils.dateparse import parse_date, parse_time
 from django.utils.html import format_html, format_html_join
 from custom_permissions.admin_mixins import PlantScopedAdminMixin
-from .shift_resolver import resolve_shift_type
 from .models.plant_proxy import FactoryPlant
 from .models.dynamic_fields import FieldDefinition, PackingTypeField
+from .services import save_final_product_rows
 
 # استيراد الموديلات بشكل صريح لضمان معرفة Pylance بها وتجنب أخطاء "unknown import symbol"
 from . import models
@@ -215,158 +211,11 @@ class FactoryPlantAdmin(admin.ModelAdmin):
         }
         return render(request, "factory/final_product_entry.html", context)
 
-    @transaction.atomic
     def _save_final_product_entry(self, request, plant, packing_type):
         payload = json.loads(request.body)
         rows = payload.get("rows", [])
-
-        tons_by_group = {}
-        rows_by_group = {}
-        default_output_point = OutputPoint.objects.filter(plant=plant).first()
-
-        # الخطوة 1: معالجة وإنشاء أسطر الأطنان (منفردة أو تابعة لمجموعة)
-        for row in rows:
-            if row.get("row_type") != "ton":
-                continue
-
-            sampled_at_date = parse_date(row.get("production_date"))
-            sampling_time_val = parse_time(row.get("sampling_time") or "00:00")
-
-            if sampled_at_date is None or sampling_time_val is None:
-                return JsonResponse({"status": "error", "message": "تاريخ الإنتاج أو وقت السحب غير صالح"}, status=400)
-
-            # مكان الإنتاج -> نقطة السحب (ربط تلقائي بدل output_point_id اللي التمبلت مش بيبعتها)
-            packing_location = None
-            if row.get("packing_location_id"):
-                packing_location = PackingLocation.objects.filter(pk=row["packing_location_id"]).first()
-
-            output_point = default_output_point
-            if packing_location:
-                pl_id = getattr(packing_location, "pk", getattr(packing_location, "id", ""))
-                output_point, _ = OutputPoint.objects.get_or_create(
-                    plant=plant,
-                    code=f"PL{pl_id}",
-                    defaults={"name": packing_location.name},
-                )
-
-            # تحويل حرف مجموعة التدوير (A/B/C/D) إلى نوع الوردية الفعلي في هذا التاريخ
-            shift_type_obj = resolve_shift_type(row.get("shift"), sampled_at_date)
-
-            reading = OutputReading.objects.create(
-                plant=plant,
-                output_point=output_point,
-                packing_location=packing_location,
-                product_name=row.get("product_type", packing_type.name),
-                sampled_at=datetime.combine(sampled_at_date, sampling_time_val),
-                shift=shift_type_obj,
-                packing_type=packing_type,
-                sampled_by_id=row.get("qc_inspector_id") or None,
-            )
-
-            ton = Ton.objects.create(
-                plant=plant,
-                output_reading=reading,
-                weight=Decimal(str(row.get("weight") or 0)),
-                production_date=sampled_at_date,
-                production_shift=shift_type_obj,
-            )
-
-            # النتائج الفيزيائية للطن
-            for test_id, value in row.get("physical", {}).items():
-                if value in (None, ""):
-                    continue
-                try:
-                    result_value = Decimal(str(value))
-                except InvalidOperation:
-                    continue
-                TonPhysicalResult.objects.create(ton=ton, test_id=test_id, result=result_value)
-
-            # قرار الجريد وسببه
-            if row.get("grade_id"):
-                reason_id = row.get("local_reason_id") or row.get("non_conforming_reason_id") or None
-                TonGradeAssignment.objects.create(
-                    ton=ton,
-                    grade_id=row["grade_id"],
-                    reason_id=reason_id,
-                    assigned_by=request.user,
-                )
-
-            group_letter = row.get("group")
-            if group_letter:
-                tons_by_group.setdefault(group_letter, []).append(ton)
-            else:
-                # طن منفرد: ياخد عينة ممثلة تلقائية بيه هو بس عشان تتسجل نتائجه
-                solo_rep = RepresentativeSample.objects.create(plant=plant, cycle_number=ton.cycle_number)
-                solo_rep.tons.add(ton)
-                solo_rep.refresh_derived_fields()
-
-                for test_id, value in row.get("chemical", {}).items():
-                    if value in (None, ""):
-                        continue
-                    try:
-                        result_value = Decimal(str(value))
-                    except InvalidOperation:
-                        continue
-                    try:
-                        test_obj = TestDefinition.objects.get(pk=test_id)
-                    except TestDefinition.DoesNotExist:
-                        continue
-                    solo_rep.apply_chemical_result(test=test_obj, result=result_value, user=request.user)
-
-        # الخطوة 2: تجميع صفوف العينة الممثلة حسب المجموعة
-        for row in rows:
-            if row.get("row_type") == "representative":
-                group_letter = row.get("group")
-                if group_letter:
-                    rows_by_group[group_letter] = row
-
-        # الخطوة 3: إنشاء العينات الممثلة وتوزيع نتائجها الكيميائية على الأطنان
-        for group_letter, tons in tons_by_group.items():
-            rep_row = rows_by_group.get(group_letter, {})
-
-            rep = RepresentativeSample.objects.create(
-                plant=plant,
-                cycle_number=tons[0].cycle_number if tons else 1,
-            )
-            rep.tons.set(tons)
-            rep.refresh_derived_fields()
-
-            # النتائج الكيميائية - بتتسجل على العينة وتتوزع تلقائي على كل الأطنان
-            for test_id, value in rep_row.get("chemical", {}).items():
-                if value in (None, ""):
-                    continue
-                try:
-                    result_value = Decimal(str(value))
-                except InvalidOperation:
-                    continue
-                try:
-                    test_obj = TestDefinition.objects.get(pk=test_id)
-                except TestDefinition.DoesNotExist:
-                    continue
-                rep.apply_chemical_result(test=test_obj, result=result_value, user=request.user)
-
-            # توريث بيانات المعمل والمراجعة لقراءات الأطنان
-            lab_chemist_id = rep_row.get("lab_chemist_id") or None
-            lab_shift_head_id = rep_row.get("lab_shift_head_id") or None
-            qc_shift_head_status = rep_row.get("qc_shift_head") or None
-
-            for ton in tons:
-                if not ton.output_reading:
-                    continue
-                update_fields = []
-                if lab_chemist_id:
-                    ton.output_reading.analyzed_by_id = lab_chemist_id
-                    update_fields.append("analyzed_by_id")
-                if lab_shift_head_id:
-                    ton.output_reading.lab_shift_head_id = lab_shift_head_id
-                    update_fields.append("lab_shift_head_id")
-                if qc_shift_head_status == "reviewed":
-                    ton.output_reading.reviewed_by = request.user
-                    update_fields.append("reviewed_by")
-                if update_fields:
-                    ton.output_reading.save(update_fields=update_fields)
-
-        return JsonResponse({"status": "ok", "rows_saved": len(rows)})
+        saved_count = save_final_product_rows(plant, packing_type, rows, request.user)
+        return JsonResponse({"status": "ok", "rows_saved": saved_count})
 
 
 @admin.register(TestDefinition)

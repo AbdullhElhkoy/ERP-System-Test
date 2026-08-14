@@ -1,5 +1,4 @@
 import json
-from datetime import datetime, time as dt_time
 from decimal import Decimal, InvalidOperation
 
 from django.contrib.admin.views.decorators import staff_member_required
@@ -9,23 +8,15 @@ from django.contrib import messages
 from django.db import transaction
 from django.utils import timezone
 from django.utils.text import slugify
-from django.utils.dateparse import parse_date, parse_datetime
+from django.utils.dateparse import parse_datetime
 from django.contrib.auth import get_user_model
 
 from plants.models import Plant
-from .shift_resolver import resolve_shift_type
 from .models import (
     ProcessStage,
     TestDefinition,
     ProcessReading,
     ProcessAnalysisResult,
-    OutputPoint,
-    OutputReading,
-    Ton,
-    RepresentativeSample,
-    TonPhysicalResult,
-    SampleChemicalResult,
-    TonGradeAssignment,
     PlantLotSetting,
     RepresentativeGroupSize,
     GradeReason,
@@ -33,6 +24,7 @@ from .models import (
     PackingLocation,
     Grade,
 )
+from .services import save_final_product_rows
 
 User = get_user_model()
 
@@ -42,7 +34,7 @@ def process_reading_grid(request):
     plant_id = request.GET.get("plant") or request.POST.get("plant")
     plant = Plant.objects.filter(pk=plant_id).first() if plant_id else None
     stages = ProcessStage.objects.filter(plant=plant) if plant else ProcessStage.objects.none()
-    tests = TestDefinition.objects.filter(plant=plant, scope="process") if plant else TestDefinition.objects.none()
+    tests = TestDefinition.objects.filter(plant=plant, scope=TestDefinition.SCOPE_REACTION) if plant else TestDefinition.objects.none()
 
     if request.method == "POST":
         if request.content_type == "application/json":
@@ -112,155 +104,6 @@ def process_reading_grid(request):
     return render(request, "factory/process_reading_grid.html", context)
 
 
-def _combine_datetime(date_str, time_str):
-    if not date_str:
-        return None
-    d = parse_date(date_str)
-    if not d:
-        return None
-    t = dt_time(0, 0)
-    if time_str:
-        try:
-            t = datetime.strptime(time_str, "%H:%M").time()
-        except ValueError:
-            pass
-    naive = datetime.combine(d, t)
-    return timezone.make_aware(naive) if timezone.is_naive(naive) else naive
-
-
-def _get_or_create_output_point(plant, packing_location):
-    if not packing_location:
-        return None
-    output_point, _ = OutputPoint.objects.get_or_create(
-        plant=plant,
-        code=f"PL{packing_location.id}",
-        defaults={"name": packing_location.name},
-    )
-    return output_point
-
-
-def _get_or_create_default_output_point(plant):
-    output_point, _ = OutputPoint.objects.get_or_create(
-        plant=plant, code="DEFAULT", defaults={"name": "نقطة سحب عامة"}
-    )
-    return output_point
-
-
-def _save_rows(plant, packing_type, rows, request_user):
-    ton_rows = [r for r in rows if r.get("row_type") == "ton"]
-    rep_rows = {r.get("group"): r for r in rows if r.get("row_type") == "representative"}
-
-    group_context = {}
-    for group_letter, rep in rep_rows.items():
-        packing_location = None
-        if rep.get("packing_location_id"):
-            packing_location = PackingLocation.objects.filter(pk=rep["packing_location_id"]).first()
-        group_context[group_letter] = {
-            "rep_sample": RepresentativeSample.objects.create(plant=plant, cycle_number=0),
-            "packing_location": packing_location,
-            "row": rep,
-        }
-
-    saved = 0
-
-    for row in ton_rows:
-        group_letter = row.get("group")
-        source_row = group_context[group_letter]["row"] if group_letter in group_context else row
-
-        try:
-            weight = Decimal(str(row.get("weight"))) if row.get("weight") not in (None, "") else Decimal("0")
-        except InvalidOperation:
-            weight = Decimal("0")
-
-        production_date = parse_date(row.get("production_date")) if row.get("production_date") else None
-        effective_date = production_date or timezone.localdate()
-
-        shift_type_obj = resolve_shift_type(source_row.get("shift"), effective_date)
-
-        packing_location = None
-        if row.get("packing_location_id"):
-            packing_location = PackingLocation.objects.filter(pk=row["packing_location_id"]).first()
-        elif group_letter and group_letter in group_context:
-            packing_location = group_context[group_letter]["packing_location"]
-
-        output_point = _get_or_create_output_point(plant, packing_location) or _get_or_create_default_output_point(plant)
-
-        reading = OutputReading.objects.create(
-            plant=plant,
-            output_point=output_point,
-            packing_location=packing_location,
-            packing_type=packing_type,
-            product_name=source_row.get("product_type", ""),
-            sampled_at=_combine_datetime(source_row.get("production_date"), source_row.get("sampling_time")) or timezone.now(),
-            shift=shift_type_obj,
-            sampled_by_id=source_row.get("qc_inspector_id") or None,
-            analyzed_by_id=source_row.get("lab_chemist_id") or None,
-            lab_shift_head_id=source_row.get("lab_shift_head_id") or None,
-            reviewed_by=request_user if source_row.get("qc_shift_head") == "reviewed" else None,
-        )
-
-        ton = Ton.objects.create(
-            plant=plant,
-            output_reading=reading,
-            weight=weight,
-            production_date=effective_date,
-            production_shift=shift_type_obj,
-        )
-
-        if group_letter and group_letter in group_context:
-            rep_sample = group_context[group_letter]["rep_sample"]
-        else:
-            rep_sample = RepresentativeSample.objects.create(plant=plant, cycle_number=ton.cycle_number)
-
-        rep_sample.tons.add(ton)
-        rep_sample.refresh_derived_fields()
-
-        for test_id, val in row.get("physical", {}).items():
-            try:
-                test_obj = TestDefinition.objects.get(pk=test_id)
-                TonPhysicalResult.objects.update_or_create(
-                    ton=ton, test=test_obj, defaults={"result": Decimal(str(val))}
-                )
-            except (TestDefinition.DoesNotExist, InvalidOperation):
-                continue
-
-        for test_id, val in row.get("chemical", {}).items():
-            try:
-                test_obj = TestDefinition.objects.get(pk=test_id)
-                result_value = Decimal(str(val))
-            except (TestDefinition.DoesNotExist, InvalidOperation):
-                continue
-            SampleChemicalResult.objects.update_or_create(
-                ton=ton,
-                test=test_obj,
-                defaults={
-                    "representative_sample": rep_sample,
-                    "result": result_value,
-                    "is_overridden": not bool(group_letter),
-                },
-            )
-
-        grade_id = row.get("grade_id")
-        if grade_id:
-            reason_id = row.get("local_reason_id") or row.get("non_conforming_reason_id") or None
-            try:
-                grade_obj = Grade.objects.get(pk=grade_id)
-                TonGradeAssignment.objects.update_or_create(
-                    ton=ton,
-                    defaults={
-                        "grade": grade_obj,
-                        "assigned_by": request_user,
-                        "reason_id": reason_id,
-                    },
-                )
-            except Grade.DoesNotExist:
-                pass
-
-        saved += 1
-
-    return saved
-
-
 @staff_member_required
 def final_product_entry_grid(request, plant_id, packing_slug):
     plant = get_object_or_404(Plant, pk=plant_id)
@@ -279,8 +122,7 @@ def final_product_entry_grid(request, plant_id, packing_slug):
             return JsonResponse({"status": "error", "message": "بيانات غير صالحة"}, status=400)
 
         try:
-            with transaction.atomic():
-                saved_count = _save_rows(plant, packing_type, rows, request.user)
+            saved_count = save_final_product_rows(plant, packing_type, rows, request.user)
             return JsonResponse({"status": "ok", "rows_saved": saved_count})
         except Exception as e:
             return JsonResponse({"status": "error", "message": str(e)}, status=400)
