@@ -38,6 +38,7 @@ class ShiftRotationPattern(models.Model):
     دورة الـ 8 أيام: أنهي مجموعة شغالة أنهي وردية في أنهي يوم من الدورة
     day_offset من 0 لـ 7
     """
+    id = models.BigAutoField(primary_key=True)
     group = models.ForeignKey(ShiftGroup, on_delete=models.CASCADE, db_column='group_id')
     day_offset = models.IntegerField()
     shift_type = models.ForeignKey(ShiftType, on_delete=models.CASCADE, db_column='shift_type_id')
@@ -55,6 +56,7 @@ class RotationReference(models.Model):
     """
     تاريخ "يوم صفر" المرجعي لحساب الدورة - سطر واحد بس للشركة كلها
     """
+    id = models.BigAutoField(primary_key=True)
     reference_date = models.DateField()
 
     class Meta:
