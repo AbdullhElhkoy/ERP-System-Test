@@ -27,6 +27,7 @@ from .models import (
     PackingTypeField,
 )
 from .services import save_final_product_rows
+from .shift_resolver import resolve_shift_type
 
 User = get_user_model()
 
@@ -60,6 +61,7 @@ def process_reading_grid(request):
                             stage=stage,
                             sampled_at=sampled_at or timezone.now(),
                             notes=row.get("notes", ""),
+                            shift=resolve_shift_type(row.get("shift"), sampled_at.date()) if sampled_at else None,
                         )
                         test_results = {**row.get("chemical", {}), **row.get("physical", {})}
                         for test_id, val_raw in test_results.items():

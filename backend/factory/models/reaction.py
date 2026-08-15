@@ -1,5 +1,6 @@
 from django.db import models
 from plants.models import Plant
+from employees.models import ShiftType
 from .shared import TestDefinition
 
 
@@ -37,6 +38,10 @@ class ProcessReading(models.Model):
     stage = models.ForeignKey(ProcessStage, on_delete=models.PROTECT, related_name="readings")
     sampled_at = models.DateTimeField()
     notes = models.TextField(blank=True)
+    shift = models.ForeignKey(
+        ShiftType, on_delete=models.SET_NULL, null=True, blank=True,
+        db_column="shift_id", related_name="factory_process_readings",
+    )
     created_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:

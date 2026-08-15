@@ -327,6 +327,7 @@ class FactoryPlantAdmin(admin.ModelAdmin):
             reading_summaries.append({
                 "reading": reading,
                 "results_text": results_text,
+                "shift_letter": self._reading_shift_letter(reading),
             })
 
         context = {
@@ -366,6 +367,9 @@ class FactoryPlantAdmin(admin.ModelAdmin):
             parsed = parse_datetime(sampled_at_raw)
             reading.sampled_at = parsed or reading.sampled_at
             reading.notes = notes
+            if "shift" in payload:
+                from .shift_resolver import resolve_shift_type
+                reading.shift = resolve_shift_type(payload.get("shift"), reading.sampled_at.date())
             reading.save()
 
             result_map = payload.get("results", {})
@@ -399,9 +403,17 @@ class FactoryPlantAdmin(admin.ModelAdmin):
             "reading": reading,
             "tests": tests,
             "results": results,
+            "shift_choices": ["A", "B", "C", "D"],
+            "current_shift": self._reading_shift_letter(reading),
             "tests_json": json.dumps([{"id": t.id, "name": t.name, "unit": t.unit or ""} for t in tests], ensure_ascii=False),
         }
         return render(request, "factory/data_reaction_reading.html", context)
+
+    def _reading_shift_letter(self, reading):
+        if not reading.shift_id:
+            return ""
+        from .shift_resolver import resolve_group_letter
+        return resolve_group_letter(reading.shift, reading.sampled_at.date())
 
     def enter_plant(self, request, plant_id):
         plant, error = self._get_plant_or_redirect(request, plant_id)

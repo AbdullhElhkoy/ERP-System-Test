@@ -20,6 +20,7 @@
         <tr>
             <th>المرحلة</th>
             <th>تاريخ/وقت السحب</th>
+            <th>الوردية</th>
             <th>النتائج</th>
             <th>ملاحظات</th>
             <th>تعديل</th>
@@ -30,6 +31,7 @@
         <tr>
             <td>{{ item.reading.stage.name }}</td>
             <td>{{ item.reading.sampled_at|date:"Y-m-d H:i" }}</td>
+            <td>{{ item.shift_letter|default:"—" }}</td>
             <td>{{ item.results_text|default:"—" }}</td>
             <td>{{ item.reading.notes|default:"—" }}</td>
             <td><a class="button" href="{% url 'admin:factory_data_reaction_reading' item.reading.pk %}">تعديل</a></td>

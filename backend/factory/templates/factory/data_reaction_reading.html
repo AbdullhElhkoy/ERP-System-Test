@@ -28,6 +28,7 @@
     <div class="group-grid">
         <label>المرحلة <input type="text" value="{{ reading.stage.name }}" readonly></label>
         <label>تاريخ/وقت السحب <input type="datetime-local" id="f-sampled-at" value="{{ reading.sampled_at|date:'Y-m-d\TH:i' }}"></label>
+        <label>الوردية <select id="f-shift">{% for s in shift_choices %}<option value="{{ s }}" {% if s == current_shift %}selected{% endif %}>{{ s }}</option>{% endfor %}</select></label>
         <label>ملاحظات <input type="text" id="f-notes" value="{{ reading.notes }}"></label>
     </div>
 </div>
@@ -64,6 +65,7 @@ document.getElementById("save-all").addEventListener("click", function() {
   });
   const payload = {
     sampled_at: document.getElementById("f-sampled-at").value,
+    shift: document.getElementById("f-shift").value,
     notes: document.getElementById("f-notes").value,
     results: results,
   };

@@ -53,3 +53,38 @@ def resolve_shift_type(group_letter, target_date):
         return None
 
     return ShiftType.objects.filter(shift_type_id=shift_type_id).first()
+
+
+def resolve_group_letter(shift_type, target_date):
+    """
+    عكس resolve_shift_type: يحوّل كائن ShiftType + تاريخ معيّن إلى حرف مجموعة
+    التدوير (A/B/C/D) في ذلك اليوم، للعرض في صفحات البيانات.
+
+    يرجّع "" لو لم يمكن تحديد الحرف.
+    """
+    if not shift_type or not target_date:
+        return ""
+
+    try:
+        with connection.cursor() as cursor:
+            cursor.execute("SELECT reference_date FROM rotation_reference LIMIT 1")
+            row = cursor.fetchone()
+            if not row:
+                return ""
+            reference_date = row[0]
+            day_offset = (target_date - reference_date).days % 8
+
+            cursor.execute(
+                "SELECT g.group_name "
+                "FROM shift_rotation_pattern p "
+                "JOIN shift_groups g ON g.group_id = p.group_id "
+                "WHERE p.day_offset = %s AND p.shift_type_id = %s "
+                "ORDER BY g.group_name LIMIT 1",
+                [day_offset, shift_type.shift_type_id],
+            )
+            row = cursor.fetchone()
+            if not row:
+                return ""
+            return row[0] or ""
+    except Exception:
+        return ""

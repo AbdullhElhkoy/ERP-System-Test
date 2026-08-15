@@ -6,6 +6,8 @@
 لا توجد أي عملية إضافة جديدة — فقط عرض وتعديل البيانات الموجودة.
 """
 
+from datetime import datetime as dt
+
 from decimal import Decimal
 
 from django.contrib.auth import get_user_model
@@ -23,7 +25,7 @@ from .models import (
     TonGradeAssignment,
     TonPhysicalResult,
 )
-from .shift_resolver import resolve_shift_type
+from .shift_resolver import resolve_group_letter, resolve_shift_type
 
 
 def _fmt_time(value):
@@ -42,6 +44,22 @@ def _num(value):
     if value is None:
         return ""
     return str(value)
+
+
+def _combine_datetime(date_str, time_str):
+    if not date_str:
+        return None
+    d = parse_date(date_str)
+    if not d:
+        return None
+    t = None
+    if time_str:
+        try:
+            t = dt.strptime(time_str, "%H:%M").time()
+        except ValueError:
+            pass
+    naive = dt.combine(d, t or dt.strptime("00:00", "%H:%M").time())
+    return timezone.make_aware(naive) if timezone.is_naive(naive) else naive
 
 
 def build_reading_grid(reading):
@@ -100,7 +118,7 @@ def build_reading_grid(reading):
             "rep": current_rep,
             "weight": _num(ton.weight),
             "production_date": _fmt_date(ton.production_date),
-            "shift": getattr(ton.production_shift, "name", "") if ton.production_shift else "",
+            "shift": resolve_group_letter(ton.production_shift, ton.production_date) if ton.production_shift else "",
             "packing_location": reading.packing_location.name if reading.packing_location else "",
             "sampling_time": _fmt_time(reading.sampled_at),
             "sampling_status": reading.sampling_status,
@@ -168,6 +186,11 @@ def save_reading_edits(plant, reading, rows, user):
     else:
         reading.reviewed_by = None
     reading.result_time = parse_time(first.get("result_time")) if first.get("result_time") else reading.result_time
+    if first.get("product_name"):
+        reading.product_name = first["product_name"]
+    new_sampled_at = _combine_datetime(first.get("production_date"), first.get("sampling_time"))
+    if new_sampled_at:
+        reading.sampled_at = new_sampled_at
     reading.save()
 
     for row in ton_rows:
@@ -241,5 +264,13 @@ def save_reading_edits(plant, reading, rows, user):
         if has_assignment:
             ton.status = Ton.STATUS_GRADED
             ton.save(update_fields=["status", "production_date", "production_shift", "weight"])
+
+    # إعادة توليد كود العينة من أول طن في القراءة
+    first_ton = Ton.objects.filter(output_reading=reading).order_by("sequence_number", "id").first()
+    if first_ton and first_ton.code:
+        expected_code = f"S-{first_ton.code}"
+        if reading.sample_code != expected_code:
+            reading.sample_code = expected_code
+            reading.save(update_fields=["sample_code"])
 
     return errors
