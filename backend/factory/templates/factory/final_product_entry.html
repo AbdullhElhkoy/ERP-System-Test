@@ -576,20 +576,35 @@ document.getElementById("save-all").addEventListener("click", function() {
     }
   });
 
+  const csrfInput = document.querySelector("[name=csrfmiddlewaretoken]");
+  if (!csrfInput) {
+    alert("خطأ: لم يتم العثور على رمز الحماية (CSRF) في الصفحة — أعد تحميل الصفحة وحاول مجدداً");
+    return;
+  }
+
   fetch(window.location.href, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
-      "X-CSRFToken": document.querySelector("[name=csrfmiddlewaretoken]").value
+      "X-CSRFToken": csrfInput.value
     },
     body: JSON.stringify({rows: rows}),
-  }).then(r => r.json()).then(data => {
-    if (data.status === "ok") {
+  })
+  .then(r => r.text().then(t => ({status: r.status, text: t})))
+  .then(res => {
+    let data;
+    try { data = JSON.parse(res.text); } catch (e) { data = null; }
+    if (data && data.status === "ok") {
       alert("تم الحفظ بنجاح: " + data.rows_saved + " صف");
       location.reload();
-    } else {
+    } else if (data) {
       alert("حدث خطأ أثناء الحفظ: " + (data.message || "تأكد من صحة البيانات المتبوعة"));
+    } else {
+      alert("خطأ من الخادم (رمز " + res.status + "). تأكد من صحة البيانات ثم حاول مجدداً.");
     }
+  })
+  .catch(err => {
+    alert("خطأ في الاتصال بالخادم — تأكد من اتصالك بالشبكة ثم أعد المحاولة");
   });
 });
 </script>

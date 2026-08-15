@@ -511,9 +511,17 @@ class FactoryPlantAdmin(admin.ModelAdmin):
         return render(request, "factory/final_product_entry.html", context)
 
     def _save_final_product_entry(self, request, plant, packing_type):
-        payload = json.loads(request.body)
+        try:
+            payload = json.loads(request.body)
+        except (ValueError, json.JSONDecodeError):
+            return JsonResponse({"status": "error", "message": "بيانات غير صالحة"}, status=400)
         rows = payload.get("rows", [])
-        saved_count = save_final_product_rows(plant, packing_type, rows, request.user)
+        try:
+            saved_count = save_final_product_rows(plant, packing_type, rows, request.user)
+        except Exception as e:
+            import traceback
+            traceback.print_exc()
+            return JsonResponse({"status": "error", "message": f"حدث خطأ أثناء الحفظ: {e}"}, status=500)
         return JsonResponse({"status": "ok", "rows_saved": saved_count})
 
 
