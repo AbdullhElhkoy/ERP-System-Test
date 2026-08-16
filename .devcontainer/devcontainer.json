@@ -2,12 +2,6 @@
   "name": "ChemFlow ERP",
   "image": "mcr.microsoft.com/devcontainers/python:3.12",
 
-  "features": {
-    "ghcr.io/devcontainers/features/postgresql:1": {
-      "version": "15"
-    }
-  },
-
   "forwardPorts": [8000, 5432],
   "portsAttributes": {
     "8000": {
