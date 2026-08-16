@@ -16,8 +16,14 @@ echo "Backend dir: $BACKEND_DIR"
 cd "$BACKEND_DIR"
 
 # تثبيت المتطلبات (python -m pip يعمل حتى لو pip غير موجود في PATH)
-python -m pip install --no-cache-dir -r requirements.txt
-python -c "import django; print('Django', django.get_version())"
+# نفضّل الـ venv داخل backend لو موجود
+PY="python"
+if [ -x "$BACKEND_DIR/venv/bin/python" ]; then
+  PY="$BACKEND_DIR/venv/bin/python"
+  echo "Using venv: $PY"
+fi
+$PY -m pip install --no-cache-dir -r requirements.txt
+$PY -c "import django; print('Django', django.get_version())"
 
 SUDO=""
 if command -v sudo >/dev/null 2>&1; then
@@ -36,10 +42,10 @@ $POSTGRES -tc "SELECT 1 FROM pg_roles WHERE rolname='chemflow_user'" | grep -q 1
   $POSTGRES -c "CREATE USER chemflow_user WITH PASSWORD 'ChemFlowSecure2026!!';"
 $POSTGRES -tc "SELECT 1 FROM pg_database WHERE datname='chemflow_db'" | grep -q 1 || \
   $POSTGRES -c "CREATE DATABASE chemflow_db OWNER chemflow_user;"
-python manage.py migrate
-python manage.py check
+$PY manage.py migrate
+$PY manage.py check
 
 echo "=========================================="
 echo "Setup complete. Run the server with:"
-echo "  python manage.py runserver 0.0.0.0:8000"
+echo "  $PY manage.py runserver 0.0.0.0:8000"
 echo "=========================================="
