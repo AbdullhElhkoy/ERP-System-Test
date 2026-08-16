@@ -15,7 +15,7 @@
     }
   },
 
-  "postCreateCommand": "bash .devcontainer/setup.sh",
+  "postCreateCommand": "echo 'ChemFlow ready. Run: bash .devcontainer/setup.sh to install PostgreSQL + deps'",
 
   "customizations": {
     "vscode": {
