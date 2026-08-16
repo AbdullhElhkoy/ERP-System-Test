@@ -67,6 +67,11 @@ for i in $(seq 1 30); do
   sleep 1
 done
 
+# === إعدادات قاعدة البيانات ===
+DB_USER="chemflow_user"
+DB_NAME="chemflow_db"
+DB_PASSWORD="ChemFlowSecure2026!!"
+
 # إنشاء قاعدة البيانات والمستخدم إن لم يكونا موجودين
 # بدون sudo: لو كنا root نستخدم runuser، وإلا نعتمد على أن pg_hba يسمح للمستخدم الحالي
 POSTGRES="psql -U postgres -h localhost"
@@ -76,11 +81,27 @@ elif command -v sudo >/dev/null 2>&1 && sudo -n true 2>/dev/null; then
   POSTGRES="sudo -n -u postgres psql"
 fi
 set +e
-$POSTGRES -tc "SELECT 1 FROM pg_roles WHERE rolname='chemflow_user'" | grep -q 1 || \
-  $POSTGRES -c "CREATE USER chemflow_user WITH PASSWORD 'ChemFlowSecure2026!!';"
-$POSTGRES -tc "SELECT 1 FROM pg_database WHERE datname='chemflow_db'" | grep -q 1 || \
-  $POSTGRES -c "CREATE DATABASE chemflow_db OWNER chemflow_user;"
+$POSTGRES -tc "SELECT 1 FROM pg_roles WHERE rolname='$DB_USER'" | grep -q 1 || \
+  $POSTGRES -c "CREATE USER $DB_USER WITH PASSWORD '$DB_PASSWORD';"
+$POSTGRES -tc "SELECT 1 FROM pg_database WHERE datname='$DB_NAME'" | grep -q 1 || \
+  $POSTGRES -c "CREATE DATABASE $DB_NAME OWNER $DB_USER;"
 set -e
+
+# === استيراد الجداول القديمة (managed=False) إن لم تكن موجودة ===
+# المشروع كله مبني على جداول legacy خارج إدارة Django (employees/plants):
+# لا بد من استيراد chemflow_org_structure.sql قبل تشغيل migrations.
+LEGACY_SQL="$BACKEND_DIR/../chemflow_org_structure.sql"
+if [ -f "$LEGACY_SQL" ]; then
+  TABLE_EXISTS=$(PGPASSWORD="$DB_PASSWORD" psql -h localhost -U "$DB_USER" -d "$DB_NAME" -tAc "SELECT 1 FROM information_schema.tables WHERE table_schema='public' AND table_name='shift_rotation_pattern'")
+  if [ "$TABLE_EXISTS" != "1" ]; then
+    echo "Importing legacy schema: $LEGACY_SQL"
+    PGPASSWORD="$DB_PASSWORD" psql -h localhost -U "$DB_USER" -d "$DB_NAME" -v ON_ERROR_STOP=1 -f "$LEGACY_SQL"
+  else
+    echo "Legacy schema already present, skipping import."
+  fi
+else
+  echo "WARNING: $LEGACY_SQL not found - legacy tables will not be created."
+fi
 
 # === تثبيت المتطلبات (نفضّل الـ venv داخل backend لو موجود، وإلا ننشئ واحداً) ===
 PY="python"
