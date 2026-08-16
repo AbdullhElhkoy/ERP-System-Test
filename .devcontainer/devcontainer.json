@@ -1,6 +1,7 @@
 {
   "name": "ChemFlow ERP",
   "image": "mcr.microsoft.com/devcontainers/python:3.12",
+  "remoteUser": "root",
 
   "forwardPorts": [8000, 5432],
   "portsAttributes": {

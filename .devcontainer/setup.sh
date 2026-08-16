@@ -11,6 +11,11 @@ if [ "$(id -u)" = "0" ]; then
   IS_ROOT=1
 fi
 
+# نتجنّب شكوى git عن ملكية المجلد عند العمل كـ root
+if [ "$IS_ROOT" = "1" ]; then
+  git config --global --add safe.directory '*' || true
+fi
+
 # sudo -n فقط (لا يطلب كلمة مرور أبداً)
 SUDO_N=""
 if [ "$IS_ROOT" = "0" ] && command -v sudo >/dev/null 2>&1; then
