@@ -1,6 +1,10 @@
 #!/usr/bin/env bash
 set -e
 
+# منع أي استعلام تفاعلي من apt/debconf (سبب التجمد الشائع في Codespaces)
+export DEBIAN_FRONTEND=noninteractive
+export TZ=Etc/UTC
+
 # اكتشاف مسار workspace تلقائياً
 for CAND in "$PWD" "$PWD/.." "$PWD/../.." /workspaces/* /workspaces/ERP-System-Test /workspaces/Default\ Project; do
   if [ -d "$CAND/backend" ]; then
@@ -26,7 +30,6 @@ if ! command -v psql >/dev/null 2>&1; then
   ${SUDO}apt-get update -y
   ${SUDO}apt-get install -y postgresql postgresql-contrib
 fi
-
 # بدء PostgreSQL بأكثر من طريقة (حسب نوع الحاوية)
 echo "Starting PostgreSQL..."
 if command -v service >/dev/null 2>&1; then
