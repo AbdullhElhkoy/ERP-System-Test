@@ -5,5 +5,6 @@ import config.admin  # noqa: F401  - بيفعّل تقسيم صفحة الأدم
 
 urlpatterns = [
     path('admin/', admin.site.urls),
+    path('warehousing/', include('warehousing.urls')),
     path('factory/', include('factory.urls')),
 ]

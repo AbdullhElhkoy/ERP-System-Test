@@ -26,9 +26,9 @@ NEW_ROLES = [
 ]
 
 EXEC_POSITIONS = [
-    ("CEO", 0),
-    ("Deputy CEO", 0),
-    ("Head of Quality Sector", 1),
+    ("CEO", 1),
+    ("Deputy CEO", 1),
+    ("Head of Quality Sector", 2),
     ("Head of ECOPHOS Production Sector", 1),
     ("Head of SOP Production Sector", 1),
     ("Head of SA Production Sector", 1),

@@ -1,0 +1,17 @@
+{% extends "admin/base_site.html" %}
+{% block content %}
+<style>
+    .soon-wrap { text-align: center; margin-top: 80px; }
+    .soon-icon { font-size: 60px; display: block; margin-bottom: 16px; }
+    .soon-title { font-size: 24px; font-weight: bold; }
+    .soon-sub { font-size: 15px; color: #666; margin-top: 10px; }
+    .soon-btn { display: inline-block; margin-top: 24px; }
+</style>
+
+<div class="soon-wrap">
+    <span class="soon-icon">🚧</span>
+    <div class="soon-title">{{ section_name }}</div>
+    <div class="soon-sub">هذا القسم تحت الإنشاء وسيتم تفعيله قريباً.</div>
+    <a class="button soon-btn" href="{% url 'admin:index' %}">← الرجوع للأدمن</a>
+</div>
+{% endblock %}

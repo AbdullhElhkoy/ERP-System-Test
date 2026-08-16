@@ -1,0 +1,161 @@
+{% extends "admin/base_site.html" %}
+
+{% block content %}
+{% csrf_token %}
+
+<style>
+  .edit-form { max-width: 900px; }
+  .form-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 14px 22px; margin-top: 16px; }
+  .form-field label { display: block; font-weight: 600; margin-bottom: 5px; font-size: 13px; color: #334155; }
+  .form-field input, .form-field select, .form-field textarea {
+    width: 100%; box-sizing: border-box; padding: 7px 10px;
+    border: 1px solid #cbd5e1; border-radius: 4px; font-size: 13px;
+  }
+  .form-field input:focus, .form-field select:focus, .form-field textarea:focus {
+    border-color: #0284c7; outline: none; box-shadow: 0 0 0 2px #e0f2fe;
+  }
+  .btn-row { margin-top: 22px; display: flex; gap: 10px; align-items: center; }
+</style>
+
+<div class="page-nav" style="display:flex; align-items:center; gap:15px; margin-bottom:8px;">
+    <div class="title">تعديل شحنة - {{ row.material_name }}</div>
+    <a class="button" href="{{ data_url }}">← عرض البيانات</a>
+</div>
+
+<form class="edit-form" id="edit-form" onsubmit="saveRow(event)">
+  <div class="form-grid">
+    <div class="form-field">
+      <label>المادة</label>
+      <select id="material">
+        <option value="">-- اختر --</option>
+        {% for m in materials_json %}{% endfor %}
+      </select>
+    </div>
+    <div class="form-field">
+      <label>المورد</label>
+      <select id="supplier"><option value="">-- اختر --</option></select>
+    </div>
+    <div class="form-field">
+      <label>رقم العربية</label>
+      <input type="text" id="vehicle-number">
+    </div>
+    <div class="form-field">
+      <label>الوزن (طن)</label>
+      <input type="number" step="any" id="weight">
+    </div>
+    <div class="form-field">
+      <label>تاريخ الوصول</label>
+      <input type="date" id="arrived-date">
+    </div>
+    <div class="form-field">
+      <label>وقت الوصول</label>
+      <input type="time" id="arrived-time">
+    </div>
+    <div class="form-field">
+      <label>القرار</label>
+      <select id="decision">
+        <option value="accepted">مقبولة</option>
+        <option value="rejected">مرفوضة</option>
+        <option value="accepted_with_deduction">مقبولة بخصم</option>
+      </select>
+    </div>
+    <div class="form-field">
+      <label>نسبة الخصم %</label>
+      <input type="number" step="any" id="deduction">
+    </div>
+    <div class="form-field">
+      <label>المخزن</label>
+      <select id="storage"><option value="">-- اختر --</option></select>
+    </div>
+    <div class="form-field">
+      <label>ملاحظات</label>
+      <textarea id="notes" rows="2"></textarea>
+    </div>
+  </div>
+  <div class="btn-row">
+    <button type="submit" class="button default">حفظ التعديلات</button>
+    <a class="button" href="{{ data_url }}">إلغاء</a>
+  </div>
+</form>
+
+{{ materials_json|json_script:"materials-data" }}
+{{ suppliers_json|json_script:"suppliers-data" }}
+{{ storages_json|json_script:"storages-data" }}
+{{ row|json_script:"row-data" }}
+
+<script>
+const MATERIALS = JSON.parse(document.getElementById('materials-data').textContent || '[]');
+const SUPPLIERS = JSON.parse(document.getElementById('suppliers-data').textContent || '[]');
+const STORAGES = JSON.parse(document.getElementById('storages-data').textContent || '[]');
+const ROW = JSON.parse(document.getElementById('row-data').textContent);
+
+const $ = id => document.getElementById(id);
+
+function fillSelect(sel, items, selected, textKey, valKey) {
+  const valueKey = valKey || 'id';
+  sel.innerHTML = '<option value="">-- اختر --</option>' + items.map(i =>
+    `<option value="${i[valueKey]}"${String(i[valueKey]) === String(selected) ? ' selected' : ''}>${i[textKey]}</option>`
+  ).join('');
+}
+
+fillSelect($('material'), MATERIALS, ROW.material_id, 'material_name');
+fillSelect($('supplier'), SUPPLIERS, ROW.supplier_id, 'supplier_name');
+fillSelect($('storage'),
+  STORAGES.filter(s => String(s.material_id) === String(ROW.material_id)),
+  ROW.storage_id, 'storage_name');
+
+$('vehicle-number').value = ROW.vehicle_number;
+$('weight').value = ROW.weight_tons;
+$('arrived-date').value = ROW.arrived_date;
+$('arrived-time').value = ROW.arrived_time;
+$('decision').value = ROW.decision;
+$('deduction').value = ROW.deduction_percentage;
+$('notes').value = ROW.notes;
+$('deduction').disabled = ROW.decision !== 'accepted_with_deduction';
+
+$('material').addEventListener('change', function() {
+  fillSelect($('storage'), STORAGES.filter(s => String(s.material_id) === String(this.value)), null, 'storage_name');
+});
+$('decision').addEventListener('change', function() {
+  $('deduction').disabled = this.value !== 'accepted_with_deduction';
+});
+
+function saveRow(e) {
+  e.preventDefault();
+  const row = {
+    delivery_id: {{ row.delivery_id }},
+    material_id: $('material').value || null,
+    supplier_id: $('supplier').value || null,
+    storage_id: $('storage').value || null,
+    vehicle_number: $('vehicle-number').value,
+    weight_tons: $('weight').value,
+    arrived_date: $('arrived-date').value,
+    arrived_time: $('arrived-time').value,
+    decision: $('decision').value,
+    deduction_percentage: $('deduction').value,
+    notes: $('notes').value,
+  };
+
+  const csrfInput = document.querySelector("[name=csrfmiddlewaretoken]");
+  fetch(window.location.href, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", "X-CSRFToken": csrfInput.value },
+    body: JSON.stringify({rows: [row]}),
+  })
+  .then(r => r.text().then(t => ({status: r.status, text: t})))
+  .then(res => {
+    let data;
+    try { data = JSON.parse(res.text); } catch (e2) { data = null; }
+    if (data && data.status === "ok") {
+      alert("تم حفظ التعديلات");
+      location.reload();
+    } else if (data) {
+      alert("حدث خطأ: " + (data.message || "تأكد من صحة البيانات"));
+    } else {
+      alert("خطأ من الخادم (رمز " + res.status + ")");
+    }
+  })
+  .catch(() => alert("خطأ في الاتصال بالخادم"));
+}
+</script>
+{% endblock %}

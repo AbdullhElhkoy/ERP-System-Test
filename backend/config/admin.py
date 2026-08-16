@@ -4,11 +4,53 @@ from django.urls import reverse
 from plants.models import Plant
 
 
+VIEW_PERMS = {"add": False, "change": False, "delete": False, "view": True}
+
+
+def _warehouse_section():
+    entries = [
+        {
+            "name": "الرو ماتيريال",
+            "object_name": "RawMaterials",
+            "perms": VIEW_PERMS,
+            "admin_url": reverse("warehousing:raw_materials_hub"),
+            "add_url": None,
+            "view_only": True,
+        },
+        {
+            "name": "قطع الغيار",
+            "object_name": "SpareParts",
+            "perms": VIEW_PERMS,
+            "admin_url": reverse("warehousing:spare_parts"),
+            "add_url": None,
+            "view_only": True,
+        },
+        {
+            "name": "المنتج النهائي",
+            "object_name": "FinalProduct",
+            "perms": VIEW_PERMS,
+            "admin_url": reverse("warehousing:final_product"),
+            "add_url": None,
+            "view_only": True,
+        },
+    ]
+    return {
+        "name": "المخازن",
+        "app_label": "warehousing",
+        "app_url": reverse("warehousing:raw_materials_hub"),
+        "models": entries,
+    }
+
+
 def get_app_list(self, request, app_label=None):
     app_list = admin.AdminSite.get_app_list(self, request, app_label)
     new_list = []
 
     for app in app_list:
+        # إخفاء موديلات raw_materials من القائمة (تظهر تحت قسم المخازن)
+        if app["app_label"] == "raw_materials":
+            continue
+
         if app["app_label"] != "factory":
             new_list.append(app)
             continue
@@ -41,6 +83,8 @@ def get_app_list(self, request, app_label=None):
                 })
 
             new_list.append({**app, "name": "Factory", "app_label": "factory", "models": entries})
+
+    new_list.append(_warehouse_section())
 
     return new_list
 

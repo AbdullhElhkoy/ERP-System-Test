@@ -1,0 +1,54 @@
+{% extends "admin/base_site.html" %}
+{% block content %}
+<style>
+    .hub-header { display: flex; align-items: center; gap: 15px; margin-bottom: 10px; }
+    .hub-header .title { font-size: 22px; font-weight: bold; }
+    .back-btn { font-size: 13px; }
+    .group-title { font-size: 15px; font-weight: bold; margin: 22px 0 8px; color: #333; border-bottom: 2px solid #79aec8; padding-bottom: 4px; }
+    .links-wrap { display: flex; flex-direction: column; gap: 8px; max-width: 480px; }
+    .links-wrap a { text-align: center; padding: 10px; font-size: 14px; }
+    .links-wrap a.locked { opacity: .55; cursor: not-allowed; pointer-events: none; background: #eee; color: #666; }
+    .plant-bar { background: #f1f5f9; border: 1px solid #cbd5e1; border-radius: 6px; padding: 12px 16px; margin: 12px 0; display: flex; align-items: center; gap: 14px; flex-wrap: wrap; }
+    .plant-bar .label { font-weight: 700; color: #334155; }
+</style>
+
+<div class="hub-header">
+    <div class="title">📦 الرو ماتيريال (Raw Materials)</div>
+    <a class="button back-btn" href="{% url 'admin:index' %}">← الرجوع للأدمن</a>
+</div>
+
+<div class="plant-bar">
+    <span class="label">🏭 المصنع الحالي:</span>
+    {% if plant %}
+        <strong>{{ plant.plant_name }}</strong>
+        <a class="button" style="margin-left: 6px;" href="{% url 'warehousing:select_plant' plant.pk %}">تغيير</a>
+    {% else %}
+        <span style="color:#b91c1c;">لا يوجد مصنع محدد — اختر مصنعاً أولاً.</span>
+    {% endif %}
+    <form method="get" action="{% url 'warehousing:raw_materials_hub' %}" style="margin-left:auto; display:flex; gap:8px; align-items:center;">
+        <select name="select_plant" onchange="if(this.value) window.location.href='{% url 'warehousing:raw_materials_hub' %}?select_plant=' + this.value;">
+            <option value="">-- اختر مصنعاً --</option>
+            {% for p in plants %}
+            <option value="{{ p.pk }}"{% if plant and p.pk == plant.pk %} selected{% endif %}>{{ p.plant_name }}</option>
+            {% endfor %}
+        </select>
+    </form>
+</div>
+
+{% if plant %}
+<div class="group-title">📝 الشيتات الجدولية</div>
+<div class="links-wrap">
+    <a class="button" href="{{ sheet_urls.delivery_entry }}">شيت استلام الشحنات (Data Entry)</a>
+    <a class="button" href="{{ sheet_urls.data }}">عرض البيانات (Data)</a>
+    <a class="button" href="{{ sheet_urls.reports }}">التقارير (Reports)</a>
+    <a class="button" href="{{ sheet_urls.analysis }}">تحليل البيانات (Data Analysis)</a>
+</div>
+{% endif %}
+
+<div class="group-title">🗂️ شاشات الإدارة الحالية (Admin)</div>
+<div class="links-wrap">
+{% for link in admin_links %}
+    <a class="button" href="{{ link.url }}">{{ link.title }}</a>
+{% endfor %}
+</div>
+{% endblock %}

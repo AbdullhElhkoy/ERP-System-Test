@@ -1,0 +1,330 @@
+{% extends "admin/base_site.html" %}
+
+{% block content %}
+{% csrf_token %}
+
+<style>
+  .excel-wrapper {
+    overflow-x: auto;
+    margin-top: 15px;
+    box-shadow: 0 2px 5px rgba(0,0,0,0.05);
+  }
+
+  .excel-table {
+    border-collapse: collapse;
+    width: 100%;
+    font-size: 12px;
+    text-align: center;
+    background-color: #fff;
+  }
+
+  .excel-table th {
+    background-color: #f1f5f9;
+    color: #334155;
+    font-weight: 700;
+    padding: 8px 4px;
+    border: 1px solid #cbd5e1;
+    white-space: nowrap;
+  }
+
+  .excel-table td {
+    border: 1px solid #cbd5e1;
+    padding: 0 !important;
+    margin: 0;
+    height: 32px;
+  }
+
+  .excel-table input[type="text"],
+  .excel-table input[type="number"],
+  .excel-table input[type="date"],
+  .excel-table input[type="time"],
+  .excel-table select {
+    width: 100%;
+    height: 100%;
+    border: none;
+    outline: none;
+    background: transparent;
+    text-align: center;
+    font-size: 12px;
+    box-sizing: border-box;
+    padding: 2px;
+  }
+
+  .excel-table input:focus,
+  .excel-table select:focus {
+    background-color: #e0f2fe !important;
+    box-shadow: inset 0 0 0 2px #0284c7;
+  }
+
+  .excel-table input[readonly] {
+    background-color: #f1f5f9 !important;
+    color: #64748b;
+    cursor: not-allowed;
+  }
+
+  .btn-mini {
+    background: none;
+    border: none;
+    cursor: pointer;
+    font-size: 11px;
+    padding: 0 2px;
+  }
+
+  .disabled-cell {
+    background-color: #e2e8f0 !important;
+    color: #94a3b8;
+  }
+
+  tr.row-accepted td { background-color: #f0fdf4; }
+  tr.row-rejected td { background-color: #fef2f2; }
+  tr.row-accepted_with_deduction td { background-color: #fffbeb; }
+</style>
+
+<div style="margin-bottom: 20px; display:flex; align-items:center; gap:15px;">
+    <h1 style="margin:0;">شيت استلام الشحنات - {{ plant.plant_name }}</h1>
+    <a class="button" href="{{ hub_url }}">← بوابة الرو ماتيريال</a>
+</div>
+
+<div class="excel-wrapper">
+<table id="entry-table" class="excel-table">
+  <thead>
+    <tr>
+      <th style="min-width: 110px;">التاريخ</th>
+      <th style="min-width: 60px;">الوقت</th>
+      <th style="min-width: 140px;">المادة</th>
+      <th style="min-width: 130px;">المورد</th>
+      <th style="min-width: 110px;">رقم العربية</th>
+      <th style="min-width: 90px;">الوزن (طن)</th>
+      <th style="min-width: 150px;">القرار</th>
+      <th style="min-width: 90px;">نسبة الخصم %</th>
+      <th style="min-width: 160px;">المخزن</th>
+      <th style="min-width: 140px;">ملاحظات</th>
+      <th style="min-width: 40px;">حذف</th>
+    </tr>
+  </thead>
+  <tbody id="entry-tbody"></tbody>
+</table>
+</div>
+
+<br>
+<div style="display:flex; gap:10px; margin-top:10px; align-items:center;">
+    <button id="add-row" type="button" class="button">+ إضافة شحنة</button>
+    <button id="save-all" type="button" class="button default">حفظ الكل</button>
+</div>
+
+<!-- البيانات الممررة بأسلوب آمن عبر json_script -->
+{{ materials_json|json_script:"materials-data" }}
+{{ suppliers_json|json_script:"suppliers-data" }}
+{{ storages_json|json_script:"storages-data" }}
+
+<script>
+const MATERIALS = JSON.parse(document.getElementById('materials-data').textContent || '[]');
+const SUPPLIERS = JSON.parse(document.getElementById('suppliers-data').textContent || '[]');
+const STORAGES = JSON.parse(document.getElementById('storages-data').textContent || '[]');
+
+function getTodayDate() { return new Date().toISOString().split('T')[0]; }
+function getCurrentTime() { const now = new Date(); return now.toTimeString().split(' ')[0].substring(0, 5); }
+
+function buildMaterialOptions(selected) {
+  let opts = `<option value="">-- اختر --</option>`;
+  MATERIALS.forEach(m => {
+    opts += `<option value="${m.id}"${String(m.id) === String(selected) ? ' selected' : ''}>${m.material_name}</option>`;
+  });
+  return opts;
+}
+
+function buildSupplierOptions(selected) {
+  let opts = `<option value="">-- اختر --</option>`;
+  SUPPLIERS.forEach(s => {
+    opts += `<option value="${s.id}"${String(s.id) === String(selected) ? ' selected' : ''}>${s.supplier_name}</option>`;
+  });
+  return opts;
+}
+
+function storageOptionsFor(materialId, selected) {
+  let opts = `<option value="">-- اختر --</option>`;
+  STORAGES.filter(s => !materialId || String(s.material_id) === String(materialId))
+    .forEach(s => {
+      opts += `<option value="${s.id}"${String(s.id) === String(selected) ? ' selected' : ''}>${s.storage_name}</option>`;
+    });
+  return opts;
+}
+
+function addRow(data) {
+  const tbody = document.getElementById("entry-tbody");
+  const tr = document.createElement("tr");
+  tr.dataset.rowType = "delivery";
+
+  tr.innerHTML = `
+    <td>
+      <div style="display:flex; align-items:center;">
+        <input type="date" class="arrived-date" value="${data && data.arrived_date ? data.arrived_date : getTodayDate()}">
+        <button type="button" class="btn-mini" onclick="this.previousElementSibling.value=getTodayDate()" title="تاريخ اليوم">📅</button>
+      </div>
+    </td>
+    <td>
+      <div style="display:flex; align-items:center;">
+        <input type="time" class="arrived-time" value="${data && data.arrived_time ? data.arrived_time : getCurrentTime()}">
+        <button type="button" class="btn-mini" onclick="this.previousElementSibling.value=getCurrentTime()" title="الوقت الحالي">⏰</button>
+      </div>
+    </td>
+    <td><select class="material">${buildMaterialOptions(data && data.material_id)}</select></td>
+    <td><select class="supplier">${buildSupplierOptions(data && data.supplier_id)}</select></td>
+    <td><input type="text" class="vehicle-number" value="${data ? data.vehicle_number : ''}"></td>
+    <td><input type="number" step="any" class="weight" value="${data ? data.weight_tons : ''}"></td>
+    <td><select class="decision">
+      <option value="accepted"${data && data.decision === 'accepted' ? ' selected' : ''}>مقبولة</option>
+      <option value="rejected"${data && data.decision === 'rejected' ? ' selected' : ''}>مرفوضة</option>
+      <option value="accepted_with_deduction"${data && data.decision === 'accepted_with_deduction' ? ' selected' : ''}>مقبولة بخصم</option>
+    </select></td>
+    <td><input type="number" step="any" class="deduction" value="${data && data.deduction_percentage ? data.deduction_percentage : ''}"></td>
+    <td><select class="storage">${storageOptionsFor(data && data.material_id, data && data.storage_id)}</select></td>
+    <td><input type="text" class="notes" value="${data ? data.notes : ''}"></td>
+    <td><button type="button" onclick="removeRow(this)" style="color:red; background:none; border:none; cursor:pointer; font-weight:bold;">X</button></td>
+  `;
+
+  tr.querySelector(".material").addEventListener("change", function() {
+    const storage = tr.querySelector(".storage");
+    storage.innerHTML = storageOptionsFor(this.value);
+    refreshRowColor(tr);
+  });
+  tr.querySelector(".decision").addEventListener("change", function() {
+    const deductionCell = tr.querySelector(".deduction");
+    deductionCell.disabled = this.value !== "accepted_with_deduction";
+    refreshRowColor(tr);
+  });
+
+  tbody.appendChild(tr);
+  refreshRowColor(tr);
+  return tr;
+}
+
+function refreshRowColor(tr) {
+  tr.className = "";
+  const d = tr.querySelector(".decision");
+  if (d) tr.classList.add("row-" + d.value);
+}
+
+function removeRow(btn) {
+  btn.closest('tr').remove();
+}
+
+function collectRow(tr) {
+  return {
+    material_id: tr.querySelector(".material").value || null,
+    supplier_id: tr.querySelector(".supplier").value || null,
+    storage_id: tr.querySelector(".storage").value || null,
+    vehicle_number: tr.querySelector(".vehicle-number").value,
+    weight_tons: tr.querySelector(".weight").value,
+    arrived_date: tr.querySelector(".arrived-date").value,
+    arrived_time: tr.querySelector(".arrived-time").value,
+    decision: tr.querySelector(".decision").value,
+    deduction_percentage: tr.querySelector(".deduction").value,
+    notes: tr.querySelector(".notes").value,
+  };
+}
+
+document.getElementById("add-row").addEventListener("click", () => addRow());
+
+/* التنقل بالكيبورد بأسلوب Excel (Enter / الأسهم) */
+document.addEventListener('keydown', function (e) {
+  const activeElement = document.activeElement;
+  if (!activeElement || (activeElement.tagName !== 'INPUT' && activeElement.tagName !== 'SELECT')) return;
+  const cell = activeElement.closest('td');
+  if (!cell) return;
+  const row = cell.closest('tr');
+  const cellIndex = Array.from(row.children).indexOf(cell);
+  let targetRow = null, targetCell = null;
+
+  if (e.key === 'Enter' || e.key === 'ArrowDown') {
+    e.preventDefault();
+    targetRow = row.nextElementSibling;
+    if (targetRow) targetCell = targetRow.children[cellIndex];
+  } else if (e.key === 'ArrowUp') {
+    e.preventDefault();
+    targetRow = row.previousElementSibling;
+    if (targetRow) targetCell = targetRow.children[cellIndex];
+  } else if (e.key === 'ArrowLeft') {
+    targetCell = cell.nextElementSibling;
+  } else if (e.key === 'ArrowRight') {
+    targetCell = cell.previousElementSibling;
+  }
+
+  if (targetCell) {
+    const targetInput = targetCell.querySelector('input:not([readonly]), select:not([disabled])');
+    if (targetInput) {
+      targetInput.focus();
+      if (targetInput.select) targetInput.select();
+    }
+  }
+});
+
+/* دعم اللصق المباشر من Excel */
+document.getElementById("entry-table").addEventListener("paste", function(e) {
+  const active = document.activeElement;
+  if (!active || !active.closest("td")) return;
+  e.preventDefault();
+  const text = (e.clipboardData || window.clipboardData).getData("text");
+  const rows = text.split("\n").filter(r => r.length);
+  let startRow = active.closest("tr");
+  let startCellIndex = Array.from(active.closest("td").parentNode.children).indexOf(active.closest("td"));
+
+  rows.forEach((rowText, i) => {
+    let targetRow = startRow;
+    for (let k = 0; k < i; k++) {
+      targetRow = targetRow.nextElementSibling;
+      if (!targetRow) return;
+    }
+    if (!targetRow) return;
+    const cells = rowText.split("\t");
+    cells.forEach((val, j) => {
+      const cellIndex = startCellIndex + j;
+      const cell = targetRow.children[cellIndex];
+      if (!cell) return;
+      const input = cell.querySelector("input:not([readonly]), select:not([disabled])");
+      if (input) input.value = val.trim();
+    });
+  });
+});
+
+/* حفظ البيانات وإرسالها إلى السيرفر */
+document.getElementById("save-all").addEventListener("click", function() {
+  const rows = [];
+  document.querySelectorAll("#entry-tbody tr").forEach(tr => {
+    rows.push(collectRow(tr));
+  });
+  if (!rows.length) { alert("لا توجد صفوف للحفظ"); return; }
+
+  const csrfInput = document.querySelector("[name=csrfmiddlewaretoken]");
+  if (!csrfInput) {
+    alert("خطأ: لم يتم العثور على رمز الحماية (CSRF) في الصفحة — أعد تحميل الصفحة وحاول مجدداً");
+    return;
+  }
+
+  fetch(window.location.href, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "X-CSRFToken": csrfInput.value
+    },
+    body: JSON.stringify({rows: rows}),
+  })
+  .then(r => r.text().then(t => ({status: r.status, text: t})))
+  .then(res => {
+    let data;
+    try { data = JSON.parse(res.text); } catch (e) { data = null; }
+    if (data && data.status === "ok") {
+      alert("تم الحفظ بنجاح: " + data.rows_saved + " شحنة");
+      location.reload();
+    } else if (data) {
+      alert("حدث خطأ أثناء الحفظ: " + (data.message || "تأكد من صحة البيانات"));
+    } else {
+      alert("خطأ من الخادم (رمز " + res.status + "). تأكد من صحة البيانات ثم حاول مجدداً.");
+    }
+  })
+  .catch(err => {
+    alert("خطأ في الاتصال بالخادم — تأكد من اتصالك بالشبكة ثم أعد المحاولة");
+  });
+});
+</script>
+{% endblock %}
