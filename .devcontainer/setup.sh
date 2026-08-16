@@ -28,7 +28,10 @@ fi
 if ! command -v psql >/dev/null 2>&1; then
   echo "Installing PostgreSQL (apt)..."
   ${SUDO}apt-get update -y
-  ${SUDO}apt-get install -y postgresql postgresql-contrib
+  ${SUDO}apt-get install -y postgresql postgresql-contrib libpq-dev gcc python3-dev
+else
+  # psql موجود لكن قد ننقص libpq-dev للـ psycopg2
+  ${SUDO}apt-get install -y libpq-dev gcc python3-dev
 fi
 # بدء PostgreSQL بأكثر من طريقة (حسب نوع الحاوية)
 echo "Starting PostgreSQL..."
@@ -53,14 +56,16 @@ for i in $(seq 1 30); do
 done
 
 # إنشاء قاعدة البيانات والمستخدم إن لم يكونا موجودين
-POSTGRES="${SUDO}psql -U postgres"
+POSTGRES="psql -U postgres"
 if command -v sudo >/dev/null 2>&1; then
-  POSTGRES="${SUDO}su postgres -c psql"
+  POSTGRES="sudo -u postgres psql"
 fi
+set +e
 $POSTGRES -tc "SELECT 1 FROM pg_roles WHERE rolname='chemflow_user'" | grep -q 1 || \
   $POSTGRES -c "CREATE USER chemflow_user WITH PASSWORD 'ChemFlowSecure2026!!';"
 $POSTGRES -tc "SELECT 1 FROM pg_database WHERE datname='chemflow_db'" | grep -q 1 || \
   $POSTGRES -c "CREATE DATABASE chemflow_db OWNER chemflow_user;"
+set -e
 
 # === تثبيت المتطلبات (نفضّل الـ venv داخل backend لو موجود، وإلا ننشئ واحداً) ===
 PY="python"
