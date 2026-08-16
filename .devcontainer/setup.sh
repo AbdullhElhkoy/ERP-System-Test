@@ -5,6 +5,18 @@ set -e
 export DEBIAN_FRONTEND=noninteractive
 export TZ=Etc/UTC
 
+# === هل نحن root؟ ===
+IS_ROOT=0
+if [ "$(id -u)" = "0" ]; then
+  IS_ROOT=1
+fi
+
+# sudo -n فقط (لا يطلب كلمة مرور أبداً)
+SUDO_N=""
+if [ "$IS_ROOT" = "0" ] && command -v sudo >/dev/null 2>&1; then
+  SUDO_N="sudo -n "
+fi
+
 # اكتشاف مسار workspace تلقائياً
 for CAND in "$PWD" "$PWD/.." "$PWD/../.." /workspaces/* /workspaces/ERP-System-Test /workspaces/Default\ Project; do
   if [ -d "$CAND/backend" ]; then
@@ -19,36 +31,31 @@ fi
 echo "Backend dir: $BACKEND_DIR"
 cd "$BACKEND_DIR"
 
-SUDO=""
-if command -v sudo >/dev/null 2>&1; then
-  SUDO="sudo "
-fi
-
 # === PostgreSQL: التثبيت اليدوي (بديل عن feature الذي لا يعمل في Codespaces) ===
 if ! command -v psql >/dev/null 2>&1; then
   echo "Installing PostgreSQL (apt)..."
-  ${SUDO}apt-get update -y
-  ${SUDO}apt-get install -y postgresql postgresql-contrib libpq-dev gcc python3-dev
+  ${SUDO_N}apt-get update -y
+  ${SUDO_N}apt-get install -y postgresql postgresql-contrib libpq-dev gcc python3-dev
 else
   # psql موجود لكن قد ننقص libpq-dev للـ psycopg2
-  ${SUDO}apt-get install -y libpq-dev gcc python3-dev
+  ${SUDO_N}apt-get install -y libpq-dev gcc python3-dev
 fi
 # بدء PostgreSQL بأكثر من طريقة (حسب نوع الحاوية)
 echo "Starting PostgreSQL..."
 if command -v service >/dev/null 2>&1; then
-  ${SUDO}service postgresql start || true
+  ${SUDO_N}service postgresql start || true
 elif command -v pg_ctlcluster >/dev/null 2>&1; then
-  ${SUDO}pg_ctlcluster 15 main start || ${SUDO}pg_ctlcluster 14 main start || true
+  ${SUDO_N}pg_ctlcluster 15 main start || ${SUDO_N}pg_ctlcluster 14 main start || true
 elif command -v pg_ctl >/dev/null 2>&1; then
   PGDATA=$(ls -d /var/lib/postgresql/*/main 2>/dev/null | head -1)
   if [ -n "$PGDATA" ]; then
-    ${SUDO}pg_ctl -D "$PGDATA" -l /tmp/postgres.log start || true
+    ${SUDO_N}pg_ctl -D "$PGDATA" -l /tmp/postgres.log start || true
   fi
 fi
 
 # الانتظار حتى يصبح PostgreSQL جاهزاً (بحد أقصى 30 ثانية)
 for i in $(seq 1 30); do
-  if ${SUDO}pg_isready -h localhost -p 5432 >/dev/null 2>&1; then
+  if ${SUDO_N}pg_isready -h localhost -p 5432 >/dev/null 2>&1; then
     echo "PostgreSQL is ready."
     break
   fi
@@ -56,9 +63,12 @@ for i in $(seq 1 30); do
 done
 
 # إنشاء قاعدة البيانات والمستخدم إن لم يكونا موجودين
-POSTGRES="psql -U postgres"
-if command -v sudo >/dev/null 2>&1; then
-  POSTGRES="sudo -u postgres psql"
+# بدون sudo: لو كنا root نستخدم runuser، وإلا نعتمد على أن pg_hba يسمح للمستخدم الحالي
+POSTGRES="psql -U postgres -h localhost"
+if [ "$IS_ROOT" = "1" ]; then
+  POSTGRES="runuser -u postgres -- psql"
+elif command -v sudo >/dev/null 2>&1 && sudo -n true 2>/dev/null; then
+  POSTGRES="sudo -n -u postgres psql"
 fi
 set +e
 $POSTGRES -tc "SELECT 1 FROM pg_roles WHERE rolname='chemflow_user'" | grep -q 1 || \
