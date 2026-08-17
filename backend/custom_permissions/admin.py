@@ -91,7 +91,3 @@ class PermissionMatrixAdmin(admin.ModelAdmin):
             "level_choices": ColumnPermission.LEVEL_CHOICES,
         }
         return TemplateResponse(request, "admin/permission_matrix.html", context)
-
-
-# Register the matrix view
-admin.site.register(Screen, ScreenAdmin)
