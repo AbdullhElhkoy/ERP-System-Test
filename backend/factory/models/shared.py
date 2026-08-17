@@ -72,6 +72,12 @@ class ConformityRule(models.Model):
     name = models.CharField(max_length=100)
     quality_grade = models.ForeignKey(QualityGrade, on_delete=models.PROTECT, related_name="conformity_rules")
     description = models.TextField(blank=True)
+    source_type = models.CharField(max_length=30, blank=True, default="")
+    test = models.ForeignKey(
+        "factory.TestDefinition", on_delete=models.SET_NULL, null=True, blank=True
+    )
+    min_value = models.DecimalField(max_digits=10, decimal_places=3, null=True, blank=True)
+    max_value = models.DecimalField(max_digits=10, decimal_places=3, null=True, blank=True)
 
     class Meta:
         db_table = "factory_conformity_rules"

@@ -46,10 +46,14 @@ INSTALLED_APPS = [
     'custom_permissions',
     'warehousing',
     'warehousing.raw_materials',
+    'warehousing.spare_parts',
+    'warehousing.packaging',
     'shared_definitions',
     'factory',
     'orders',
-   
+    'lab',
+    'quality_control',
+    'finished_products',
 ]
 
 CSRF_TRUSTED_ORIGINS = [
@@ -60,6 +64,7 @@ CSRF_TRUSTED_ORIGINS = [
 MIDDLEWARE = [
     'django.middleware.security.SecurityMiddleware',
     'django.contrib.sessions.middleware.SessionMiddleware',
+    'django.middleware.locale.LocaleMiddleware',
     'django.middleware.common.CommonMiddleware',
     'django.middleware.csrf.CsrfViewMiddleware',
     'django.contrib.auth.middleware.AuthenticationMiddleware',
@@ -124,6 +129,15 @@ AUTH_PASSWORD_VALIDATORS = [
 # https://docs.djangoproject.com/en/6.0/topics/i18n/
 
 LANGUAGE_CODE = 'en-us'
+
+LANGUAGES = [
+    ('en', 'English'),
+    ('ar', 'العربية'),
+]
+
+LOCALE_PATHS = [
+    BASE_DIR / 'locale',
+]
 
 TIME_ZONE = 'UTC'
 

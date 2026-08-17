@@ -101,7 +101,7 @@ class DepartmentPlantScope(models.Model):
         unique_together = (("department", "plant"),)
 
     def __str__(self):
-        return f"{self.department.department_name} → {self.plant.plant_code}"
+        return f"{self.department.department_name} → {self.plant.plant_name}"
 
 
 class OrgPositionDepartmentScope(models.Model):

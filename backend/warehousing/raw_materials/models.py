@@ -173,7 +173,7 @@ class MaterialStorage(models.Model):
 
     def __str__(self):
         return (
-            f"{self.plant.plant_code} - "
+            f"{self.plant.plant_name} - "
             f"{self.material.material_name} - "
             f"{self.storage_name}"
         )
@@ -348,6 +348,10 @@ class RawMaterialSample(models.Model):
     sampled_at    = models.DateTimeField()
     sampled_by    = models.CharField(max_length=100, blank=True)
     notes         = models.TextField(blank=True)
+    lab_sample    = models.OneToOneField(
+        "lab.Sample", on_delete=models.SET_NULL, null=True, blank=True,
+        related_name="raw_material_sample",
+    )
     created_at    = models.DateTimeField(auto_now_add=True)
 
     class Meta:
