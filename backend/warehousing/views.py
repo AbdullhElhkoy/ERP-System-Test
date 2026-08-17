@@ -40,46 +40,7 @@ def _set_current_plant(request, plant):
 
 @staff_member_required
 def raw_materials_hub(request):
-    """بوابة الرو ماتيريال: روابط لشاشات الأدمن الحالية + الشيتات الجدولية."""
-    admin_urls = [
-        {
-            "title": "المواد (Materials)",
-            "url": reverse("admin:raw_materials_material_changelist"),
-        },
-        {
-            "title": "الموردين (Suppliers)",
-            "url": reverse("admin:raw_materials_supplier_changelist"),
-        },
-        {
-            "title": "اختبارات المواد (Material Tests)",
-            "url": reverse("admin:raw_materials_materialtest_changelist"),
-        },
-        {
-            "title": "مواصفات المواد (Material Specifications)",
-            "url": reverse("admin:raw_materials_materialspecification_changelist"),
-        },
-        {
-            "title": "مخازن الخام (Material Storages)",
-            "url": reverse("admin:raw_materials_materialstorage_changelist"),
-        },
-        {
-            "title": "حركات المخزون (Inventory Transactions)",
-            "url": reverse("admin:raw_materials_inventorytransaction_changelist"),
-        },
-        {
-            "title": "التشغيلات (Raw Material Lots)",
-            "url": reverse("admin:raw_materials_rawmateriallot_changelist"),
-        },
-        {
-            "title": "العينات (Raw Material Samples)",
-            "url": reverse("admin:raw_materials_rawmaterialsample_changelist"),
-        },
-        {
-            "title": "نتائج التحاليل (Raw Material Analysis)",
-            "url": reverse("admin:raw_materials_rawmaterialanalysis_changelist"),
-        },
-    ]
-
+    """Raw Materials hub — 5-card layout matching Factory dashboard."""
     plant = _current_plant(request)
 
     selected = request.GET.get("select_plant")
@@ -91,18 +52,51 @@ def raw_materials_hub(request):
 
     context = _admin_context(
         request,
-        title="الرو ماتيريال (Raw Materials)",
-        admin_links=admin_urls,
+        title="Raw Materials",
         plant=plant,
         plants=Plant.objects.all().order_by("plant_name"),
-        sheet_urls={
-            "delivery_entry": reverse("warehousing:delivery_entry"),
-            "data": reverse("warehousing:deliveries_data"),
-            "reports": reverse("warehousing:deliveries_reports"),
-            "analysis": reverse("warehousing:deliveries_analysis"),
-        },
+        settings_url=reverse("warehousing:warehousing_settings"),
+        data_entry_url=reverse("warehousing:delivery_entry"),
+        data_url=reverse("warehousing:deliveries_data"),
+        reports_url=reverse("warehousing:deliveries_reports"),
+        data_analysis_url=reverse("warehousing:deliveries_analysis"),
     )
     return render(request, "warehousing/raw_materials_hub.html", context)
+
+
+@staff_member_required
+def warehousing_settings(request):
+    """Settings page — grouped admin links for managing materials, suppliers, tests, etc."""
+    plant = _current_plant(request)
+    if not plant:
+        return redirect("warehousing:raw_materials_hub")
+
+    def _link(model, title):
+        return {"url": reverse(f"admin:raw_materials_{model}_changelist"), "title": title}
+
+    context = _admin_context(
+        request,
+        title="Warehousing Settings",
+        plant=plant,
+        hub_url=reverse("warehousing:raw_materials_hub"),
+        materials_groups=[
+            _link("material", "Materials"),
+            _link("supplier", "Suppliers"),
+        ],
+        tests_groups=[
+            _link("materialtest", "Material Tests"),
+            _link("materialspecification", "Material Specifications"),
+        ],
+        storage_groups=[
+            _link("materialstorage", "Material Storages"),
+            _link("inventorytransaction", "Inventory Transactions"),
+            _link("rawmateriallot", "Raw Material Lots"),
+            _link("rawmaterialsample", "Raw Material Samples"),
+            _link("rawmaterialanalysis", "Raw Material Analysis"),
+        ],
+        company_groups=[],
+    )
+    return render(request, "warehousing/warehousing_settings.html", context)
 
 
 @staff_member_required

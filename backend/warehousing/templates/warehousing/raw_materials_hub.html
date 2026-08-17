@@ -1,33 +1,40 @@
 {% extends "admin/base_site.html" %}
 {% block content %}
 <style>
-    .hub-header { display: flex; align-items: center; gap: 15px; margin-bottom: 10px; }
-    .hub-header .title { font-size: 22px; font-weight: bold; }
+    .plant-header { display: flex; align-items: center; gap: 15px; margin-bottom: 10px; }
+    .plant-header .title { font-size: 22px; font-weight: bold; }
     .back-btn { font-size: 13px; }
-    .group-title { font-size: 15px; font-weight: bold; margin: 22px 0 8px; color: #333; border-bottom: 2px solid #79aec8; padding-bottom: 4px; }
-    .links-wrap { display: flex; flex-direction: column; gap: 8px; max-width: 480px; }
-    .links-wrap a { text-align: center; padding: 10px; font-size: 14px; }
-    .links-wrap a.locked { opacity: .55; cursor: not-allowed; pointer-events: none; background: #eee; color: #666; }
+    .section-grid { display: flex; flex-wrap: wrap; gap: 16px; margin-top: 20px; }
+    .section-card {
+        flex: 1 1 220px; max-width: 240px;
+        border: 1px solid #ccc; border-radius: 8px;
+        padding: 20px; text-align: center; background: #f9f9f9;
+        cursor: pointer; text-decoration: none; color: inherit; display: block;
+        transition: box-shadow .2s, background .2s;
+    }
+    .section-card:hover { box-shadow: 0 4px 12px rgba(0,0,0,.15); background: #fff; }
+    .section-card .icon { font-size: 34px; display: block; margin-bottom: 10px; }
+    .section-card .label { font-size: 16px; font-weight: bold; }
     .plant-bar { background: #f1f5f9; border: 1px solid #cbd5e1; border-radius: 6px; padding: 12px 16px; margin: 12px 0; display: flex; align-items: center; gap: 14px; flex-wrap: wrap; }
     .plant-bar .label { font-weight: 700; color: #334155; }
 </style>
 
-<div class="hub-header">
-    <div class="title">📦 الرو ماتيريال (Raw Materials)</div>
-    <a class="button back-btn" href="{% url 'admin:index' %}">← الرجوع للأدمن</a>
+<div class="plant-header">
+    <div class="title">📦 Raw Materials (الرو ماتيريال)</div>
+    <a class="button back-btn" href="{% url 'admin:index' %}">← العودة للأدمن</a>
 </div>
 
 <div class="plant-bar">
-    <span class="label">🏭 المصنع الحالي:</span>
+    <span class="label">🏭 Current Plant:</span>
     {% if plant %}
         <strong>{{ plant.plant_name }}</strong>
-        <a class="button" style="margin-left: 6px;" href="{% url 'warehousing:select_plant' plant.pk %}">تغيير</a>
+        <a class="button" style="margin-left: 6px;" href="{% url 'warehousing:select_plant' plant.pk %}">Change</a>
     {% else %}
-        <span style="color:#b91c1c;">لا يوجد مصنع محدد — اختر مصنعاً أولاً.</span>
+        <span style="color:#b91c1c;">No plant selected — choose a plant first.</span>
     {% endif %}
     <form method="get" action="{% url 'warehousing:raw_materials_hub' %}" style="margin-left:auto; display:flex; gap:8px; align-items:center;">
         <select name="select_plant" onchange="if(this.value) window.location.href='{% url 'warehousing:raw_materials_hub' %}?select_plant=' + this.value;">
-            <option value="">-- اختر مصنعاً --</option>
+            <option value="">-- Select Plant --</option>
             {% for p in plants %}
             <option value="{{ p.pk }}"{% if plant and p.pk == plant.pk %} selected{% endif %}>{{ p.plant_name }}</option>
             {% endfor %}
@@ -36,19 +43,36 @@
 </div>
 
 {% if plant %}
-<div class="group-title">📝 الشيتات الجدولية</div>
-<div class="links-wrap">
-    <a class="button" href="{{ sheet_urls.delivery_entry }}">شيت استلام الشحنات (Data Entry)</a>
-    <a class="button" href="{{ sheet_urls.data }}">عرض البيانات (Data)</a>
-    <a class="button" href="{{ sheet_urls.reports }}">التقارير (Reports)</a>
-    <a class="button" href="{{ sheet_urls.analysis }}">تحليل البيانات (Data Analysis)</a>
-</div>
-{% endif %}
+<p style="margin: 0;">Current context: <strong>{{ plant.plant_name }}</strong> — all pages here are specific to this plant.</p>
 
-<div class="group-title">🗂️ شاشات الإدارة الحالية (Admin)</div>
-<div class="links-wrap">
-{% for link in admin_links %}
-    <a class="button" href="{{ link.url }}">{{ link.title }}</a>
-{% endfor %}
+<div class="section-grid">
+    <a class="section-card" href="{{ settings_url }}">
+        <span class="icon">⚙️</span>
+        <span class="label">Settings</span>
+        <div style="font-size: 12px; color: #666; margin-top: 6px;">Materials, Suppliers, Tests, Specs, Storages</div>
+    </a>
+    <a class="section-card" href="{{ data_entry_url }}">
+        <span class="icon">📝</span>
+        <span class="label">Data Entry</span>
+        <div style="font-size: 12px; color: #666; margin-top: 6px;">Record raw material deliveries</div>
+    </a>
+    <a class="section-card" href="{{ data_url }}">
+        <span class="icon">🗄️</span>
+        <span class="label">Data</span>
+        <div style="font-size: 12px; color: #666; margin-top: 6px;">View and edit recorded deliveries</div>
+    </a>
+    <a class="section-card" href="{{ reports_url }}">
+        <span class="icon">📊</span>
+        <span class="label">Reports</span>
+        <div style="font-size: 12px; color: #666; margin-top: 6px;">Reports (coming soon)</div>
+    </a>
+    <a class="section-card" href="{{ data_analysis_url }}">
+        <span class="icon">📈</span>
+        <span class="label">Data Analysis</span>
+        <div style="font-size: 12px; color: #666; margin-top: 6px;">Data Analysis (coming soon)</div>
+    </a>
 </div>
+{% else %}
+<p style="margin-top: 20px; color: #999;">Select a plant above to access the warehouse sheets.</p>
+{% endif %}
 {% endblock %}

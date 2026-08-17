@@ -1,0 +1,44 @@
+{% extends "admin/base_site.html" %}
+{% block content %}
+<style>
+    .settings-nav { display: flex; align-items: center; gap: 12px; margin-bottom: 18px; }
+    .settings-nav .title { font-size: 20px; font-weight: bold; }
+    .group-title { font-size: 15px; font-weight: bold; margin: 22px 0 8px; color: #333; border-bottom: 2px solid #79aec8; padding-bottom: 4px; }
+    .links-wrap { display: flex; flex-direction: column; gap: 8px; max-width: 480px; }
+    .links-wrap a { text-align: center; padding: 10px; font-size: 14px; }
+    .links-wrap a.locked { opacity: .55; cursor: not-allowed; pointer-events: none; background: #eee; color: #666; }
+</style>
+
+<div class="settings-nav">
+    <div class="title">⚙️ Warehousing Settings - {{ plant.plant_name }}</div>
+    <a class="button" href="{{ hub_url }}">← Warehouse Hub</a>
+</div>
+
+<div class="group-title">📦 Materials & Suppliers</div>
+<div class="links-wrap">
+{% for link in materials_groups %}
+    <a class="button" href="{{ link.url }}">{{ link.title }}</a>
+{% endfor %}
+</div>
+
+<div class="group-title">🧪 Tests & Specifications</div>
+<div class="links-wrap">
+{% for link in tests_groups %}
+    <a class="button{% if link.locked %} locked{% endif %}" href="{{ link.url }}">{{ link.title }}</a>
+{% endfor %}
+</div>
+
+<div class="group-title">🗄️ Storages & Inventory</div>
+<div class="links-wrap">
+{% for link in storage_groups %}
+    <a class="button" href="{{ link.url }}">{{ link.title }}</a>
+{% endfor %}
+</div>
+
+<div class="group-title">🏢 Company-wide Settings</div>
+<div class="links-wrap">
+{% for link in company_groups %}
+    <a class="button" href="{{ link.url }}">{{ link.title }}</a>
+{% endfor %}
+</div>
+{% endblock %}
