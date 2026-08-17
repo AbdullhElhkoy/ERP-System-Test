@@ -10,7 +10,7 @@ VIEW_PERMS = {"add": False, "change": False, "delete": False, "view": True}
 def _warehouse_section():
     entries = [
         {
-            "name": "الرو ماتيريال",
+            "name": "Raw Materials",
             "object_name": "RawMaterials",
             "perms": VIEW_PERMS,
             "admin_url": reverse("warehousing:raw_materials_hub"),
@@ -18,7 +18,7 @@ def _warehouse_section():
             "view_only": True,
         },
         {
-            "name": "قطع الغيار",
+            "name": "Spare Parts",
             "object_name": "SpareParts",
             "perms": VIEW_PERMS,
             "admin_url": reverse("warehousing:spare_parts"),
@@ -26,7 +26,7 @@ def _warehouse_section():
             "view_only": True,
         },
         {
-            "name": "المنتج النهائي",
+            "name": "Final Products",
             "object_name": "FinalProduct",
             "perms": VIEW_PERMS,
             "admin_url": reverse("warehousing:final_product"),
@@ -35,7 +35,7 @@ def _warehouse_section():
         },
     ]
     return {
-        "name": "المخازن",
+        "name": "Warehousing",
         "app_label": "warehousing",
         "app_url": reverse("warehousing:raw_materials_hub"),
         "models": entries,
@@ -47,7 +47,6 @@ def get_app_list(self, request, app_label=None):
     new_list = []
 
     for app in app_list:
-        # إخفاء موديلات raw_materials من القائمة (تظهر تحت قسم المخازن)
         if app["app_label"] == "raw_materials":
             continue
 

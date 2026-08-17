@@ -1,8 +1,8 @@
 """
-طبقة الخدمات الموحّدة لشيتات الرو ماتيريال.
+Unified service layer for raw material delivery sheets.
 
-كل منطق حفظ وعرض بيانات الشحنات يُنفَّذ هنا في مكان واحد، بنفس أسلوب
-factory/services.py — أي شاشة أو API مستقبلي يستدعي هذه الدوال بنفس الطريقة.
+All save/display logic for deliveries is handled here, following the same
+pattern as factory/services.py — any future screen or API calls these functions.
 """
 
 from datetime import datetime, time as dt_time
@@ -75,24 +75,24 @@ def _resolve_storage(storage_id, plant):
 @transaction.atomic
 def save_delivery_rows(plant, rows, user=None):
     """
-    الحفظ الموحّد لشاشة إدخال الشحنات (Data Entry).
+    Unified save for delivery entry sheet.
 
-    rows: قائمة صفوف كما يرسلها القالب:
+    rows: list of dicts as sent by the template:
         {
             "material_id": ..,
             "supplier_id": ..,
-            "storage_id": ..,          # اختياري
+            "storage_id": ..,
             "vehicle_number": ..,
             "weight_tons": ..,
             "arrived_date": "YYYY-MM-DD",
             "arrived_time": "HH:MM",
             "decision": "accepted|rejected|accepted_with_deduction",
-            "deduction_percentage": .., # اختياري
+            "deduction_percentage": ..,
             "notes": ..,
         }
 
-    الاستلام المقبول/المقبول بخصم ينشئ حركة مخزون تلقائياً (في save الخاصة بالموديل).
-    يرجّع (saved_count, errors).
+    Accepted / accepted_with_deduction deliveries auto-create an InventoryTransaction.
+    Returns (saved_count, errors).
     """
     saved = 0
     errors = []
@@ -100,17 +100,17 @@ def save_delivery_rows(plant, rows, user=None):
     for row in rows:
         material = _resolve_material(row.get("material_id"))
         if not material:
-            errors.append("مادة غير صالحة في أحد الصفوف")
+            errors.append("Invalid material in one of the rows")
             continue
 
         supplier = _resolve_supplier(row.get("supplier_id"))
         if not supplier:
-            errors.append(f"مورد غير صالح للمادة: {material.material_name}")
+            errors.append(f"Invalid supplier for material: {material.material_name}")
             continue
 
         weight = _as_decimal(row.get("weight_tons"))
         if weight is None:
-            errors.append(f"وزن غير صالح للمادة: {material.material_name}")
+            errors.append(f"Invalid weight for material: {material.material_name}")
             continue
 
         decision = row.get("decision") or RawMaterialDelivery.DECISION_ACCEPTED
@@ -121,7 +121,7 @@ def save_delivery_rows(plant, rows, user=None):
             RawMaterialDelivery.DECISION_ACCEPTED,
             RawMaterialDelivery.DECISION_ACCEPTED_WITH_DEDUCTION,
         ) and not storage:
-            errors.append(f"لازم تحدد المخزن للشحنة المقبولة: {material.material_name}")
+            errors.append(f"Storage is required for accepted delivery: {material.material_name}")
             continue
 
         if (
@@ -149,13 +149,13 @@ def save_delivery_rows(plant, rows, user=None):
             )
             saved += 1
         except Exception as e:
-            errors.append(f"فشل حفظ شحنة {material.material_name}: {e}")
+            errors.append(f"Failed to save delivery {material.material_name}: {e}")
 
     return saved, errors
 
 
 def delivery_row_data(delivery):
-    """تجهيز صف شحنة للعرض/التعديل في شبكة الداتا."""
+    """Prepare a delivery row for display/edit in the data grid."""
     return {
         "delivery_id": delivery.pk,
         "material_id": delivery.material_id,
@@ -181,8 +181,8 @@ def delivery_row_data(delivery):
 @transaction.atomic
 def save_delivery_edits(plant, rows, user=None):
     """
-    حفظ تعديلات الشحنات الموجودة (صفحة داتا). لا يُنشئ شحنات جديدة.
-    يعدّل القيم على الشحنة الحالية فقط.
+    Save edits to existing deliveries (data page). Does not create new deliveries.
+    Updates values on the current delivery only.
     """
     errors = []
 
@@ -193,21 +193,21 @@ def save_delivery_edits(plant, rows, user=None):
                 pk=row.get("delivery_id"), plant=plant
             )
         except (RawMaterialDelivery.DoesNotExist, ValueError, KeyError):
-            errors.append(f"شحنة غير موجودة: {row.get('delivery_id')}")
+            errors.append(f"Delivery not found: {row.get('delivery_id')}")
             continue
 
         material = _resolve_material(row.get("material_id"))
         if not material:
-            errors.append(f"مادة غير صالحة للشحنة رقم {delivery.pk}")
+            errors.append(f"Invalid material for delivery #{delivery.pk}")
             continue
         supplier = _resolve_supplier(row.get("supplier_id"))
         if not supplier:
-            errors.append(f"مورد غير صالح للشحنة رقم {delivery.pk}")
+            errors.append(f"Invalid supplier for delivery #{delivery.pk}")
             continue
 
         weight = _as_decimal(row.get("weight_tons"))
         if weight is None:
-            errors.append(f"وزن غير صالح للشحنة رقم {delivery.pk}")
+            errors.append(f"Invalid weight for delivery #{delivery.pk}")
             continue
 
         decision = row.get("decision") or delivery.decision
@@ -217,7 +217,7 @@ def save_delivery_edits(plant, rows, user=None):
             RawMaterialDelivery.DECISION_ACCEPTED,
             RawMaterialDelivery.DECISION_ACCEPTED_WITH_DEDUCTION,
         ) and not storage:
-            errors.append(f"لازم تحدد المخزن للشحنة المقبولة رقم {delivery.pk}")
+            errors.append(f"Storage is required for accepted delivery #{delivery.pk}")
             continue
 
         arrived_at = _combine_datetime(

@@ -16,23 +16,23 @@
 </style>
 
 <div class="page-nav">
-    <div class="title">📦 عرض بيانات الشحنات - {{ plant.plant_name }}</div>
-    <a class="button" href="{{ hub_url }}">← بوابة الرو ماتيريال</a>
+    <div class="title">📦 Deliveries Data - {{ plant.plant_name }}</div>
+    <a class="button" href="{{ hub_url }}">← Raw Materials Hub</a>
 </div>
 
 <div class="table-wrap">
 <table class="list-table">
     <thead>
         <tr>
-            <th>التاريخ</th>
-            <th>المادة</th>
-            <th>المورد</th>
-            <th>رقم العربية</th>
-            <th>الوزن (طن)</th>
-            <th>القرار</th>
-            <th>نسبة الخصم</th>
-            <th>المخزن</th>
-            <th>ملاحظات</th>
+            <th>Date</th>
+            <th>Material</th>
+            <th>Supplier</th>
+            <th>Vehicle No.</th>
+            <th>Weight (Tons)</th>
+            <th>Decision</th>
+            <th>Deduction %</th>
+            <th>Storage</th>
+            <th>Notes</th>
             <th></th>
         </tr>
     </thead>
@@ -48,10 +48,10 @@
             <td>{% if d.deduction_percentage %}{{ d.deduction_percentage }}%{% else %}—{% endif %}</td>
             <td>{% if d.storage %}{{ d.storage.storage_name }}{% else %}—{% endif %}</td>
             <td>{{ d.notes }}</td>
-            <td><a class="button" href="{% url 'warehousing:delivery_edit' d.pk %}">تعديل</a></td>
+            <td><a class="button" href="{% url 'warehousing:delivery_edit' d.pk %}">Edit</a></td>
         </tr>
         {% empty %}
-        <tr><td colspan="10" class="empty-msg">لا توجد شحنات مسجلة لهذا المصنع حتى الآن.</td></tr>
+        <tr><td colspan="10" class="empty-msg">No deliveries recorded for this plant yet.</td></tr>
         {% endfor %}
     </tbody>
 </table>

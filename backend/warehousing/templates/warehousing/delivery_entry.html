@@ -81,25 +81,25 @@
 </style>
 
 <div style="margin-bottom: 20px; display:flex; align-items:center; gap:15px;">
-    <h1 style="margin:0;">شيت استلام الشحنات - {{ plant.plant_name }}</h1>
-    <a class="button" href="{{ hub_url }}">← بوابة الرو ماتيريال</a>
+    <h1 style="margin:0;">Delivery Entry - {{ plant.plant_name }}</h1>
+    <a class="button" href="{{ hub_url }}">← Raw Materials Hub</a>
 </div>
 
 <div class="excel-wrapper">
 <table id="entry-table" class="excel-table">
   <thead>
     <tr>
-      <th style="min-width: 110px;">التاريخ</th>
-      <th style="min-width: 60px;">الوقت</th>
-      <th style="min-width: 140px;">المادة</th>
-      <th style="min-width: 130px;">المورد</th>
-      <th style="min-width: 110px;">رقم العربية</th>
-      <th style="min-width: 90px;">الوزن (طن)</th>
-      <th style="min-width: 150px;">القرار</th>
-      <th style="min-width: 90px;">نسبة الخصم %</th>
-      <th style="min-width: 160px;">المخزن</th>
-      <th style="min-width: 140px;">ملاحظات</th>
-      <th style="min-width: 40px;">حذف</th>
+      <th style="min-width: 110px;">Date</th>
+      <th style="min-width: 60px;">Time</th>
+      <th style="min-width: 140px;">Material</th>
+      <th style="min-width: 130px;">Supplier</th>
+      <th style="min-width: 110px;">Vehicle No.</th>
+      <th style="min-width: 90px;">Weight (Tons)</th>
+      <th style="min-width: 150px;">Decision</th>
+      <th style="min-width: 90px;">Deduction %</th>
+      <th style="min-width: 160px;">Storage</th>
+      <th style="min-width: 140px;">Notes</th>
+      <th style="min-width: 40px;">Delete</th>
     </tr>
   </thead>
   <tbody id="entry-tbody"></tbody>
@@ -108,8 +108,8 @@
 
 <br>
 <div style="display:flex; gap:10px; margin-top:10px; align-items:center;">
-    <button id="add-row" type="button" class="button">+ إضافة شحنة</button>
-    <button id="save-all" type="button" class="button default">حفظ الكل</button>
+    <button id="add-row" type="button" class="button">+ Add Delivery</button>
+    <button id="save-all" type="button" class="button default">Save All</button>
 </div>
 
 <!-- البيانات الممررة بأسلوب آمن عبر json_script -->
@@ -126,7 +126,7 @@ function getTodayDate() { return new Date().toISOString().split('T')[0]; }
 function getCurrentTime() { const now = new Date(); return now.toTimeString().split(' ')[0].substring(0, 5); }
 
 function buildMaterialOptions(selected) {
-  let opts = `<option value="">-- اختر --</option>`;
+  let opts = `<option value="">-- Select --</option>`;
   MATERIALS.forEach(m => {
     opts += `<option value="${m.id}"${String(m.id) === String(selected) ? ' selected' : ''}>${m.material_name}</option>`;
   });
@@ -134,7 +134,7 @@ function buildMaterialOptions(selected) {
 }
 
 function buildSupplierOptions(selected) {
-  let opts = `<option value="">-- اختر --</option>`;
+  let opts = `<option value="">-- Select --</option>`;
   SUPPLIERS.forEach(s => {
     opts += `<option value="${s.id}"${String(s.id) === String(selected) ? ' selected' : ''}>${s.supplier_name}</option>`;
   });
@@ -142,7 +142,7 @@ function buildSupplierOptions(selected) {
 }
 
 function storageOptionsFor(materialId, selected) {
-  let opts = `<option value="">-- اختر --</option>`;
+  let opts = `<option value="">-- Select --</option>`;
   STORAGES.filter(s => !materialId || String(s.material_id) === String(materialId))
     .forEach(s => {
       opts += `<option value="${s.id}"${String(s.id) === String(selected) ? ' selected' : ''}>${s.storage_name}</option>`;
@@ -159,13 +159,13 @@ function addRow(data) {
     <td>
       <div style="display:flex; align-items:center;">
         <input type="date" class="arrived-date" value="${data && data.arrived_date ? data.arrived_date : getTodayDate()}">
-        <button type="button" class="btn-mini" onclick="this.previousElementSibling.value=getTodayDate()" title="تاريخ اليوم">📅</button>
+        <button type="button" class="btn-mini" onclick="this.previousElementSibling.value=getTodayDate()" title="Today">📅</button>
       </div>
     </td>
     <td>
       <div style="display:flex; align-items:center;">
         <input type="time" class="arrived-time" value="${data && data.arrived_time ? data.arrived_time : getCurrentTime()}">
-        <button type="button" class="btn-mini" onclick="this.previousElementSibling.value=getCurrentTime()" title="الوقت الحالي">⏰</button>
+        <button type="button" class="btn-mini" onclick="this.previousElementSibling.value=getCurrentTime()" title="Current Time">⏰</button>
       </div>
     </td>
     <td><select class="material">${buildMaterialOptions(data && data.material_id)}</select></td>
@@ -173,9 +173,9 @@ function addRow(data) {
     <td><input type="text" class="vehicle-number" value="${data ? data.vehicle_number : ''}"></td>
     <td><input type="number" step="any" class="weight" value="${data ? data.weight_tons : ''}"></td>
     <td><select class="decision">
-      <option value="accepted"${data && data.decision === 'accepted' ? ' selected' : ''}>مقبولة</option>
-      <option value="rejected"${data && data.decision === 'rejected' ? ' selected' : ''}>مرفوضة</option>
-      <option value="accepted_with_deduction"${data && data.decision === 'accepted_with_deduction' ? ' selected' : ''}>مقبولة بخصم</option>
+      <option value="accepted"${data && data.decision === 'accepted' ? ' selected' : ''}>Accepted</option>
+      <option value="rejected"${data && data.decision === 'rejected' ? ' selected' : ''}>Rejected</option>
+      <option value="accepted_with_deduction"${data && data.decision === 'accepted_with_deduction' ? ' selected' : ''}>Accepted with Deduction</option>
     </select></td>
     <td><input type="number" step="any" class="deduction" value="${data && data.deduction_percentage ? data.deduction_percentage : ''}"></td>
     <td><select class="storage">${storageOptionsFor(data && data.material_id, data && data.storage_id)}</select></td>
@@ -225,6 +225,8 @@ function collectRow(tr) {
 }
 
 document.getElementById("add-row").addEventListener("click", () => addRow());
+
+addRow();
 
 /* التنقل بالكيبورد بأسلوب Excel (Enter / الأسهم) */
 document.addEventListener('keydown', function (e) {
@@ -293,11 +295,11 @@ document.getElementById("save-all").addEventListener("click", function() {
   document.querySelectorAll("#entry-tbody tr").forEach(tr => {
     rows.push(collectRow(tr));
   });
-  if (!rows.length) { alert("لا توجد صفوف للحفظ"); return; }
+  if (!rows.length) { alert("No rows to save"); return; }
 
   const csrfInput = document.querySelector("[name=csrfmiddlewaretoken]");
   if (!csrfInput) {
-    alert("خطأ: لم يتم العثور على رمز الحماية (CSRF) في الصفحة — أعد تحميل الصفحة وحاول مجدداً");
+    alert("CSRF token not found — please reload the page and try again");
     return;
   }
 
@@ -314,16 +316,16 @@ document.getElementById("save-all").addEventListener("click", function() {
     let data;
     try { data = JSON.parse(res.text); } catch (e) { data = null; }
     if (data && data.status === "ok") {
-      alert("تم الحفظ بنجاح: " + data.rows_saved + " شحنة");
+      alert("Saved successfully: " + data.rows_saved + " deliveries");
       location.reload();
     } else if (data) {
-      alert("حدث خطأ أثناء الحفظ: " + (data.message || "تأكد من صحة البيانات"));
+      alert("Error saving: " + (data.message || "Please check the data"));
     } else {
-      alert("خطأ من الخادم (رمز " + res.status + "). تأكد من صحة البيانات ثم حاول مجدداً.");
+      alert("Server error (code " + res.status + "). Please check data and try again.");
     }
   })
   .catch(err => {
-    alert("خطأ في الاتصال بالخادم — تأكد من اتصالك بالشبكة ثم أعد المحاولة");
+    alert("Connection error — please check your network and try again");
   });
 });
 </script>

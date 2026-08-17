@@ -119,7 +119,7 @@ def coming_soon(request, section_name):
 
 @staff_member_required
 def delivery_entry(request):
-    """شيت إدخال الشحنات الجدولي (مثل final_product_entry في الفاكتوري)."""
+    """Delivery entry sheet (Excel-like grid, same as final_product_entry in Factory)."""
     plant = _current_plant(request)
     if not plant:
         return redirect("warehousing:raw_materials_hub")
@@ -128,7 +128,7 @@ def delivery_entry(request):
         try:
             payload = json.loads(request.body)
         except json.JSONDecodeError:
-            return JsonResponse({"status": "error", "message": "بيانات غير صالحة"}, status=400)
+            return JsonResponse({"status": "error", "message": "Invalid data"}, status=400)
         saved, errors = save_delivery_rows(plant, payload.get("rows", []), request.user)
         if errors:
             return JsonResponse({"status": "error", "message": "; ".join(errors)}, status=400)
@@ -140,7 +140,7 @@ def delivery_entry(request):
 
     context = _admin_context(
         request,
-        title="شيت استلام الشحنات - " + plant.plant_name,
+        title="Delivery Entry - " + plant.plant_name,
         plant=plant,
         materials_json=json.dumps(
             list(materials.values("id", "material_name")), ensure_ascii=False
@@ -159,7 +159,7 @@ def delivery_entry(request):
 
 @staff_member_required
 def deliveries_data(request):
-    """قائمة الشحنات السابقة للمصنع الحالي (بنفس تقسيم صفحة الداتا في الفاكتوري)."""
+    """List of previous deliveries for the current plant (same layout as Factory data page)."""
     plant = _current_plant(request)
     if not plant:
         return redirect("warehousing:raw_materials_hub")
@@ -171,7 +171,7 @@ def deliveries_data(request):
     )
     context = _admin_context(
         request,
-        title="عرض بيانات الشحنات - " + plant.plant_name,
+        title="Deliveries Data - " + plant.plant_name,
         plant=plant,
         deliveries=deliveries,
         hub_url=reverse("warehousing:raw_materials_hub"),
@@ -181,7 +181,7 @@ def deliveries_data(request):
 
 @staff_member_required
 def delivery_edit(request, delivery_id):
-    """عرض/تعديل شحنة واحدة (لا إضافة من هنا)."""
+    """View/edit a single delivery (no creation from here)."""
     plant = _current_plant(request)
     if not plant:
         return redirect("warehousing:raw_materials_hub")
@@ -194,7 +194,7 @@ def delivery_edit(request, delivery_id):
         try:
             payload = json.loads(request.body)
         except json.JSONDecodeError:
-            return JsonResponse({"status": "error", "message": "بيانات غير صالحة"}, status=400)
+            return JsonResponse({"status": "error", "message": "Invalid data"}, status=400)
         errors = save_delivery_edits(plant, payload.get("rows", []), request.user)
         if errors:
             return JsonResponse({"status": "error", "message": "; ".join(errors)}, status=400)
@@ -206,7 +206,7 @@ def delivery_edit(request, delivery_id):
 
     context = _admin_context(
         request,
-        title="تعديل شحنة - " + delivery.material.material_name,
+        title="Edit Delivery - " + delivery.material.material_name,
         plant=plant,
         row=delivery_row_data(delivery),
         materials_json=json.dumps(
@@ -226,13 +226,13 @@ def delivery_edit(request, delivery_id):
 
 @staff_member_required
 def deliveries_reports(request):
-    """التقارير — جاهز للإضافة لاحقاً."""
+    """Reports — ready for future implementation."""
     plant = _current_plant(request)
     if not plant:
         return redirect("warehousing:raw_materials_hub")
     context = _admin_context(
         request,
-        title="تقارير الشحنات - " + plant.plant_name,
+        title="Delivery Reports - " + plant.plant_name,
         plant=plant,
         hub_url=reverse("warehousing:raw_materials_hub"),
     )
@@ -241,13 +241,13 @@ def deliveries_reports(request):
 
 @staff_member_required
 def deliveries_analysis(request):
-    """تحليل البيانات — جاهز للإضافة لاحقاً."""
+    """Data Analysis — ready for future implementation."""
     plant = _current_plant(request)
     if not plant:
         return redirect("warehousing:raw_materials_hub")
     context = _admin_context(
         request,
-        title="تحليل بيانات الشحنات - " + plant.plant_name,
+        title="Delivery Data Analysis - " + plant.plant_name,
         plant=plant,
         hub_url=reverse("warehousing:raw_materials_hub"),
     )

@@ -18,63 +18,63 @@
 </style>
 
 <div class="page-nav" style="display:flex; align-items:center; gap:15px; margin-bottom:8px;">
-    <div class="title">تعديل شحنة - {{ row.material_name }}</div>
-    <a class="button" href="{{ data_url }}">← عرض البيانات</a>
+    <div class="title">Edit Delivery - {{ row.material_name }}</div>
+    <a class="button" href="{{ data_url }}">← Back to Data</a>
 </div>
 
 <form class="edit-form" id="edit-form" onsubmit="saveRow(event)">
   <div class="form-grid">
     <div class="form-field">
-      <label>المادة</label>
+      <label>Material</label>
       <select id="material">
-        <option value="">-- اختر --</option>
+        <option value="">-- Select --</option>
         {% for m in materials_json %}{% endfor %}
       </select>
     </div>
     <div class="form-field">
-      <label>المورد</label>
-      <select id="supplier"><option value="">-- اختر --</option></select>
+      <label>Supplier</label>
+      <select id="supplier"><option value="">-- Select --</option></select>
     </div>
     <div class="form-field">
-      <label>رقم العربية</label>
+      <label>Vehicle No.</label>
       <input type="text" id="vehicle-number">
     </div>
     <div class="form-field">
-      <label>الوزن (طن)</label>
+      <label>Weight (Tons)</label>
       <input type="number" step="any" id="weight">
     </div>
     <div class="form-field">
-      <label>تاريخ الوصول</label>
+      <label>Arrival Date</label>
       <input type="date" id="arrived-date">
     </div>
     <div class="form-field">
-      <label>وقت الوصول</label>
+      <label>Arrival Time</label>
       <input type="time" id="arrived-time">
     </div>
     <div class="form-field">
-      <label>القرار</label>
+      <label>Decision</label>
       <select id="decision">
-        <option value="accepted">مقبولة</option>
-        <option value="rejected">مرفوضة</option>
-        <option value="accepted_with_deduction">مقبولة بخصم</option>
+        <option value="accepted">Accepted</option>
+        <option value="rejected">Rejected</option>
+        <option value="accepted_with_deduction">Accepted with Deduction</option>
       </select>
     </div>
     <div class="form-field">
-      <label>نسبة الخصم %</label>
+      <label>Deduction %</label>
       <input type="number" step="any" id="deduction">
     </div>
     <div class="form-field">
-      <label>المخزن</label>
-      <select id="storage"><option value="">-- اختر --</option></select>
+      <label>Storage</label>
+      <select id="storage"><option value="">-- Select --</option></select>
     </div>
     <div class="form-field">
-      <label>ملاحظات</label>
+      <label>Notes</label>
       <textarea id="notes" rows="2"></textarea>
     </div>
   </div>
   <div class="btn-row">
-    <button type="submit" class="button default">حفظ التعديلات</button>
-    <a class="button" href="{{ data_url }}">إلغاء</a>
+    <button type="submit" class="button default">Save Changes</button>
+    <a class="button" href="{{ data_url }}">Cancel</a>
   </div>
 </form>
 
@@ -93,7 +93,7 @@ const $ = id => document.getElementById(id);
 
 function fillSelect(sel, items, selected, textKey, valKey) {
   const valueKey = valKey || 'id';
-  sel.innerHTML = '<option value="">-- اختر --</option>' + items.map(i =>
+  sel.innerHTML = '<option value="">-- Select --</option>' + items.map(i =>
     `<option value="${i[valueKey]}"${String(i[valueKey]) === String(selected) ? ' selected' : ''}>${i[textKey]}</option>`
   ).join('');
 }
@@ -147,15 +147,15 @@ function saveRow(e) {
     let data;
     try { data = JSON.parse(res.text); } catch (e2) { data = null; }
     if (data && data.status === "ok") {
-      alert("تم حفظ التعديلات");
+      alert("Changes saved successfully");
       location.reload();
     } else if (data) {
-      alert("حدث خطأ: " + (data.message || "تأكد من صحة البيانات"));
+      alert("Error: " + (data.message || "Please check the data"));
     } else {
-      alert("خطأ من الخادم (رمز " + res.status + ")");
+      alert("Server error (code " + res.status + ")");
     }
   })
-  .catch(() => alert("خطأ في الاتصال بالخادم"));
+  .catch(() => alert("Connection error"));
 }
 </script>
 {% endblock %}
