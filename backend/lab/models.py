@@ -92,21 +92,23 @@ class Sample(models.Model):
 class SampleRequiredTest(models.Model):
     """Tests required before a sample is considered ready for QC decision."""
     sample = models.ForeignKey(Sample, on_delete=models.CASCADE, related_name="required_tests")
-    test = models.ForeignKey("factory.TestDefinition", on_delete=models.CASCADE)
+    test_name = models.CharField(max_length=100)
+    test_id_ref = models.PositiveIntegerField(null=True, blank=True, help_text="Reference to factory.TestDefinition PK — set by caller")
     is_completed = models.BooleanField(default=False)
 
     class Meta:
         db_table = "lab_sample_required_tests"
-        unique_together = (("sample", "test"),)
+        unique_together = (("sample", "test_name"),)
 
     def __str__(self):
-        return f"{self.sample.sample_code} — {self.test.name}"
+        return f"{self.sample.sample_code} — {self.test_name}"
 
 
 class SampleTestResult(models.Model):
     """Individual test result for a sample."""
     sample = models.ForeignKey(Sample, on_delete=models.CASCADE, related_name="test_results")
-    test = models.ForeignKey("factory.TestDefinition", on_delete=models.CASCADE)
+    test_name = models.CharField(max_length=100)
+    test_id_ref = models.PositiveIntegerField(null=True, blank=True, help_text="Reference to factory.TestDefinition PK — set by caller")
     result = models.DecimalField(max_digits=10, decimal_places=3, null=True, blank=True)
     entered_by = models.ForeignKey(
         settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True
@@ -115,7 +117,7 @@ class SampleTestResult(models.Model):
 
     class Meta:
         db_table = "lab_sample_test_results"
-        unique_together = (("sample", "test"),)
+        unique_together = (("sample", "test_name"),)
 
     def __str__(self):
-        return f"{self.sample.sample_code} — {self.test.name}: {self.result}"
+        return f"{self.sample.sample_code} — {self.test_name}: {self.result}"

@@ -26,10 +26,11 @@ def _resolve_lab_department(plant):
     return Department.objects.filter(department_id__in=dept_ids).first()
 
 
-def create_sample(source_type, source_object, plant, required_test_ids, collected_by=None, group=None):
+def create_sample(source_type, source_object, plant, required_test_names, collected_by=None, group=None):
     """
     Single entry point for any app to open a new lab sample.
 
+    required_test_names: list of dicts [{"name": "SiO2", "id_ref": 123}, ...]
     Returns the created Sample instance.
     """
     ct = ContentType.objects.get_for_model(source_object) if source_object else None
@@ -46,10 +47,11 @@ def create_sample(source_type, source_object, plant, required_test_ids, collecte
         status=Sample.STATUS_DRAFT,
     )
 
-    for test_id in required_test_ids:
+    for test_info in required_test_names:
         SampleRequiredTest.objects.create(
             sample=sample,
-            test_id=test_id,
+            test_name=test_info["name"],
+            test_id_ref=test_info.get("id_ref"),
         )
 
     return sample
@@ -64,19 +66,21 @@ def mark_collected(sample, user):
     return sample
 
 
-def enter_result(sample, test, value, user):
+def enter_result(sample, test_name, value, user, test_id_ref=None):
     """
     Record a test result. Update SampleRequiredTest.is_completed.
     If all required tests are completed → status=ready_for_decision.
     """
-    srt = SampleRequiredTest.objects.filter(sample=sample, test=test).first()
+    srt = SampleRequiredTest.objects.filter(sample=sample, test_name=test_name).first()
     if not srt:
-        srt = SampleRequiredTest.objects.create(sample=sample, test=test)
+        srt = SampleRequiredTest.objects.create(
+            sample=sample, test_name=test_name, test_id_ref=test_id_ref,
+        )
 
     SampleTestResult.objects.update_or_create(
         sample=sample,
-        test=test,
-        defaults={"result": value, "entered_by": user},
+        test_name=test_name,
+        defaults={"result": value, "entered_by": user, "test_id_ref": test_id_ref},
     )
 
     srt.is_completed = True

@@ -20,7 +20,7 @@ def compute_suggested_decision(sample):
 
     for rule in rules:
         result = SampleTestResult.objects.filter(
-            sample=sample, test=rule.test
+            sample=sample, test_name=rule.test.name
         ).first()
         if not result or result.result is None:
             continue
