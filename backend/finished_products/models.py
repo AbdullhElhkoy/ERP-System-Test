@@ -6,7 +6,7 @@ class Product(models.Model):
     product_code = models.CharField(max_length=30, unique=True)
     product_name = models.CharField(max_length=150)
     product_type = models.CharField(max_length=50, blank=True)
-    plant = models.ForeignKey("plants.Plant", on_delete=models.PROTECT, related_name="finished_products")
+    plants = models.ManyToManyField("plants.Plant", blank=True, related_name="finished_products")
     unit_of_measure = models.CharField(max_length=20, default="tons")
     packing_types = models.ManyToManyField("factory.PackingType", blank=True)
     traceability_level = models.PositiveSmallIntegerField(default=1)
@@ -44,6 +44,7 @@ class StockLedger(models.Model):
     ]
 
     product = models.ForeignKey(Product, on_delete=models.PROTECT, related_name="stock_movements")
+    plant = models.ForeignKey("plants.Plant", on_delete=models.PROTECT, related_name="finished_stock_ledger")
     packaging_type = models.ForeignKey("factory.PackingType", on_delete=models.PROTECT)
     transaction_type = models.CharField(max_length=20, choices=TYPE_CHOICES)
     quantity = models.DecimalField(max_digits=12, decimal_places=3)
@@ -62,6 +63,7 @@ class StockLedger(models.Model):
 
 
 class StockBalance(models.Model):
+    plant = models.ForeignKey("plants.Plant", on_delete=models.PROTECT, related_name="finished_stock_balances")
     product = models.ForeignKey(Product, on_delete=models.PROTECT, related_name="balances")
     packaging_type = models.ForeignKey("factory.PackingType", on_delete=models.PROTECT)
     total_stock = models.DecimalField(max_digits=12, decimal_places=3, default=0)
@@ -73,7 +75,7 @@ class StockBalance(models.Model):
 
     class Meta:
         db_table = "finished_products_stock_balances"
-        unique_together = (("product", "packaging_type"),)
+        unique_together = (("plant", "product", "packaging_type"),)
 
     def __str__(self):
-        return f"{self.product} / {self.packaging_type}: {self.available} available"
+        return f"{self.plant} / {self.product} / {self.packaging_type}: {self.available} available"

@@ -6,10 +6,11 @@ from .models import StockLedger, StockBalance
 
 
 @transaction.atomic
-def create_stock_transaction(product, packaging_type, transaction_type, quantity, user=None, reference="", notes=""):
+def create_stock_transaction(product, plant, packaging_type, transaction_type, quantity, user=None, reference="", notes=""):
     """Create a StockLedger entry and update StockBalance."""
     ledger = StockLedger.objects.create(
         product=product,
+        plant=plant,
         packaging_type=packaging_type,
         transaction_type=transaction_type,
         quantity=quantity,
@@ -20,6 +21,7 @@ def create_stock_transaction(product, packaging_type, transaction_type, quantity
     )
 
     balance, _ = StockBalance.objects.select_for_update().get_or_create(
+        plant=plant,
         product=product,
         packaging_type=packaging_type,
         defaults={
@@ -58,10 +60,10 @@ def create_stock_transaction(product, packaging_type, transaction_type, quantity
 
 
 @transaction.atomic
-def reserve_stock(product, packaging_type, quantity, user=None, reference=""):
+def reserve_stock(product, plant, packaging_type, quantity, user=None, reference=""):
     """Reserve stock — fails if available < quantity."""
     balance = StockBalance.objects.select_for_update().filter(
-        product=product, packaging_type=packaging_type
+        plant=plant, product=product, packaging_type=packaging_type
     ).first()
 
     if not balance:
@@ -76,38 +78,38 @@ def reserve_stock(product, packaging_type, quantity, user=None, reference=""):
         raise ValueError("Stock is under QC hold and cannot be reserved.")
 
     return create_stock_transaction(
-        product, packaging_type, StockLedger.TYPE_RESERVED,
+        product, plant, packaging_type, StockLedger.TYPE_RESERVED,
         quantity, user=user, reference=reference,
     )
 
 
 @transaction.atomic
-def release_stock(product, packaging_type, quantity, user=None, reference=""):
+def release_stock(product, plant, packaging_type, quantity, user=None, reference=""):
     """Release a reservation (reserved → available)."""
     balance = StockBalance.objects.select_for_update().filter(
-        product=product, packaging_type=packaging_type
+        plant=plant, product=product, packaging_type=packaging_type
     ).first()
 
     if not balance or balance.reserved < quantity:
         raise ValueError("Insufficient reserved stock to release.")
 
     return create_stock_transaction(
-        product, packaging_type, StockLedger.TYPE_RELEASED,
+        product, plant, packaging_type, StockLedger.TYPE_RELEASED,
         quantity, user=user, reference=reference,
     )
 
 
 @transaction.atomic
-def issue_stock(product, packaging_type, quantity, user=None, reference=""):
+def issue_stock(product, plant, packaging_type, quantity, user=None, reference=""):
     """Issue stock for delivery (reserved → out)."""
     balance = StockBalance.objects.select_for_update().filter(
-        product=product, packaging_type=packaging_type
+        plant=plant, product=product, packaging_type=packaging_type
     ).first()
 
     if not balance or balance.reserved < quantity:
         raise ValueError("Insufficient reserved stock to issue.")
 
     return create_stock_transaction(
-        product, packaging_type, StockLedger.TYPE_ISSUED,
+        product, plant, packaging_type, StockLedger.TYPE_ISSUED,
         quantity, user=user, reference=reference,
     )

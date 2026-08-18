@@ -150,6 +150,7 @@ class SalesOrder(models.Model):
 class SalesOrderLine(models.Model):
     order = models.ForeignKey(SalesOrder, on_delete=models.CASCADE, related_name="lines")
     product = models.ForeignKey("finished_products.Product", on_delete=models.PROTECT)
+    plant = models.ForeignKey("plants.Plant", on_delete=models.PROTECT, related_name="order_lines")
     packaging_type = models.ForeignKey("factory.PackingType", on_delete=models.PROTECT)
     quantity = models.DecimalField(max_digits=10, decimal_places=3)
     unit_price = models.DecimalField(max_digits=10, decimal_places=2)
@@ -159,7 +160,7 @@ class SalesOrderLine(models.Model):
 
 
 class OrderPlantAllocation(models.Model):
-    """توزيع الطلبية الحالي على مصنع أو أكتر - الحالة النشطة دلوقتي"""
+    """Tracks which plant produces what portion of an order — currently active allocation."""
     order = models.ForeignKey(SalesOrder, on_delete=models.CASCADE, related_name="plant_allocations")
     plant = models.ForeignKey("plants.Plant", on_delete=models.PROTECT, related_name="order_allocations")
     allocated_quantity = models.DecimalField(max_digits=12, decimal_places=3)
@@ -174,7 +175,7 @@ class OrderPlantAllocation(models.Model):
 
 
 class OrderPlantAllocationChangeLog(models.Model):
-    """سجل كل عملية إعادة توزيع بين المصانع - للتتبع الكامل"""
+    """Audit log for all plant reallocation changes — full traceability."""
     order = models.ForeignKey(SalesOrder, on_delete=models.CASCADE, related_name="allocation_logs")
     from_plant = models.ForeignKey(
         "plants.Plant", on_delete=models.PROTECT, null=True, blank=True, related_name="allocation_logs_from"
@@ -203,10 +204,10 @@ class OrderMovement(models.Model):
     MOVEMENT_STAGING = "staging"
     MOVEMENT_LOADING = "loading"
     MOVEMENT_TYPE_CHOICES = [
-        (MOVEMENT_PRODUCTION, "إنتاج"),
-        (MOVEMENT_HANDOVER, "تسليم للمخزن"),
-        (MOVEMENT_STAGING, "تجهيز"),
-        (MOVEMENT_LOADING, "تحميل"),
+        (MOVEMENT_PRODUCTION, "Production"),
+        (MOVEMENT_HANDOVER, "Handover to Warehouse"),
+        (MOVEMENT_STAGING, "Staging"),
+        (MOVEMENT_LOADING, "Loading"),
     ]
 
     order = models.ForeignKey(SalesOrder, on_delete=models.CASCADE, related_name="movements")

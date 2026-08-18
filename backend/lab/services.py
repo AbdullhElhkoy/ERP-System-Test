@@ -26,11 +26,12 @@ def _resolve_lab_department(plant):
     return Department.objects.filter(department_id__in=dept_ids).first()
 
 
-def create_sample(source_type, source_object, plant, required_test_names, collected_by=None, group=None):
+def create_sample(source_type, source_object, plant, required_tests, collected_by=None, group=None):
     """
     Single entry point for any app to open a new lab sample.
 
-    required_test_names: list of dicts [{"name": "SiO2", "id_ref": 123}, ...]
+    required_tests: list of dicts [{"name": "SiO2", "test_object": <model_instance>}, ...]
+        or legacy [{"name": "SiO2", "id_ref": 123}, ...] (stored as test_name only).
     Returns the created Sample instance.
     """
     ct = ContentType.objects.get_for_model(source_object) if source_object else None
@@ -47,11 +48,20 @@ def create_sample(source_type, source_object, plant, required_test_names, collec
         status=Sample.STATUS_DRAFT,
     )
 
-    for test_info in required_test_names:
+    for test_info in required_tests:
+        test_obj = test_info.get("test_object")
+        if test_obj:
+            test_ct = ContentType.objects.get_for_model(test_obj)
+            test_oid = test_obj.pk
+        else:
+            test_ct = None
+            test_oid = None
+
         SampleRequiredTest.objects.create(
             sample=sample,
             test_name=test_info["name"],
-            test_id_ref=test_info.get("id_ref"),
+            test_content_type=test_ct,
+            test_object_id=test_oid,
         )
 
     return sample
@@ -66,21 +76,31 @@ def mark_collected(sample, user):
     return sample
 
 
-def enter_result(sample, test_name, value, user, test_id_ref=None):
+def enter_result(sample, test_name, value, user, test_object=None):
     """
     Record a test result. Update SampleRequiredTest.is_completed.
+    test_object: the actual TestDefinition / MaterialTest / InspectionTemplate instance.
     If all required tests are completed → status=ready_for_decision.
     """
     srt = SampleRequiredTest.objects.filter(sample=sample, test_name=test_name).first()
+
+    test_ct = None
+    test_oid = None
+    if test_object:
+        test_ct = ContentType.objects.get_for_model(test_object)
+        test_oid = test_object.pk
+
     if not srt:
         srt = SampleRequiredTest.objects.create(
-            sample=sample, test_name=test_name, test_id_ref=test_id_ref,
+            sample=sample, test_name=test_name,
+            test_content_type=test_ct, test_object_id=test_oid,
         )
 
     SampleTestResult.objects.update_or_create(
         sample=sample,
         test_name=test_name,
-        defaults={"result": value, "entered_by": user, "test_id_ref": test_id_ref},
+        defaults={"result": value, "entered_by": user,
+                  "test_content_type": test_ct, "test_object_id": test_oid},
     )
 
     srt.is_completed = True

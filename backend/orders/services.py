@@ -13,18 +13,19 @@ from .models import SalesOrder, SalesOrderLine, OrderPlantAllocation
 def reserve_stock_for_order(order, user=None):
     """
     Reserve finished-product stock for all confirmed order lines.
-    Calls finished_products.services.reserve_stock per line.
+    Each line carries its own plant FK.
     Returns list of (line, error) tuples — empty list means success.
     """
     from finished_products.services import reserve_stock
 
     errors = []
-    lines = order.lines.select_related("product", "packaging_type").all()
+    lines = order.lines.select_related("product", "plant", "packaging_type").all()
 
     for line in lines:
         try:
             reserve_stock(
                 product=line.product,
+                plant=line.plant,
                 packaging_type=line.packaging_type,
                 quantity=line.quantity,
                 user=user,
@@ -41,7 +42,7 @@ def reserve_stock_for_order(order, user=None):
 
 
 @transaction.atomic
-def issue_stock_for_order(order, product, packaging_type, quantity, user=None):
+def issue_stock_for_order(order, product, plant, packaging_type, quantity, user=None):
     """
     Issue (ship) stock previously reserved for this order.
     Decrements reserved → out; transitions order status to partially/fully delivered.
@@ -51,6 +52,7 @@ def issue_stock_for_order(order, product, packaging_type, quantity, user=None):
     try:
         issue_stock(
             product=product,
+            plant=plant,
             packaging_type=packaging_type,
             quantity=quantity,
             user=user,
@@ -61,7 +63,7 @@ def issue_stock_for_order(order, product, packaging_type, quantity, user=None):
 
     total_reserved = sum(
         line.quantity for line in order.lines.all()
-        if line.product_id == product.pk and line.packaging_type_id == packaging_type.pk
+        if line.product_id == product.pk and line.plant_id == plant.pk and line.packaging_type_id == packaging_type.pk
     )
     total_issued = sum(
         order.movements.filter(

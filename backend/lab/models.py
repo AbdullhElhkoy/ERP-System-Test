@@ -92,7 +92,14 @@ class SampleRequiredTest(models.Model):
     """Tests required before a sample is considered ready for QC decision."""
     sample = models.ForeignKey(Sample, on_delete=models.CASCADE, related_name="required_tests")
     test_name = models.CharField(max_length=100)
-    test_id_ref = models.PositiveIntegerField(null=True, blank=True, help_text="Reference to factory.TestDefinition PK — set by caller")
+
+    test_content_type = models.ForeignKey(
+        ContentType, on_delete=models.SET_NULL, null=True, blank=True,
+        related_name="lab_required_tests",
+    )
+    test_object_id = models.PositiveBigIntegerField(null=True, blank=True)
+    test_object = GenericForeignKey("test_content_type", "test_object_id")
+
     is_completed = models.BooleanField(default=False)
 
     class Meta:
@@ -107,7 +114,14 @@ class SampleTestResult(models.Model):
     """Individual test result for a sample."""
     sample = models.ForeignKey(Sample, on_delete=models.CASCADE, related_name="test_results")
     test_name = models.CharField(max_length=100)
-    test_id_ref = models.PositiveIntegerField(null=True, blank=True, help_text="Reference to factory.TestDefinition PK — set by caller")
+
+    test_content_type = models.ForeignKey(
+        ContentType, on_delete=models.SET_NULL, null=True, blank=True,
+        related_name="lab_test_results",
+    )
+    test_object_id = models.PositiveBigIntegerField(null=True, blank=True)
+    test_object = GenericForeignKey("test_content_type", "test_object_id")
+
     result = models.DecimalField(max_digits=10, decimal_places=3, null=True, blank=True)
     entered_by = models.ForeignKey(
         settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True
