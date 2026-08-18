@@ -4,7 +4,7 @@ from .models import Sample, SampleGroup, SampleRequiredTest, SampleTestResult
 
 @admin.register(SampleGroup)
 class SampleGroupAdmin(admin.ModelAdmin):
-    list_display = ("group_code", "plant", "location_label", "packing_type", "is_open", "created_at")
+    list_display = ("group_code", "plant", "location_label", "packing_type_name", "is_open", "created_at")
     list_filter = ("plant", "is_open")
     search_fields = ("group_code", "location_label")
 
