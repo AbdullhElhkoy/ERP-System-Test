@@ -18,11 +18,11 @@ class QualityDecision(models.Model):
     sample = models.OneToOneField(
         "lab.Sample", on_delete=models.CASCADE, related_name="quality_decision"
     )
-    suggested_decision = models.CharField(max_length=20, choices=DECISION_CHOICES, blank=True)
+    suggested_decision = models.CharField(max_length=30, choices=DECISION_CHOICES, blank=True)
     suggested_by_rule = models.ForeignKey(
         "factory.ConformityRule", on_delete=models.SET_NULL, null=True, blank=True
     )
-    final_decision = models.CharField(max_length=20, choices=DECISION_CHOICES)
+    final_decision = models.CharField(max_length=30, choices=DECISION_CHOICES)
     decided_by = models.ForeignKey(
         settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True
     )
