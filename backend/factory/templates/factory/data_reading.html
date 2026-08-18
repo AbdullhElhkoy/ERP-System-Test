@@ -24,38 +24,39 @@
 
 <div class="de-nav">
     <div class="title">🗄️ Data - {{ plant.plant_name }} - {{ packing_type.name }}</div>
-    <a class="button" href="{% url 'admin:factory_data_packings' packing_type.pk %}">← القراءات السابقة</a>
-    <a class="button" href="{{ dashboard_url }}">← لوحة المصنع</a>
+    <a class="button" href="{% url 'admin:factory_data_packings' packing_type.pk %}">← Previous Readings</a>
+    <a class="button" href="{{ dashboard_url }}">← Factory Dashboard</a>
+    {% include "warehousing/includes/lang_toggle.html" %}
 </div>
 
 <form id="data-form">
 <div class="group-box">
-    <h3>بيانات السحب (مشتركة)</h3>
+    <h3>Sampling Data (Shared)</h3>
     <div class="group-grid">
-        <label>مكان الإنتاج
+        <label>Production Location
             <select id="f-packing-location">
                 {% for loc in packing_locations %}<option value="{{ loc.id }}" {% if loc.id == reading.packing_location_id %}selected{% endif %}>{{ loc.name }}</option>{% endfor %}
             </select>
         </label>
-        <label>تاريخ الإنتاج <input type="date" id="f-production-date" value="{{ grid.rows.0.production_date }}"></label>
-        <label>الوردية <select id="f-shift">{% for s in shift_choices %}<option value="{{ s }}" {% if s == grid.rows.0.shift %}selected{% endif %}>{{ s }}</option>{% endfor %}</select></label>
-        <label>نوع المنتج <input type="text" id="f-product-type" value="{{ reading.product_name|default:packing_type.name }}" readonly></label>
-        <label>وقت السحب <input type="time" id="f-sampling-time" value="{{ grid.rows.0.sampling_time }}"></label>
+        <label>Production Date <input type="date" id="f-production-date" value="{{ grid.rows.0.production_date }}"></label>
+        <label>Shift <select id="f-shift">{% for s in shift_choices %}<option value="{{ s }}" {% if s == grid.rows.0.shift %}selected{% endif %}>{{ s }}</option>{% endfor %}</select></label>
+        <label>Product Type <input type="text" id="f-product-type" value="{{ reading.product_name|default:packing_type.name }}" readonly></label>
+        <label>Sampling Time <input type="time" id="f-sampling-time" value="{{ grid.rows.0.sampling_time }}"></label>
         <label>QC Inspector
-            <select id="f-qc-inspector"><option value="">— اختر —</option>{% for u in users %}<option value="{{ u.id }}" {% if u.id == reading.sampled_by_id %}selected{% endif %}>{{ u.name }}</option>{% endfor %}</select>
+            <select id="f-qc-inspector"><option value="">-- Select --</option>{% for u in users %}<option value="{{ u.id }}" {% if u.id == reading.sampled_by_id %}selected{% endif %}>{{ u.name }}</option>{% endfor %}</select>
         </label>
-        <label>حالة السحب
-            <select id="f-sampling-status"><option value="تم" {% if reading.sampling_status == 'تم' %}selected{% endif %}>تم</option><option value="لم يتم" {% if reading.sampling_status == 'لم يتم' %}selected{% endif %}>لم يتم</option></select>
+        <label>Sampling Status
+            <select id="f-sampling-status"><option value="Done" {% if reading.sampling_status == 'Done' %}selected{% endif %}>Done</option><option value="Not Done" {% if reading.sampling_status == 'Not Done' %}selected{% endif %}>Not Done</option></select>
         </label>
         <label>Lab Chemist
-            <select id="f-lab-chemist"><option value="">— اختر —</option>{% for u in users %}<option value="{{ u.id }}" {% if u.id == reading.analyzed_by_id %}selected{% endif %}>{{ u.name }}</option>{% endfor %}</select>
+            <select id="f-lab-chemist"><option value="">-- Select --</option>{% for u in users %}<option value="{{ u.id }}" {% if u.id == reading.analyzed_by_id %}selected{% endif %}>{{ u.name }}</option>{% endfor %}</select>
         </label>
         <label>Lab SHIFT HEAD
-            <select id="f-lab-shift-head"><option value="">— اختر —</option>{% for u in users %}<option value="{{ u.id }}" {% if u.id == reading.lab_shift_head_id %}selected{% endif %}>{{ u.name }}</option>{% endfor %}</select>
+            <select id="f-lab-shift-head"><option value="">-- Select --</option>{% for u in users %}<option value="{{ u.id }}" {% if u.id == reading.lab_shift_head_id %}selected{% endif %}>{{ u.name }}</option>{% endfor %}</select>
         </label>
-        <label>وقت النتيجة <input type="time" id="f-result-time" value="{{ grid.rows.0.result_time }}"></label>
-        <label>مراجعة QC
-            <select id="f-qc-shift-head"><option value="">لم تتم المراجعة</option><option value="reviewed" {% if reading.reviewed_by_id %}selected{% endif %}>تمت مراجعته</option></select>
+        <label>Result Time <input type="time" id="f-result-time" value="{{ grid.rows.0.result_time }}"></label>
+        <label>QC Review
+            <select id="f-qc-shift-head"><option value="">Not Reviewed</option><option value="reviewed" {% if reading.reviewed_by_id %}selected{% endif %}>Reviewed</option></select>
         </label>
     </div>
 </div>
@@ -64,21 +65,21 @@
 <table id="entry-table" class="excel-table">
     <thead>
         <tr>
-            <th>نوع الصف</th>
-            <th>الكود</th>
-            {% for t in chemical_tests %}<th>{{ t.name }} (كيميائي)</th>{% endfor %}
-            {% for t in physical_tests %}<th>{{ t.name }} (فيزيائي)</th>{% endfor %}
-            <th>الوزن</th>
-            <th>الجريد الأساسي</th>
-            <th>الجريد الثانوي</th>
-            <th>سبب المحلي</th>
-            <th>سبب غير المطابق</th>
+            <th>Row Type</th>
+            <th>Code</th>
+            {% for t in chemical_tests %}<th>{{ t.name }} (Chemical)</th>{% endfor %}
+            {% for t in physical_tests %}<th>{{ t.name }} (Physical)</th>{% endfor %}
+            <th>Weight</th>
+            <th>Primary Grade</th>
+            <th>Secondary Grade</th>
+            <th>Local Reason</th>
+            <th>Non-Conforming Reason</th>
         </tr>
     </thead>
     <tbody id="entry-tbody">
         {% for row in grid.rows %}
         <tr class="ton-row" data-ton-id="{{ row.ton.pk }}">
-            <td>{% if row.rep %}عينة ممثلة{% else %}عينة منفردة{% endif %}</td>
+            <td>{% if row.rep %}Representative Sample{% else %}Single Sample{% endif %}</td>
             <td>{{ row.ton.code }}</td>
             {% for t in chemical_tests %}
             <td><input type="number" step="any" class="chemical-input" data-test-id="{{ t.id }}" value="{{ row.chemical_values|get_item:t.id }}"></td>
@@ -87,20 +88,20 @@
             <td><input type="number" step="any" class="physical-input" data-test-id="{{ t.id }}" value="{{ row.physical_values|get_item:t.id }}"></td>
             {% endfor %}
             <td><input type="number" step="any" class="weight" value="{{ row.weight }}"></td>
-            <td><select class="primary-grade"><option value="">— اختر —</option>{% for g in grid.primary_grades %}<option value="{{ g.id }}" {% if g.id == row.primary_grade %}selected{% endif %}>{{ g.code }}</option>{% endfor %}</select></td>
-            <td><select class="secondary-grade"><option value="">— اختر —</option>{% for g in grid.secondary_grades %}<option value="{{ g.id }}" {% if g.id == row.secondary_grade %}selected{% endif %}>{{ g.code }}</option>{% endfor %}</select></td>
-            <td><select class="local-reason"><option value="">— اختر —</option>{% for r in grid.local_reasons %}<option value="{{ r.id }}" {% if r.id == row.local_reason %}selected{% endif %}>{{ r.text }}</option>{% endfor %}</select></td>
-            <td><select class="non-conforming-reason"><option value="">— اختر —</option>{% for r in grid.non_conforming_reasons %}<option value="{{ r.id }}" {% if r.id == row.non_conforming_reason %}selected{% endif %}>{{ r.text }}</option>{% endfor %}</select></td>
+            <td><select class="primary-grade"><option value="">-- Select --</option>{% for g in grid.primary_grades %}<option value="{{ g.id }}" {% if g.id == row.primary_grade %}selected{% endif %}>{{ g.code }}</option>{% endfor %}</select></td>
+            <td><select class="secondary-grade"><option value="">-- Select --</option>{% for g in grid.secondary_grades %}<option value="{{ g.id }}" {% if g.id == row.secondary_grade %}selected{% endif %}>{{ g.code }}</option>{% endfor %}</select></td>
+            <td><select class="local-reason"><option value="">-- Select --</option>{% for r in grid.local_reasons %}<option value="{{ r.id }}" {% if r.id == row.local_reason %}selected{% endif %}>{{ r.text }}</option>{% endfor %}</select></td>
+            <td><select class="non-conforming-reason"><option value="">-- Select --</option>{% for r in grid.non_conforming_reasons %}<option value="{{ r.id }}" {% if r.id == row.non_conforming_reason %}selected{% endif %}>{{ r.text }}</option>{% endfor %}</select></td>
         </tr>
         {% empty %}
-        <tr><td colspan="100">لا توجد أطنان لهذه القراءة.</td></tr>
+        <tr><td colspan="100">No tons found for this reading.</td></tr>
         {% endfor %}
     </tbody>
 </table>
 </div>
 
 <br>
-<button id="save-all" type="button" class="button default">حفظ التعديلات</button>
+<button id="save-all" type="button" class="button default">Save Changes</button>
 </form>
 
 {{ chemical_tests_json|json_script:"chemical-tests-data" }}
@@ -148,7 +149,7 @@ document.getElementById("save-all").addEventListener("click", function() {
 
   const csrfEl = document.querySelector('[name=csrfmiddlewaretoken]');
   if (!csrfEl) {
-    alert("خطأ: لا يوجد رمز حماية (CSRF) في الصفحة — أعد تحميل الصفحة");
+    alert("Error: CSRF token not found — please reload the page");
     return;
   }
 
@@ -161,11 +162,11 @@ document.getElementById("save-all").addEventListener("click", function() {
     body: JSON.stringify({ rows: rows }),
   }).then(r => r.json()).then(data => {
     if (data.status === "ok") {
-      alert("تم حفظ التعديلات بنجاح");
+      alert("Changes saved successfully: " + data.count + " rows");
     } else {
-      alert("خطأ: " + (data.message || "حدث خطأ"));
+      alert("Error: " + (data.message || "An error occurred"));
     }
-  }).catch(() => alert("خطأ في الاتصال بالخادم — تأكد من اتصالك"));
+  }).catch(() => alert("Connection error — please check your network"));
 });
 </script>
 {% endblock %}

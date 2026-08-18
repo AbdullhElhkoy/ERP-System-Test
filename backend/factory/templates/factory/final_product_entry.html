@@ -92,34 +92,35 @@
 </style>
 
 <div style="margin-bottom: 20px;">
-    <h1>إدخال المنتج النهائي - {{ plant.plant_name }} - {{ packing_type.name }}</h1>
+    <h1>Final Product Entry - {{ plant.plant_name }} - {{ packing_type.name }}</h1>
+    {% include "warehousing/includes/lang_toggle.html" %}
 </div>
 
 <div class="excel-wrapper">
 <table id="entry-table" class="excel-table">
   <thead>
     <tr>
-      <th style="min-width: 60px;">نوع الصف</th>
-      <th style="min-width: 100px;">الكود</th>
-      <th style="min-width: 110px;">مكان الإنتاج</th>
-      <th style="min-width: 120px;">تاريخ الإنتاج</th>
-      <th style="min-width: 50px;">الوردية</th>
-      <th style="min-width: 80px;">نوع المنتج</th>
-      <th style="min-width: 90px;">وقت السحب</th>
+      <th style="min-width: 60px;">Row Type</th>
+      <th style="min-width: 100px;">Code</th>
+      <th style="min-width: 110px;">Production Location</th>
+      <th style="min-width: 120px;">Production Date</th>
+      <th style="min-width: 50px;">Shift</th>
+      <th style="min-width: 80px;">Product Type</th>
+      <th style="min-width: 90px;">Sampling Time</th>
       <th style="min-width: 110px;">QC Inspector</th>
-      <th style="min-width: 70px;">حالة السحب</th>
-      {% for t in chemical_tests %}<th data-test-id="{{ t.id }}" data-kind="chemical" style="min-width: 75px;">{{ t.name }} (كيميائي)</th>{% endfor %}
+      <th style="min-width: 70px;">Sampling Status</th>
+      {% for t in chemical_tests %}<th data-test-id="{{ t.id }}" data-kind="chemical" style="min-width: 75px;">{{ t.name }} (Chemical)</th>{% endfor %}
       <th style="min-width: 110px;">Lab Chemist</th>
       <th style="min-width: 110px;">Lab SHIFT HEAD</th>
-      {% for t in physical_tests %}<th data-test-id="{{ t.id }}" data-kind="physical" style="min-width: 75px;">{{ t.name }} (فيزيائي)</th>{% endfor %}
-      <th style="min-width: 90px;">وقت النتيجة</th>
-      <th style="min-width: 65px;">الوزن</th>
-      <th style="min-width: 90px;">الجريد الأساسي</th>
-      <th style="min-width: 90px;">الجريد الثانوي</th>
-      <th style="min-width: 110px;">سبب المحلي</th>
-      <th style="min-width: 110px;">سبب غير المطابق</th>
+      {% for t in physical_tests %}<th data-test-id="{{ t.id }}" data-kind="physical" style="min-width: 75px;">{{ t.name }} (Physical)</th>{% endfor %}
+      <th style="min-width: 90px;">Result Time</th>
+      <th style="min-width: 65px;">Weight</th>
+      <th style="min-width: 90px;">Primary Grade</th>
+      <th style="min-width: 90px;">Secondary Grade</th>
+      <th style="min-width: 110px;">Local Reason</th>
+      <th style="min-width: 110px;">Non-Conforming Reason</th>
       <th style="min-width: 110px;">QC SHIFT HEAD</th>
-      <th style="min-width: 40px;">حذف</th>
+      <th style="min-width: 40px;">Delete</th>
     </tr>
   </thead>
   <tbody id="entry-tbody"></tbody>
@@ -128,13 +129,13 @@
 
 <br>
 <div style="display:flex; gap:10px; margin-top:10px; align-items:center;">
-    <button id="add-representative" type="button" class="button">+ إضافة عينة ممثلة</button>
-    <button id="add-ton-to-rep" type="button" class="button">+ طن</button>
-    <button id="delete-representative" type="button" class="button" style="color:#b91c1c;">حذف ممثله</button>
-    <button id="save-all" type="button" class="button default">حفظ الكل</button>
+    <button id="add-representative" type="button" class="button">+ Add Representative Sample</button>
+    <button id="add-ton-to-rep" type="button" class="button">+ Ton</button>
+    <button id="delete-representative" type="button" class="button" style="color:#b91c1c;">Delete Representative</button>
+    <button id="save-all" type="button" class="button default">Save All</button>
 </div>
 
-<!-- البيانات الممررة بأسلوب آمن عبر json_script -->
+<!-- Data passed safely via json_script -->
 {{ chemical_tests_json|json_script:"chemical-tests-data" }}
 {{ physical_tests_json|json_script:"physical-tests-data" }}
 {{ primary_grades_json|json_script:"primary-grades-data" }}
@@ -170,25 +171,25 @@ function getTodayDate() { return new Date().toISOString().split('T')[0]; }
 function getCurrentTime() { const now = new Date(); return now.toTimeString().split(' ')[0].substring(0, 5); }
 
 function buildUserOptions() {
-  return `<option value="">-- اختر --</option>` + USERS.map(u => `<option value="${u.id}">${u.name}</option>`).join("");
+  return `<option value="">-- Select --</option>` + USERS.map(u => `<option value="${u.id}">${u.name}</option>`).join("");
 }
 
 function buildLocationOptions() {
-  return `<option value="">-- اختر --</option>` + LOCATIONS.map(l => `<option value="${l.id}">${l.name}</option>`).join("");
+  return `<option value="">-- Select --</option>` + LOCATIONS.map(l => `<option value="${l.id}">${l.name}</option>`).join("");
 }
 
 function buildPrimaryGradeOptions() {
-  return `<option value="">-- اختر --</option>` + PRIMARY_GRADES.map(g => `<option value="${g.id}">${g.code}</option>`).join("");
+  return `<option value="">-- Select --</option>` + PRIMARY_GRADES.map(g => `<option value="${g.id}">${g.code}</option>`).join("");
 }
 
 function buildSecondaryGradeOptions() {
-  return `<option value="">-- اختر --</option>` + SECONDARY_GRADES.map(g => `<option value="${g.id}">${g.code}</option>`).join("");
+  return `<option value="">-- Select --</option>` + SECONDARY_GRADES.map(g => `<option value="${g.id}">${g.code}</option>`).join("");
 }
 
 function buildDynamicCell(f, oninput) {
   const attrs = oninput ? ` oninput="${oninput}"` : "";
   if (f.field_type === 'choice') {
-    const opts = ['<option value="">-- اختر --</option>'].concat(
+    const opts = ['<option value="">-- Select --</option>'].concat(
       (f.choices || []).map(c => `<option value="${c}">${c}</option>`)
     ).join("");
     return `<td><select class="dynamic-input" data-dynamic-key="${f.key}"${attrs}>${opts}</select></td>`;
@@ -211,7 +212,7 @@ function collectDynamicValues(tr) {
   return dynamic;
 }
 
-// إعادة تسلسل كافة الأطنان المضافة لتفادي أي ثغرات أو قفزات أرقام عند الإضافة أو الحذف
+// Resequence all added tons to avoid gaps
 function resequenceAll() {
   let seq = globalSeqCounter;
   const groups = {};
@@ -231,7 +232,7 @@ function resequenceAll() {
     }
   });
 
-  // تحديث كود العينة الممثلة ومجموع الأوزان الخاص بها
+  // Update representative sample code and weight total
   Object.keys(groups).forEach(groupLetter => {
     const repTr = document.querySelector(`tr[data-row-type="representative"][data-group="${groupLetter}"]`);
     if (repTr) {
@@ -243,7 +244,7 @@ function resequenceAll() {
   });
 }
 
-// حساب مجموع أوزان الأطنان للعينات الممثلة تلقائياً
+// Auto-calculate total weight for representative samples
 function calculateGroupWeight(groupLetter) {
   const tonRows = document.querySelectorAll(`tr[data-row-type="ton"][data-group-letter="${groupLetter}"]`);
   let totalWeight = 0;
@@ -258,7 +259,7 @@ function calculateGroupWeight(groupLetter) {
   }
 }
 
-// دالة نسخ القيمة من العينة الممثلة لجميع الأطنان التابعة لها (مع إمكانية تعديل كل طن بشكل منفرد)
+// Sync representative value to all child tons
 function syncRepresentativeValueToTons(repTr, selector, targetSelector) {
   const groupLetter = repTr.dataset.group;
   const sourceElem = repTr.querySelector(selector);
@@ -279,16 +280,16 @@ function addTonRow(groupLetter) {
   if (groupLetter) tr.dataset.groupLetter = groupLetter;
 
   let chemicalCells = CHEMICAL_TESTS.map(t => `<td><input type="number" step="any" class="chemical-input" data-test-id="${t.id}"></td>`).join(""); 
-  let physicalCells = PHYSICAL_TESTS.map(t => `<td><input type="number" step="any" class="physical-input" placeholder="تحت الاختبار" data-test-id="${t.id}"></td>`).join("");
+  let physicalCells = PHYSICAL_TESTS.map(t => `<td><input type="number" step="any" class="physical-input" placeholder="Under Test" data-test-id="${t.id}"></td>`).join("");
 
   tr.innerHTML = `
-    <td>عينة منفردة</td>
+    <td>Single Sample</td>
     <td class="ton-code"><input type="text" readonly></td>
     <td><select class="packing-location">${buildLocationOptions()}</select></td>
     <td>
       <div style="display:flex; align-items:center;">
         <input type="date" class="production-date">
-        <button type="button" class="btn-mini" onclick="this.previousElementSibling.value=getTodayDate()" title="تاريخ اليوم">📅</button>
+        <button type="button" class="btn-mini" onclick="this.previousElementSibling.value=getTodayDate()" title="Today">📅</button>
       </div>
     </td>
     <td><select class="shift"><option value="A">A</option><option value="B">B</option><option value="C">C</option><option value="D">D</option></select></td>
@@ -296,11 +297,11 @@ function addTonRow(groupLetter) {
     <td>
       <div style="display:flex; align-items:center;">
         <input type="time" class="sampling-time">
-        <button type="button" class="btn-mini" onclick="this.previousElementSibling.value=getCurrentTime()" title="الوقت الحالي">⏰</button>
+        <button type="button" class="btn-mini" onclick="this.previousElementSibling.value=getCurrentTime()" title="Current Time">⏰</button>
       </div>
     </td>
     <td><select class="qc-inspector">${buildUserOptions()}</select></td>
-    <td><select class="sampling-status"><option value="تم">تم</option><option value="لم يتم">لم يتم</option></select></td>
+    <td><select class="sampling-status"><option value="Done">Done</option><option value="Not Done">Not Done</option></select></td>
     ${chemicalCells}
     <td class="disabled-cell">-</td>
     <td class="disabled-cell">-</td>
@@ -308,15 +309,15 @@ function addTonRow(groupLetter) {
     <td>
       <div style="display:flex; align-items:center;">
         <input type="time" class="result-time">
-        <button type="button" class="btn-mini" onclick="this.previousElementSibling.value=getCurrentTime()" title="الوقت الحالي">⏰</button>
+        <button type="button" class="btn-mini" onclick="this.previousElementSibling.value=getCurrentTime()" title="Current Time">⏰</button>
       </div>
     </td>
     ${dynamicCells()}
     <td><input type="number" step="any" class="weight" oninput="if(this.closest('tr').dataset.groupLetter) calculateGroupWeight(this.closest('tr').dataset.groupLetter)"></td>
     <td><select class="grade primary-grade">${buildPrimaryGradeOptions()}</select></td>
     <td><select class="grade secondary-grade">${buildSecondaryGradeOptions()}</select></td>
-    <td><select class="local-reason"><option value="">-- اختر --</option>${LOCAL_REASONS.map(r => `<option value="${r.id}">${r.text}</option>`).join('')}</select></td>
-    <td><select class="non-conforming-reason"><option value="">-- اختر --</option>${NON_CONFORMING_REASONS.map(r => `<option value="${r.id}">${r.text}</option>`).join('')}</select></td>
+    <td><select class="local-reason"><option value="">-- Select --</option>${LOCAL_REASONS.map(r => `<option value="${r.id}">${r.text}</option>`).join('')}</select></td>
+    <td><select class="non-conforming-reason"><option value="">-- Select --</option>${NON_CONFORMING_REASONS.map(r => `<option value="${r.id}">${r.text}</option>`).join('')}</select></td>
     <td class="disabled-cell">-</td>
     <td><button type="button" onclick="removeRow(this)" style="color:red; background:none; border:none; cursor:pointer; font-weight:bold;">X</button></td>
   `;
@@ -350,7 +351,7 @@ function addRepresentativeRow() {
   let physicalCells = PHYSICAL_TESTS.map(() => `<td class="disabled-cell">-</td>`).join("");
 
   tr.innerHTML = `
-    <td>عينة ممثلة</td>
+    <td>Representative Sample</td>
     <td class="rep-code" data-group="${groupLetter}" style="font-weight:bold;">C()</td>
     <td><select class="packing-location" onchange="syncRepresentativeValueToTons(this.closest('tr'), '.packing-location', '.packing-location')">${buildLocationOptions()}</select></td>
     <td>
@@ -364,11 +365,11 @@ function addRepresentativeRow() {
     <td>
       <div style="display:flex; align-items:center;">
         <input type="time" class="sampling-time" onchange="syncRepresentativeValueToTons(this.closest('tr'), '.sampling-time', '.sampling-time')">
-        <button type="button" class="btn-mini" onclick="this.previousElementSibling.value=getCurrentTime(); syncRepresentativeValueToTons(this.closest('tr'), '.sampling-time', '.sampling-time')" title="الوقت الحالي">⏰</button>
+        <button type="button" class="btn-mini" onclick="this.previousElementSibling.value=getCurrentTime(); syncRepresentativeValueToTons(this.closest('tr'), '.sampling-time', '.sampling-time')" title="Current Time">⏰</button>
       </div>
     </td>
     <td><select class="qc-inspector" onchange="syncRepresentativeValueToTons(this.closest('tr'), '.qc-inspector', '.qc-inspector')">${buildUserOptions()}</select></td>
-    <td><select class="sampling-status" onchange="syncRepresentativeValueToTons(this.closest('tr'), '.sampling-status', '.sampling-status')"><option value="تم">تم</option><option value="لم يتم">لم يتم</option></select></td>
+    <td><select class="sampling-status" onchange="syncRepresentativeValueToTons(this.closest('tr'), '.sampling-status', '.sampling-status')"><option value="Done">Done</option><option value="Not Done">Not Done</option></select></td>
     ${chemicalCells}
     <td><select class="lab-chemist" onchange="syncRepresentativeValueToTons(this.closest('tr'), '.lab-chemist', '.lab-chemist')">${buildUserOptions()}</select></td>
     <td><select class="lab-shift-head" onchange="syncRepresentativeValueToTons(this.closest('tr'), '.lab-shift-head', '.lab-shift-head')">${buildUserOptions()}</select></td>
@@ -376,13 +377,13 @@ function addRepresentativeRow() {
     <td>
       <div style="display:flex; align-items:center;">
         <input type="time" class="result-time" onchange="syncRepresentativeValueToTons(this.closest('tr'), '.result-time', '.result-time')">
-        <button type="button" class="btn-mini" onclick="this.previousElementSibling.value=getCurrentTime(); syncRepresentativeValueToTons(this.closest('tr'), '.result-time', '.result-time')" title="الوقت الحالي">⏰</button>
+        <button type="button" class="btn-mini" onclick="this.previousElementSibling.value=getCurrentTime(); syncRepresentativeValueToTons(this.closest('tr'), '.result-time', '.result-time')" title="Current Time">⏰</button>
       </div>
     </td>
     ${DYNAMIC_FIELDS.map(() => '<td class="disabled-cell">-</td>').join('')}
-    <td><input type="number" step="any" class="rep-weight" readonly placeholder="مجموع" style="font-weight:bold;"></td>
+    <td><input type="number" step="any" class="rep-weight" readonly placeholder="Total" style="font-weight:bold;"></td>
     <td class="disabled-cell" colspan="4">-</td>
-    <td><select class="qc-shift-head"><option value="">لم تتم المراجعة</option><option value="reviewed">تمت مراجعته</option></select></td>
+    <td><select class="qc-shift-head"><option value="">Not Reviewed</option><option value="reviewed">Reviewed</option></select></td>
     <td>
       <button type="button" onclick="selectRepresentative(this.closest('tr')); removeRow(this)" style="color:red; border:none; background:none; cursor:pointer; font-weight:bold;">X</button>
     </td>
@@ -426,7 +427,7 @@ function getTargetRepresentative() {
 function addTonToRepresentative() {
   const rep = getTargetRepresentative();
   if (!rep) {
-    alert("لا توجد عينة ممثلة — أضف واحدة أولاً");
+    alert("No representative sample — add one first");
     return;
   }
   selectRepresentative(rep);
@@ -436,10 +437,10 @@ function addTonToRepresentative() {
 function deleteRepresentative() {
   const rep = getTargetRepresentative();
   if (!rep) {
-    alert("لا توجد عينة ممثلة لحذفها");
+    alert("No representative sample to delete");
     return;
   }
-  if (!confirm("حذف العينة الممثلة وجميع أطنانها؟")) return;
+  if (!confirm("Delete the representative sample and all its tons?")) return;
   const group = rep.dataset.group;
   document.querySelectorAll(`tr[data-group-letter="${group}"]`).forEach(t => t.remove());
   rep.remove();
@@ -455,7 +456,7 @@ document.getElementById("entry-tbody").addEventListener("click", function(e) {
   if (tr && !e.target.closest('button')) selectRepresentative(tr);
 });
 
-/* التنقل بالكيبورد بأسلوب Excel (Enter / الأسهم) */
+/* Excel-style keyboard navigation (Enter / Arrows) */
 document.addEventListener('keydown', function (e) {
   const activeElement = document.activeElement;
   if (!activeElement || (activeElement.tagName !== 'INPUT' && activeElement.tagName !== 'SELECT')) return;
@@ -492,7 +493,7 @@ document.addEventListener('keydown', function (e) {
   }
 });
 
-/* دعم اللصق المباشر من Excel */
+/* Direct paste from Excel */
 document.getElementById("entry-table").addEventListener("paste", function(e) {
   const active = document.activeElement;
   if (!active || !active.closest("td")) return;
@@ -520,7 +521,7 @@ document.getElementById("entry-table").addEventListener("paste", function(e) {
   });
 });
 
-/* حفظ البيانات وإرسالها إلى السيرفر */
+/* Save data and send to server */
 document.getElementById("save-all").addEventListener("click", function() {
   const rows = [];
 
@@ -578,7 +579,7 @@ document.getElementById("save-all").addEventListener("click", function() {
 
   const csrfInput = document.querySelector("[name=csrfmiddlewaretoken]");
   if (!csrfInput) {
-    alert("خطأ: لم يتم العثور على رمز الحماية (CSRF) في الصفحة — أعد تحميل الصفحة وحاول مجدداً");
+    alert("Error: CSRF token not found — please reload the page and try again");
     return;
   }
 
@@ -595,16 +596,16 @@ document.getElementById("save-all").addEventListener("click", function() {
     let data;
     try { data = JSON.parse(res.text); } catch (e) { data = null; }
     if (data && data.status === "ok") {
-      alert("تم الحفظ بنجاح: " + data.rows_saved + " صف");
+      alert("Saved successfully: " + data.rows_saved + " rows");
       location.reload();
     } else if (data) {
-      alert("حدث خطأ أثناء الحفظ: " + (data.message || "تأكد من صحة البيانات المتبوعة"));
+      alert("Error saving: " + (data.message || "Please check the data"));
     } else {
-      alert("خطأ من الخادم (رمز " + res.status + "). تأكد من صحة البيانات ثم حاول مجدداً.");
+      alert("Server error (code " + res.status + "). Please check the data and try again.");
     }
   })
   .catch(err => {
-    alert("خطأ في الاتصال بالخادم — تأكد من اتصالك بالشبكة ثم أعد المحاولة");
+    alert("Connection error — please check your network and try again");
   });
 });
 </script>

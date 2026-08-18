@@ -10,20 +10,21 @@
 
 <div class="de-nav">
     <div class="title">🗄️ Data - {{ plant.plant_name }} - 🧪 {{ stage.name }}</div>
-    <a class="button" href="{% url 'admin:factory_data' plant.pk %}">← اختيار مرحلة/نوع آخر</a>
-    <a class="button" href="{{ dashboard_url }}">← لوحة المصنع</a>
+    <a class="button" href="{% url 'admin:factory_data' plant.pk %}">← Select Another Stage</a>
+    <a class="button" href="{{ dashboard_url }}">← Factory Dashboard</a>
+    {% include "warehousing/includes/lang_toggle.html" %}
 </div>
 
 {% if reading_summaries %}
 <table class="excel-table">
     <thead>
         <tr>
-            <th>المرحلة</th>
-            <th>تاريخ/وقت السحب</th>
-            <th>الوردية</th>
-            <th>النتائج</th>
-            <th>ملاحظات</th>
-            <th>تعديل</th>
+            <th>Stage</th>
+            <th>Sampling Date/Time</th>
+            <th>Shift</th>
+            <th>Results</th>
+            <th>Notes</th>
+            <th>Edit</th>
         </tr>
     </thead>
     <tbody>
@@ -34,12 +35,12 @@
             <td>{{ item.shift_letter|default:"—" }}</td>
             <td>{{ item.results_text|default:"—" }}</td>
             <td>{{ item.reading.notes|default:"—" }}</td>
-            <td><a class="button" href="{% url 'admin:factory_data_reaction_reading' item.reading.pk %}">تعديل</a></td>
+            <td><a class="button" href="{% url 'admin:factory_data_reaction_reading' item.reading.pk %}">Edit</a></td>
         </tr>
         {% endfor %}
     </tbody>
 </table>
 {% else %}
-<p>لا توجد قراءات سابقة لهذه المرحلة.</p>
+<p>No previous readings for this stage.</p>
 {% endif %}
 {% endblock %}

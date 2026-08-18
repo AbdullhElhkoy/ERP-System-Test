@@ -19,26 +19,27 @@
 
 <div class="de-nav">
     <div class="title">🗄️ Data - {{ plant.plant_name }} - 🧪 {{ reading.stage.name }}</div>
-    <a class="button" href="{% url 'admin:factory_data_reaction_readings' reading.stage.pk %}">← قراءات المرحلة</a>
-    <a class="button" href="{{ dashboard_url }}">← لوحة المصنع</a>
+    <a class="button" href="{% url 'admin:factory_data_reaction_readings' reading.stage.pk %}">← Stage Readings</a>
+    <a class="button" href="{{ dashboard_url }}">← Factory Dashboard</a>
+    {% include "warehousing/includes/lang_toggle.html" %}
 </div>
 
 <div class="group-box">
-    <h3>بيانات السحب</h3>
+    <h3>Sampling Data</h3>
     <div class="group-grid">
-        <label>المرحلة <input type="text" value="{{ reading.stage.name }}" readonly></label>
-        <label>تاريخ/وقت السحب <input type="datetime-local" id="f-sampled-at" value="{{ reading.sampled_at|date:'Y-m-d\TH:i' }}"></label>
-        <label>الوردية <select id="f-shift">{% for s in shift_choices %}<option value="{{ s }}" {% if s == current_shift %}selected{% endif %}>{{ s }}</option>{% endfor %}</select></label>
-        <label>ملاحظات <input type="text" id="f-notes" value="{{ reading.notes }}"></label>
+        <label>Stage <input type="text" value="{{ reading.stage.name }}" readonly></label>
+        <label>Sampling Date/Time <input type="datetime-local" id="f-sampled-at" value="{{ reading.sampled_at|date:'Y-m-d\TH:i' }}"></label>
+        <label>Shift <select id="f-shift">{% for s in shift_choices %}<option value="{{ s }}" {% if s == current_shift %}selected{% endif %}>{{ s }}</option>{% endfor %}</select></label>
+        <label>Notes <input type="text" id="f-notes" value="{{ reading.notes }}"></label>
     </div>
 </div>
 
 <table class="excel-table">
     <thead>
         <tr>
-            <th>الاختبار</th>
-            <th>الوحدة</th>
-            <th>النتيجة</th>
+            <th>Test</th>
+            <th>Unit</th>
+            <th>Result</th>
         </tr>
     </thead>
     <tbody>
@@ -49,13 +50,13 @@
             <td><input type="number" step="any" class="result-input" data-test-id="{{ t.id }}" value="{{ results|get_item:t.id }}"></td>
         </tr>
         {% empty %}
-        <tr><td colspan="3">لا توجد اختبارات تفاعل لهذا المصنع.</td></tr>
+        <tr><td colspan="3">No reaction tests defined for this factory.</td></tr>
         {% endfor %}
     </tbody>
 </table>
 
 <br>
-<button id="save-all" type="button" class="button default">حفظ التعديلات</button>
+<button id="save-all" type="button" class="button default">Save Changes</button>
 
 <script>
 document.getElementById("save-all").addEventListener("click", function() {
@@ -77,9 +78,9 @@ document.getElementById("save-all").addEventListener("click", function() {
     },
     body: JSON.stringify(payload),
   }).then(r => r.json()).then(data => {
-    if (data.status === "ok") alert("تم حفظ التعديلات بنجاح");
-    else alert("خطأ: " + (data.message || "حدث خطأ"));
-  }).catch(() => alert("خطأ في الاتصال"));
+    if (data.status === "ok") alert("Changes saved successfully");
+    else alert("Error: " + (data.message || "An error occurred"));
+  }).catch(() => alert("Connection error"));
 });
 </script>
 {% endblock %}

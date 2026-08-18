@@ -20,6 +20,7 @@
 <div class="page-nav" style="display:flex; align-items:center; gap:15px; margin-bottom:8px;">
     <div class="title">Edit Delivery - {{ row.material_name }}</div>
     <a class="button" href="{{ data_url }}">← Back to Data</a>
+    {% include "warehousing/includes/lang_toggle.html" %}
 </div>
 
 <form class="edit-form" id="edit-form" onsubmit="saveRow(event)">

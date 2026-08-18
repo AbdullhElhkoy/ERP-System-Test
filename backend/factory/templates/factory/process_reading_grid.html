@@ -85,9 +85,10 @@
 </style>
 
 <div style="margin-bottom: 20px;">
-    <h1>إدخال قراءات التفاعل - {{ plant.plant_name }}</h1>
+    <h1>Reaction Readings Entry - {{ plant.plant_name }}</h1>
     <p>
-        <a class="button" href="{{ dashboard_url }}">← لوحة المصنع</a>
+        <a class="button" href="{{ dashboard_url }}">← Factory Dashboard</a>
+        {% include "warehousing/includes/lang_toggle.html" %}
     </p>
 </div>
 
@@ -95,13 +96,13 @@
 <table id="entry-table" class="excel-table">
   <thead>
     <tr>
-      <th style="min-width: 130px;">المرحلة</th>
-      <th style="min-width: 110px;">تاريخ السحب</th>
-      <th style="min-width: 90px;">وقت السحب</th>
-      <th style="min-width: 50px;">الوردية</th>
-      <th style="min-width: 140px;">ملاحظات</th>
+      <th style="min-width: 130px;">Stage</th>
+      <th style="min-width: 110px;">Sampling Date</th>
+      <th style="min-width: 90px;">Sampling Time</th>
+      <th style="min-width: 50px;">Shift</th>
+      <th style="min-width: 140px;">Notes</th>
       {% for t in tests %}<th data-test-id="{{ t.id }}" data-category="{{ t.category }}" style="min-width: 80px;">{{ t.name }}{% if t.unit %} ({{ t.unit }}){% endif %}</th>{% endfor %}
-      <th style="min-width: 40px;">حذف</th>
+      <th style="min-width: 40px;">Delete</th>
     </tr>
   </thead>
   <tbody id="entry-tbody"></tbody>
@@ -110,11 +111,10 @@
 
 <br>
 <div style="display:flex; gap:10px; margin-top:10px;">
-    <button id="add-row" type="button" class="button">+ إضافة قراءة</button>
-    <button id="save-all" type="button" class="button default">حفظ الكل</button>
+    <button id="add-row" type="button" class="button">+ Add Reading</button>
+    <button id="save-all" type="button" class="button default">Save All</button>
 </div>
 
-<!-- البيانات الممررة بأسلوب آمن عبر json_script -->
 {{ stages_json|json_script:"stages-data" }}
 {{ tests_json|json_script:"tests-data" }}
 
@@ -126,7 +126,7 @@ function getTodayDate() { return new Date().toISOString().split('T')[0]; }
 function getCurrentTime() { const now = new Date(); return now.toTimeString().split(' ')[0].substring(0, 5); }
 
 function buildStageOptions() {
-  return `<option value="">-- اختر المرحلة --</option>` + STAGES.map(s => `<option value="${s.id}">${s.order} - ${s.name}</option>`).join("");
+  return `<option value="">-- Select Stage --</option>` + STAGES.map(s => `<option value="${s.id}">${s.order} - ${s.name}</option>`).join("");
 }
 
 function addRow() {
@@ -135,7 +135,7 @@ function addRow() {
 
   let testCells = TESTS.map(t => {
     if (t.category === 'physical') {
-      return `<td><input type="number" step="any" class="test-input" data-test-id="${t.id}" placeholder="تحت الاختبار"></td>`;
+      return `<td><input type="number" step="any" class="test-input" data-test-id="${t.id}" placeholder="Under test"></td>`;
     }
     return `<td><input type="number" step="any" class="test-input" data-test-id="${t.id}"></td>`;
   }).join("");
@@ -145,17 +145,17 @@ function addRow() {
     <td>
       <div style="display:flex; align-items:center;">
         <input type="date" class="sampling-date" value="${getTodayDate()}">
-        <button type="button" class="btn-mini" onclick="this.previousElementSibling.value=getTodayDate()" title="تاريخ اليوم">📅</button>
+        <button type="button" class="btn-mini" onclick="this.previousElementSibling.value=getTodayDate()" title="Today">📅</button>
       </div>
     </td>
     <td>
       <div style="display:flex; align-items:center;">
         <input type="time" class="sampling-time" value="${getCurrentTime()}">
-        <button type="button" class="btn-mini" onclick="this.previousElementSibling.value=getCurrentTime()" title="الوقت الحالي">⏰</button>
+        <button type="button" class="btn-mini" onclick="this.previousElementSibling.value=getCurrentTime()" title="Current Time">⏰</button>
       </div>
     </td>
     <td><select class="shift"><option value="A">A</option><option value="B">B</option><option value="C">C</option><option value="D">D</option></select></td>
-    <td><input type="text" class="notes" placeholder="ملاحظات"></td>
+    <td><input type="text" class="notes" placeholder="Notes"></td>
     ${testCells}
     <td><button type="button" onclick="removeRow(this)" style="color:red; background:none; border:none; cursor:pointer; font-weight:bold;">X</button></td>
   `;
@@ -170,7 +170,7 @@ function removeRow(btn) {
 
 document.getElementById("add-row").addEventListener("click", addRow);
 
-/* التنقل بالكيبورد بأسلوب Excel (Enter / الأسهم) */
+/* Excel-style keyboard navigation (Enter / Arrow keys) */
 document.addEventListener('keydown', function (e) {
   const activeElement = document.activeElement;
   if (!activeElement || (activeElement.tagName !== 'INPUT' && activeElement.tagName !== 'SELECT')) return;
@@ -207,7 +207,7 @@ document.addEventListener('keydown', function (e) {
   }
 });
 
-/* دعم اللصق المباشر من Excel */
+/* Direct paste from Excel */
 document.getElementById("entry-table").addEventListener("paste", function(e) {
   const active = document.activeElement;
   if (!active || !active.closest("td")) return;
@@ -235,7 +235,7 @@ document.getElementById("entry-table").addEventListener("paste", function(e) {
   });
 });
 
-/* حفظ البيانات وإرسالها إلى السيرفر */
+/* Save data to server */
 document.getElementById("save-all").addEventListener("click", function() {
   const rows = [];
 
@@ -267,7 +267,7 @@ document.getElementById("save-all").addEventListener("click", function() {
   });
 
   if (rows.length === 0) {
-    alert("لا توجد صفوف مكتملة (كل صف لازم يختار مرحلة)");
+    alert("No complete rows found (each row must have a stage selected)");
     return;
   }
 
@@ -280,10 +280,10 @@ document.getElementById("save-all").addEventListener("click", function() {
     body: JSON.stringify({rows: rows}),
   }).then(r => r.json()).then(data => {
     if (data.status === "ok") {
-      alert("تم الحفظ بنجاح: " + data.rows_saved + " قراءة");
+      alert("Saved successfully: " + data.rows_saved + " readings");
       location.reload();
     } else {
-      alert("حدث خطأ أثناء الحفظ: " + (data.message || "تأكد من صحة البيانات"));
+      alert("Error saving: " + (data.message || "Please check the data"));
     }
   });
 });

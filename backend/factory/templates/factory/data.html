@@ -11,26 +11,27 @@
 
 <div class="de-nav">
     <div class="title">🗄️ Data - {{ plant.plant_name }}</div>
-    <a class="button" href="{{ dashboard_url }}">← لوحة المصنع</a>
+    <a class="button" href="{{ dashboard_url }}">← Factory Dashboard</a>
+    {% include "warehousing/includes/lang_toggle.html" %}
 </div>
 
-<div class="group-title">🧪 Reaction (البيانات السابقة للتفاعل)</div>
-<p class="hint">اختر المرحلة لعرض/تعديل القراءات المسجلة سابقاً لها. لا إضافة جديدة من هنا.</p>
+<div class="group-title">🧪 Reaction (Previous Readings)</div>
+<p class="hint">Select a stage to view/edit previously recorded readings. No new entries from here.</p>
 <div class="links-wrap">
     {% for stage in reaction_stages %}
     <a class="button" href="{% url 'admin:factory_data_reaction_readings' stage.pk %}">⚗️ {{ stage.name }}</a>
     {% empty %}
-    <p>لا توجد مراحل تفاعل — أضفها من Factory Settings ← Reaction Settings.</p>
+    <p>No reaction stages — add them from Factory Settings ← Reaction Settings.</p>
     {% endfor %}
 </div>
 
-<div class="group-title">📦 Final Product (البيانات السابقة للمنتج النهائي)</div>
-<p class="hint">اختر نوع التعبئة لعرض/تعديل القراءات المسجلة سابقاً له. لا إضافة جديدة من هنا.</p>
+<div class="group-title">📦 Final Product (Previous Readings)</div>
+<p class="hint">Select a packing type to view/edit previously recorded readings. No new entries from here.</p>
 <div class="links-wrap">
     {% for packing in final_product_packing %}
     <a class="button" href="{% url 'admin:factory_data_packings' packing.pk %}">📦 {{ packing.name }}</a>
     {% empty %}
-    <p>لا توجد أنواع تعبئة — أضفها من Factory Settings ← Final Product Settings.</p>
+    <p>No packing types — add them from Factory Settings ← Final Product Settings.</p>
     {% endfor %}
 </div>
 {% endblock %}

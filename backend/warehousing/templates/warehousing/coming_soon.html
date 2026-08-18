@@ -13,5 +13,6 @@
     <div class="soon-title">{{ section_name }}</div>
     <div class="soon-sub">This section is under construction and will be available soon.</div>
     <a class="button soon-btn" href="{% url 'admin:index' %}">← Back to Admin</a>
+    {% include "warehousing/includes/lang_toggle.html" %}
 </div>
 {% endblock %}

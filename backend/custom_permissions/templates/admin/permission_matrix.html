@@ -13,6 +13,7 @@
 
 <div class="screen-bar">
   <strong>Screen:</strong>
+  {% include "warehousing/includes/lang_toggle.html" %}
   <select onchange="window.location.href='?screen=' + this.value">
     <option value="">-- Select Screen --</option>
     {% for s in screens %}

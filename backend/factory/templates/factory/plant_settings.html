@@ -11,31 +11,32 @@
 
 <div class="settings-nav">
     <div class="title">⚙️ Factory Settings - {{ plant.plant_name }}</div>
-    <a class="button" href="{{ dashboard_url }}">← لوحة المصنع</a>
+    <a class="button" href="{{ dashboard_url }}">← Factory Dashboard</a>
+    {% include "warehousing/includes/lang_toggle.html" %}
 </div>
 
-<div class="group-title">🧪 Reaction Settings (إعدادات التفاعل)</div>
+<div class="group-title">🧪 Reaction Settings</div>
 <div class="links-wrap">
 {% for link in reaction_groups %}
     <a class="button" href="{{ link.url }}">{{ link.title }}</a>
 {% endfor %}
 </div>
 
-<div class="group-title">📦 Final Product Settings (إعدادات المنتج النهائي)</div>
+<div class="group-title">📦 Final Product Settings</div>
 <div class="links-wrap">
 {% for link in final_product_groups %}
     <a class="button{% if link.locked %} locked{% endif %}" href="{{ link.url }}">{{ link.title }}</a>
 {% endfor %}
 </div>
 
-<div class="group-title">🗄️ بيانات المصنع (سجلات الإدخال)</div>
+<div class="group-title">🗄️ Factory Data (Entry Logs)</div>
 <div class="links-wrap">
 {% for link in data_groups %}
     <a class="button" href="{{ link.url }}">{{ link.title }}</a>
 {% endfor %}
 </div>
 
-<div class="group-title">🏢 إعدادات مشتركة (لكل الشركة)</div>
+<div class="group-title">🏢 Company-wide Settings</div>
 <div class="links-wrap">
 {% for link in company_groups %}
     <a class="button" href="{{ link.url }}">{{ link.title }}</a>

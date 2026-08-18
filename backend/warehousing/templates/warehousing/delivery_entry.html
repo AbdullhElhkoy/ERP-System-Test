@@ -83,6 +83,7 @@
 <div style="margin-bottom: 20px; display:flex; align-items:center; gap:15px;">
     <h1 style="margin:0;">Delivery Entry - {{ plant.plant_name }}</h1>
     <a class="button" href="{{ hub_url }}">← Raw Materials Hub</a>
+    {% include "warehousing/includes/lang_toggle.html" %}
 </div>
 
 <div class="excel-wrapper">
@@ -112,7 +113,7 @@
     <button id="save-all" type="button" class="button default">Save All</button>
 </div>
 
-<!-- البيانات الممررة بأسلوب آمن عبر json_script -->
+<!-- Data passed safely via json_script -->
 {{ materials_json|json_script:"materials-data" }}
 {{ suppliers_json|json_script:"suppliers-data" }}
 {{ storages_json|json_script:"storages-data" }}
@@ -228,7 +229,7 @@ document.getElementById("add-row").addEventListener("click", () => addRow());
 
 addRow();
 
-/* التنقل بالكيبورد بأسلوب Excel (Enter / الأسهم) */
+/* Excel-style keyboard navigation (Enter / Arrows) */
 document.addEventListener('keydown', function (e) {
   const activeElement = document.activeElement;
   if (!activeElement || (activeElement.tagName !== 'INPUT' && activeElement.tagName !== 'SELECT')) return;
@@ -261,7 +262,7 @@ document.addEventListener('keydown', function (e) {
   }
 });
 
-/* دعم اللصق المباشر من Excel */
+/* Direct paste from Excel */
 document.getElementById("entry-table").addEventListener("paste", function(e) {
   const active = document.activeElement;
   if (!active || !active.closest("td")) return;
@@ -289,7 +290,7 @@ document.getElementById("entry-table").addEventListener("paste", function(e) {
   });
 });
 
-/* حفظ البيانات وإرسالها إلى السيرفر */
+/* Save data and send to server */
 document.getElementById("save-all").addEventListener("click", function() {
   const rows = [];
   document.querySelectorAll("#entry-tbody tr").forEach(tr => {

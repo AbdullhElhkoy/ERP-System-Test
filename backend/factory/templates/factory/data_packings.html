@@ -10,23 +10,24 @@
 
 <div class="de-nav">
     <div class="title">🗄️ Data - {{ plant.plant_name }} - {{ packing_type.name }}</div>
-    <a class="button" href="{% url 'admin:factory_data' plant.pk %}">← اختيار نوع آخر</a>
-    <a class="button" href="{{ dashboard_url }}">← لوحة المصنع</a>
+    <a class="button" href="{% url 'admin:factory_data' plant.pk %}">← Select Another Type</a>
+    <a class="button" href="{{ dashboard_url }}">← Factory Dashboard</a>
+    {% include "warehousing/includes/lang_toggle.html" %}
 </div>
 
 {% if reading_summaries %}
 <table class="excel-table">
     <thead>
         <tr>
-            <th>الكود</th>
-            <th>تاريخ/وقت السحب</th>
-            <th>مكان الإنتاج</th>
-            <th>نوع المنتج</th>
-            <th>عدد الأطنان</th>
-            <th>إجمالي الوزن</th>
-            <th>الجريد</th>
-            <th>حالة السحب</th>
-            <th>تعديل</th>
+            <th>Code</th>
+            <th>Sampling Date/Time</th>
+            <th>Production Location</th>
+            <th>Product Type</th>
+            <th>Ton Count</th>
+            <th>Total Weight</th>
+            <th>Grade</th>
+            <th>Sampling Status</th>
+            <th>Edit</th>
         </tr>
     </thead>
     <tbody>
@@ -40,12 +41,12 @@
             <td>{{ item.total_weight }}</td>
             <td>{{ item.grade_text|default:"—" }}</td>
             <td>{{ item.reading.sampling_status|default:"—" }}</td>
-            <td><a class="button" href="{% url 'admin:factory_data_reading' item.reading.pk %}">تعديل</a></td>
+            <td><a class="button" href="{% url 'admin:factory_data_reading' item.reading.pk %}">Edit</a></td>
         </tr>
         {% endfor %}
     </tbody>
 </table>
 {% else %}
-<p>لا توجد قراءات سابقة لنوع التعبئة هذا.</p>
+<p>No previous readings for this packing type.</p>
 {% endif %}
 {% endblock %}
