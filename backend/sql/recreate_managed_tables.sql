@@ -92,23 +92,3 @@ CREATE TABLE employee_assignments (
     end_date DATE,
     is_current BOOLEAN DEFAULT true
 );
-
--- Seed minimal data
-INSERT INTO shift_types (shift_type_name, start_time, end_time) VALUES
-    ('First', '08:00', '16:00'),
-    ('Second', '16:00', '00:00'),
-    ('Third', '00:00', '08:00'),
-    ('Off', NULL, NULL);
-
-INSERT INTO shift_groups (group_name) VALUES ('A'), ('B'), ('C'), ('D');
-
-INSERT INTO rotation_reference (reference_date) VALUES ('2026-01-01');
-
-INSERT INTO departments (department_name, department_code, category) VALUES
-    ('QC Lab', 'QC_LAB', 'lab'),
-    ('Production Floor', 'PROD_FLOOR', 'production');
-
-INSERT INTO plants (plant_name, product_type) VALUES ('Plant A', 'cement');
-
-INSERT INTO department_plant_scope (department_id, plant_id)
-    SELECT d.department_id, p.plant_id FROM departments d, plants p;
