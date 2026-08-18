@@ -1,3 +1,4 @@
+{% load i18n %}
 <form id="lang-form" method="post" action="{% url 'set_language' %}" style="display:inline;">
     {% csrf_token %}
     <input type="hidden" name="next" value="{{ request.path }}">
