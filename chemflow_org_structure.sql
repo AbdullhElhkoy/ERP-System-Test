@@ -1,129 +1,31 @@
+--
+-- PostgreSQL database dump
+--
 
--- =========================================================
--- ChemFlow ERP - Organizational Structure Schema
--- PostgreSQL
--- =========================================================
+\restrict db7T6xyta90ZVfaQGd7P7zFqTtaAgQ5ZQovbo0Ja8OkhDZp4spg9TuLQeaIcRZX
 
--- 1) المصانع
-CREATE TABLE plants (
-    plant_id    SERIAL PRIMARY KEY,
-    plant_code  VARCHAR(20) NOT NULL UNIQUE,
-    plant_name  VARCHAR(50) NOT NULL UNIQUE
-);
+-- Dumped from database version 17.11 (Debian 17.11-0+deb13u1)
+-- Dumped by pg_dump version 17.11 (Debian 17.11-0+deb13u1)
 
--- 2) الإدارات المركزية (تخدم أكتر من مصنع)
-CREATE TABLE departments (
-    department_id   SERIAL PRIMARY KEY,
-    department_code VARCHAR(20) NOT NULL UNIQUE,
-    department_name VARCHAR(50) NOT NULL UNIQUE
-);
+SET statement_timeout = 0;
+SET lock_timeout = 0;
+SET idle_in_transaction_session_timeout = 0;
+SET transaction_timeout = 0;
+SET client_encoding = 'UTF8';
+SET standard_conforming_strings = on;
+SELECT pg_catalog.set_config('search_path', '', false);
+SET check_function_bodies = false;
+SET xmloption = content;
+SET client_min_messages = warning;
+SET row_security = off;
 
--- 3) الأدوار الوظيفية الفريدة (Master Roles)
-CREATE TABLE roles (
-    role_id    SERIAL PRIMARY KEY,
-    role_name  VARCHAR(50) NOT NULL UNIQUE
-);
+--
+-- Name: get_group_shift(character varying, date); Type: FUNCTION; Schema: public; Owner: -
+--
 
--- 4) نطاق تغطية كل إدارة مركزية (أي إدارة بتخدم أي مصانع) - علاقة Many-to-Many
-CREATE TABLE department_plant_scope (
-    department_id INT NOT NULL REFERENCES departments(department_id) ON DELETE CASCADE,
-    plant_id      INT NOT NULL REFERENCES plants(plant_id) ON DELETE CASCADE,
-    PRIMARY KEY (department_id, plant_id)
-);
-
--- 5) الوظائف الفعلية (Positions/Slots) - كل صف = وظيفة موجودة في مصنع أو إدارة
---    entity_type بيحدد هل الوظيفة دي تابعة لمصنع ولا لإدارة مركزية
-CREATE TABLE org_positions (
-    position_id    SERIAL PRIMARY KEY,
-    entity_type    VARCHAR(10) NOT NULL CHECK (entity_type IN ('plant', 'department')),
-    plant_id       INT REFERENCES plants(plant_id) ON DELETE CASCADE,
-    department_id  INT REFERENCES departments(department_id) ON DELETE CASCADE,
-    role_id        INT NOT NULL REFERENCES roles(role_id),
-    hierarchy_level INT NOT NULL,
-
-    -- تأكيد إن الوظيفة تابعة لمصنع أو لإدارة، مش الاتنين ولا ولا واحد
-    CONSTRAINT chk_entity_link CHECK (
-        (entity_type = 'plant' AND plant_id IS NOT NULL AND department_id IS NULL)
-        OR
-        (entity_type = 'department' AND department_id IS NOT NULL AND plant_id IS NULL)
-    ),
-    -- منع تكرار نفس الدور مرتين في نفس المصنع/الإدارة
-    UNIQUE (entity_type, plant_id, department_id, role_id)
-);
-
--- 6) أنواع الورديات (نهاري / أولى / ثانية / ثالثة / إجازة)
-CREATE TABLE shift_types (
-    shift_type_id   SERIAL PRIMARY KEY,
-    shift_type_name VARCHAR(20) NOT NULL UNIQUE,
-    start_time      TIME,   -- NULL للإجازة (مفيش وقت بداية)
-    end_time        TIME    -- NULL للإجازة
-);
-
--- 7) مجموعات التدوير (A, B, C, D) - نظام موحّد لكل الشركة
-CREATE TABLE shift_groups (
-    group_id   SERIAL PRIMARY KEY,
-    group_name VARCHAR(5) NOT NULL UNIQUE
-);
-
--- 8) دورة الـ 8 أيام: أي مجموعة شغالة في أنهي وردية في أنهي يوم من الدورة
---    day_offset من 0 لـ 7 (8 أيام دورة كاملة: يومين لكل وردية + يومين إجازة)
-CREATE TABLE shift_rotation_pattern (
-    group_id      INT NOT NULL REFERENCES shift_groups(group_id) ON DELETE CASCADE,
-    day_offset    INT NOT NULL CHECK (day_offset BETWEEN 0 AND 7),
-    shift_type_id INT NOT NULL REFERENCES shift_types(shift_type_id),
-    PRIMARY KEY (group_id, day_offset)
-);
-
--- 9) تاريخ "يوم صفر" المرجعي - نظام موحّد واحد للشركة كلها
---    بنحسب منه: day_offset = (التاريخ الحالي - reference_date) mod 8
-CREATE TABLE rotation_reference (
-    reference_date DATE NOT NULL
-);
-
--- 7) الموظفين
-CREATE TABLE employees (
-    employee_id  SERIAL PRIMARY KEY,
-    full_name    VARCHAR(100) NOT NULL,
-    national_id  VARCHAR(20) UNIQUE,
-    phone        VARCHAR(20),
-    hire_date    DATE,
-    is_active    BOOLEAN NOT NULL DEFAULT TRUE
-);
-
--- 10) تعيين الموظف على وظيفة معينة (ده اللي بيربط كل حاجة ببعض)
---     shift_mode بيحدد هل الموظف "نهاري ثابت" أو "مدوّر على مجموعة"
---     لو rotating: بنسجل group_id بس، والوردية الفعلية بتتحسب يوم بيوم من الدورة
---     لو fixed: بنسجل fixed_shift_type_id (هيكون دايمًا = نهاري)
-CREATE TABLE employee_assignments (
-    assignment_id       SERIAL PRIMARY KEY,
-    employee_id         INT NOT NULL REFERENCES employees(employee_id) ON DELETE CASCADE,
-    position_id         INT NOT NULL REFERENCES org_positions(position_id) ON DELETE CASCADE,
-    shift_mode          VARCHAR(10) NOT NULL CHECK (shift_mode IN ('rotating', 'fixed')),
-    group_id            INT REFERENCES shift_groups(group_id),
-    fixed_shift_type_id INT REFERENCES shift_types(shift_type_id),
-    start_date          DATE NOT NULL DEFAULT CURRENT_DATE,
-    end_date            DATE,
-    is_current          BOOLEAN NOT NULL DEFAULT TRUE,
-
-    CONSTRAINT chk_shift_mode_link CHECK (
-        (shift_mode = 'rotating' AND group_id IS NOT NULL AND fixed_shift_type_id IS NULL)
-        OR
-        (shift_mode = 'fixed' AND fixed_shift_type_id IS NOT NULL AND group_id IS NULL)
-    )
-);
-
--- إندكسات لتسريع أكتر استعلامات هتتكرر
-CREATE INDEX idx_positions_plant ON org_positions(plant_id);
-CREATE INDEX idx_positions_department ON org_positions(department_id);
-CREATE INDEX idx_assignments_employee ON employee_assignments(employee_id);
-CREATE INDEX idx_assignments_position ON employee_assignments(position_id);
-
--- =========================================================
--- Function: حساب وردية أي مجموعة في أي تاريخ
--- بتحسب day_offset من تاريخ المرجع، وترجع نوع الوردية
--- =========================================================
-CREATE OR REPLACE FUNCTION get_group_shift(p_group_name VARCHAR, p_date DATE)
-RETURNS VARCHAR AS $$
+CREATE FUNCTION public.get_group_shift(p_group_name character varying, p_date date) RETURNS character varying
+    LANGUAGE plpgsql
+    AS $$
 DECLARE
     v_offset INT;
     v_shift_name VARCHAR;
@@ -144,278 +46,9570 @@ BEGIN
 
     RETURN v_shift_name;
 END;
-$$ LANGUAGE plpgsql;
-
--- =========================================================
--- View: وردية كل موظف "مدوّر" في تاريخ النهاردة
--- (الموظفين "الثابتين/نهاري" مش محتاجين حساب، ورديتهم معروفة دايمًا)
--- =========================================================
-CREATE OR REPLACE VIEW v_today_shift_rotating AS
-SELECT
-    e.employee_id,
-    e.full_name,
-    sg.group_name,
-    get_group_shift(sg.group_name, CURRENT_DATE) AS today_shift
-FROM employee_assignments ea
-JOIN employees e ON e.employee_id = ea.employee_id
-JOIN shift_groups sg ON sg.group_id = ea.group_id
-WHERE ea.shift_mode = 'rotating' AND ea.is_current = TRUE;
+$$;
 
 
--- =========================================================
--- Seed Data: roles
--- =========================================================
+SET default_tablespace = '';
 
-INSERT INTO roles (role_name) VALUES
-    ('مدير إنتاج'),
-    ('رئيس قسم'),
-    ('رئيس وردية'),
-    ('الكيميائي'),
-    ('مشرف'),
-    ('مدير الإدارة'),
-    ('مدير المعمل'),
-    ('مدير المخازن'),
-    ('أمين مخزن'),
-    ('مدير المبيعات'),
-    ('مهندس مسؤول');
+SET default_table_access_method = heap;
 
--- Seed Data: plants
+--
+-- Name: auth_group; Type: TABLE; Schema: public; Owner: -
+--
 
-INSERT INTO plants (plant_code, plant_name) VALUES
-    ('DCP', 'DCP'),
-    ('GCC1', 'GCC1'),
-    ('GCC2', 'GCC2'),
-    ('PA', 'PA'),
-    ('SA200', 'SA 200'),
-    ('SA600', 'SA 600'),
-    ('SOPA', 'SOP A'),
-    ('SOPB', 'SOP B'),
-    ('SOPC', 'SOP C'),
-    ('SOPD', 'SOP D'),
-    ('SOPH', 'SOP H'),
-    ('GSOP', 'G SOP');
-
--- Seed Data: departments
-
-INSERT INTO departments (department_code, department_name) VALUES
-    ('QA', 'QA'),
-    ('QC', 'QC'),
-    ('LAB_SOP', 'Lab SOP'),
-    ('LAB_ECHPS', 'Lab ECHPS'),
-    ('WH', 'Warehouse'),
-    ('SALES', 'Sales');
-
--- Seed Data: department_plant_scope (أي إدارة بتخدم أي مصانع)
-
-INSERT INTO department_plant_scope (department_id, plant_id)
-SELECT d.department_id, p.plant_id
-FROM departments d
-JOIN plants p ON p.plant_name = ANY (
-    CASE d.department_name
-
-        WHEN 'QA' THEN ARRAY['DCP', 'GCC1', 'GCC2', 'PA', 'SA 200', 'SA 600', 'SOP A', 'SOP B', 'SOP C', 'SOP D', 'SOP H', 'G SOP']
-
-        WHEN 'QC' THEN ARRAY['DCP', 'GCC1', 'GCC2', 'PA', 'SA 200', 'SA 600', 'SOP A', 'SOP B', 'SOP C', 'SOP D', 'SOP H', 'G SOP']
-
-        WHEN 'Warehouse' THEN ARRAY['DCP', 'GCC1', 'GCC2', 'PA', 'SA 200', 'SA 600', 'SOP A', 'SOP B', 'SOP C', 'SOP D', 'SOP H', 'G SOP']
-
-        WHEN 'Sales' THEN ARRAY['DCP', 'GCC1', 'GCC2', 'PA', 'SA 200', 'SA 600', 'SOP A', 'SOP B', 'SOP C', 'SOP D', 'SOP H', 'G SOP']
-
-        WHEN 'Lab SOP' THEN ARRAY['SA 200', 'SA 600', 'SOP A', 'SOP B', 'SOP C', 'SOP D', 'SOP H', 'G SOP']
-
-        WHEN 'Lab ECHPS' THEN ARRAY['DCP', 'GCC1', 'GCC2', 'PA']
-
-    END
+CREATE TABLE public.auth_group (
+    id integer NOT NULL,
+    name character varying(150) NOT NULL
 );
 
--- Seed Data: org_positions - وظائف المصانع (12 مصنع x 5 مستويات)
 
-INSERT INTO org_positions (entity_type, plant_id, role_id, hierarchy_level)
-SELECT 'plant', p.plant_id, r.role_id, v.hierarchy_level
-FROM plants p
-CROSS JOIN (VALUES
+--
+-- Name: auth_group_id_seq; Type: SEQUENCE; Schema: public; Owner: -
+--
 
-    (1, 'مدير إنتاج'),
-    (2, 'رئيس قسم'),
-    (3, 'رئيس وردية'),
-    (4, 'الكيميائي'),
-    (5, 'مشرف')
-) AS v(hierarchy_level, role_name)
-
-JOIN roles r ON r.role_name = v.role_name;
-
--- Seed Data: org_positions - وظائف الإدارات المركزية (لكل إدارة مستوياتها الخاصة)
-
--- QA
-
-INSERT INTO org_positions (entity_type, department_id, role_id, hierarchy_level)
-SELECT 'department', d.department_id, r.role_id, v.hierarchy_level
-FROM departments d
-CROSS JOIN (VALUES
-
-    (1, 'مدير الإدارة'),
-    (2, 'رئيس قسم'),
-    (3, 'رئيس وردية'),
-    (4, 'الكيميائي'),
-    (5, 'مشرف')
-) AS v(hierarchy_level, role_name)
-
-JOIN roles r ON r.role_name = v.role_name
-
-WHERE d.department_name = 'QA';
+ALTER TABLE public.auth_group ALTER COLUMN id ADD GENERATED BY DEFAULT AS IDENTITY (
+    SEQUENCE NAME public.auth_group_id_seq
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1
+);
 
 
--- QC
+--
+-- Name: auth_group_permissions; Type: TABLE; Schema: public; Owner: -
+--
 
-INSERT INTO org_positions (entity_type, department_id, role_id, hierarchy_level)
-SELECT 'department', d.department_id, r.role_id, v.hierarchy_level
-FROM departments d
-CROSS JOIN (VALUES
-
-    (1, 'مدير الإدارة'),
-    (2, 'رئيس قسم'),
-    (3, 'رئيس وردية'),
-    (4, 'الكيميائي'),
-    (5, 'مشرف')
-) AS v(hierarchy_level, role_name)
-
-JOIN roles r ON r.role_name = v.role_name
-
-WHERE d.department_name = 'QC';
+CREATE TABLE public.auth_group_permissions (
+    id bigint NOT NULL,
+    group_id integer NOT NULL,
+    permission_id integer NOT NULL
+);
 
 
--- Lab SOP
+--
+-- Name: auth_group_permissions_id_seq; Type: SEQUENCE; Schema: public; Owner: -
+--
 
-INSERT INTO org_positions (entity_type, department_id, role_id, hierarchy_level)
-SELECT 'department', d.department_id, r.role_id, v.hierarchy_level
-FROM departments d
-CROSS JOIN (VALUES
-
-    (1, 'مدير المعمل'),
-    (2, 'رئيس قسم'),
-    (3, 'رئيس وردية'),
-    (4, 'الكيميائي'),
-    (5, 'مشرف')
-) AS v(hierarchy_level, role_name)
-
-JOIN roles r ON r.role_name = v.role_name
-
-WHERE d.department_name = 'Lab SOP';
+ALTER TABLE public.auth_group_permissions ALTER COLUMN id ADD GENERATED BY DEFAULT AS IDENTITY (
+    SEQUENCE NAME public.auth_group_permissions_id_seq
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1
+);
 
 
--- Lab ECHPS
+--
+-- Name: auth_permission; Type: TABLE; Schema: public; Owner: -
+--
 
-INSERT INTO org_positions (entity_type, department_id, role_id, hierarchy_level)
-SELECT 'department', d.department_id, r.role_id, v.hierarchy_level
-FROM departments d
-CROSS JOIN (VALUES
-
-    (1, 'مدير المعمل'),
-    (2, 'رئيس قسم'),
-    (3, 'رئيس وردية'),
-    (4, 'الكيميائي'),
-    (5, 'مشرف')
-) AS v(hierarchy_level, role_name)
-
-JOIN roles r ON r.role_name = v.role_name
-
-WHERE d.department_name = 'Lab ECHPS';
+CREATE TABLE public.auth_permission (
+    id integer NOT NULL,
+    name character varying(255) NOT NULL,
+    content_type_id integer NOT NULL,
+    codename character varying(100) NOT NULL
+);
 
 
--- Warehouse
+--
+-- Name: auth_permission_id_seq; Type: SEQUENCE; Schema: public; Owner: -
+--
 
-INSERT INTO org_positions (entity_type, department_id, role_id, hierarchy_level)
-SELECT 'department', d.department_id, r.role_id, v.hierarchy_level
-FROM departments d
-CROSS JOIN (VALUES
-
-    (1, 'مدير المخازن'),
-    (2, 'رئيس قسم'),
-    (3, 'رئيس وردية'),
-    (4, 'أمين مخزن'),
-    (5, 'مشرف')
-) AS v(hierarchy_level, role_name)
-
-JOIN roles r ON r.role_name = v.role_name
-
-WHERE d.department_name = 'Warehouse';
+ALTER TABLE public.auth_permission ALTER COLUMN id ADD GENERATED BY DEFAULT AS IDENTITY (
+    SEQUENCE NAME public.auth_permission_id_seq
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1
+);
 
 
--- Sales
+--
+-- Name: auth_user; Type: TABLE; Schema: public; Owner: -
+--
 
-INSERT INTO org_positions (entity_type, department_id, role_id, hierarchy_level)
-SELECT 'department', d.department_id, r.role_id, v.hierarchy_level
-FROM departments d
-CROSS JOIN (VALUES
+CREATE TABLE public.auth_user (
+    id integer NOT NULL,
+    password character varying(128) NOT NULL,
+    last_login timestamp with time zone,
+    is_superuser boolean NOT NULL,
+    username character varying(150) NOT NULL,
+    first_name character varying(150) NOT NULL,
+    last_name character varying(150) NOT NULL,
+    email character varying(254) NOT NULL,
+    is_staff boolean NOT NULL,
+    is_active boolean NOT NULL,
+    date_joined timestamp with time zone NOT NULL
+);
 
-    (1, 'مدير المبيعات'),
-    (2, 'رئيس قسم'),
-    (3, 'مهندس مسؤول'),
-    (4, 'مشرف')
-) AS v(hierarchy_level, role_name)
 
-JOIN roles r ON r.role_name = v.role_name
+--
+-- Name: auth_user_groups; Type: TABLE; Schema: public; Owner: -
+--
 
-WHERE d.department_name = 'Sales';
+CREATE TABLE public.auth_user_groups (
+    id bigint NOT NULL,
+    user_id integer NOT NULL,
+    group_id integer NOT NULL
+);
 
 
--- Seed Data: shift_types (أنواع الورديات)
+--
+-- Name: auth_user_groups_id_seq; Type: SEQUENCE; Schema: public; Owner: -
+--
 
-INSERT INTO shift_types (shift_type_name, start_time, end_time) VALUES
-    ('نهاري', '08:00', '16:00'),
-    ('أولى', '08:00', '16:00'),
-    ('ثانية', '16:00', '00:00'),
-    ('ثالثة', '00:00', '08:00'),
-    ('إجازة', NULL, NULL);
+ALTER TABLE public.auth_user_groups ALTER COLUMN id ADD GENERATED BY DEFAULT AS IDENTITY (
+    SEQUENCE NAME public.auth_user_groups_id_seq
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1
+);
 
--- Seed Data: shift_groups (المجموعات الأربعة)
 
-INSERT INTO shift_groups (group_name) VALUES
-    ('A'), ('B'), ('C'), ('D');
+--
+-- Name: auth_user_id_seq; Type: SEQUENCE; Schema: public; Owner: -
+--
 
--- Seed Data: shift_rotation_pattern (دورة الـ 8 أيام لكل مجموعة)
+ALTER TABLE public.auth_user ALTER COLUMN id ADD GENERATED BY DEFAULT AS IDENTITY (
+    SEQUENCE NAME public.auth_user_id_seq
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1
+);
 
-INSERT INTO shift_rotation_pattern (group_id, day_offset, shift_type_id)
-SELECT sg.group_id, v.day_offset, st.shift_type_id
-FROM shift_groups sg
-JOIN (VALUES
 
-    ('A', 0, 'ثانية'),
-    ('A', 1, 'ثانية'),
-    ('A', 2, 'ثالثة'),
-    ('A', 3, 'ثالثة'),
-    ('A', 4, 'إجازة'),
-    ('A', 5, 'إجازة'),
-    ('A', 6, 'أولى'),
-    ('A', 7, 'أولى'),
-    ('B', 0, 'ثالثة'),
-    ('B', 1, 'ثالثة'),
-    ('B', 2, 'إجازة'),
-    ('B', 3, 'إجازة'),
-    ('B', 4, 'أولى'),
-    ('B', 5, 'أولى'),
-    ('B', 6, 'ثانية'),
-    ('B', 7, 'ثانية'),
-    ('C', 0, 'أولى'),
-    ('C', 1, 'أولى'),
-    ('C', 2, 'ثانية'),
-    ('C', 3, 'ثانية'),
-    ('C', 4, 'ثالثة'),
-    ('C', 5, 'ثالثة'),
-    ('C', 6, 'إجازة'),
-    ('C', 7, 'إجازة'),
-    ('D', 0, 'إجازة'),
-    ('D', 1, 'إجازة'),
-    ('D', 2, 'أولى'),
-    ('D', 3, 'أولى'),
-    ('D', 4, 'ثانية'),
-    ('D', 5, 'ثانية'),
-    ('D', 6, 'ثالثة'),
-    ('D', 7, 'ثالثة')
-) AS v(group_name, day_offset, shift_type_name) ON v.group_name = sg.group_name
+--
+-- Name: auth_user_user_permissions; Type: TABLE; Schema: public; Owner: -
+--
 
-JOIN shift_types st ON st.shift_type_name = v.shift_type_name;
+CREATE TABLE public.auth_user_user_permissions (
+    id bigint NOT NULL,
+    user_id integer NOT NULL,
+    permission_id integer NOT NULL
+);
 
--- Seed Data: rotation_reference (تاريخ يوم صفر - عدّله ليوم فعلي تعرف فيه بداية دورة المجموعة A من أولى)
 
-INSERT INTO rotation_reference (reference_date) VALUES ('2026-07-20');
+--
+-- Name: auth_user_user_permissions_id_seq; Type: SEQUENCE; Schema: public; Owner: -
+--
+
+ALTER TABLE public.auth_user_user_permissions ALTER COLUMN id ADD GENERATED BY DEFAULT AS IDENTITY (
+    SEQUENCE NAME public.auth_user_user_permissions_id_seq
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1
+);
+
+
+--
+-- Name: custom_permissions_column_permissions; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.custom_permissions_column_permissions (
+    id bigint NOT NULL,
+    level character varying(10) NOT NULL,
+    role_id integer NOT NULL,
+    column_id bigint NOT NULL
+);
+
+
+--
+-- Name: custom_permissions_column_permissions_id_seq; Type: SEQUENCE; Schema: public; Owner: -
+--
+
+ALTER TABLE public.custom_permissions_column_permissions ALTER COLUMN id ADD GENERATED BY DEFAULT AS IDENTITY (
+    SEQUENCE NAME public.custom_permissions_column_permissions_id_seq
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1
+);
+
+
+--
+-- Name: custom_permissions_screen_columns; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.custom_permissions_screen_columns (
+    id bigint NOT NULL,
+    code character varying(50) NOT NULL,
+    label character varying(100) NOT NULL,
+    "order" smallint NOT NULL,
+    screen_id bigint NOT NULL,
+    CONSTRAINT custom_permissions_screen_columns_order_check CHECK (("order" >= 0))
+);
+
+
+--
+-- Name: custom_permissions_screen_columns_id_seq; Type: SEQUENCE; Schema: public; Owner: -
+--
+
+ALTER TABLE public.custom_permissions_screen_columns ALTER COLUMN id ADD GENERATED BY DEFAULT AS IDENTITY (
+    SEQUENCE NAME public.custom_permissions_screen_columns_id_seq
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1
+);
+
+
+--
+-- Name: custom_permissions_screens; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.custom_permissions_screens (
+    id bigint NOT NULL,
+    code character varying(50) NOT NULL,
+    name character varying(100) NOT NULL
+);
+
+
+--
+-- Name: custom_permissions_screens_id_seq; Type: SEQUENCE; Schema: public; Owner: -
+--
+
+ALTER TABLE public.custom_permissions_screens ALTER COLUMN id ADD GENERATED BY DEFAULT AS IDENTITY (
+    SEQUENCE NAME public.custom_permissions_screens_id_seq
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1
+);
+
+
+--
+-- Name: department_plant_scope; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.department_plant_scope (
+    department_id integer NOT NULL,
+    plant_id integer NOT NULL,
+    id integer NOT NULL
+);
+
+
+--
+-- Name: department_plant_scope_id_seq; Type: SEQUENCE; Schema: public; Owner: -
+--
+
+CREATE SEQUENCE public.department_plant_scope_id_seq
+    AS integer
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1;
+
+
+--
+-- Name: department_plant_scope_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: -
+--
+
+ALTER SEQUENCE public.department_plant_scope_id_seq OWNED BY public.department_plant_scope.id;
+
+
+--
+-- Name: departments; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.departments (
+    department_id integer NOT NULL,
+    department_code character varying(20) NOT NULL,
+    department_name character varying(50) NOT NULL,
+    parent_department_id integer
+);
+
+
+--
+-- Name: departments_department_id_seq; Type: SEQUENCE; Schema: public; Owner: -
+--
+
+CREATE SEQUENCE public.departments_department_id_seq
+    AS integer
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1;
+
+
+--
+-- Name: departments_department_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: -
+--
+
+ALTER SEQUENCE public.departments_department_id_seq OWNED BY public.departments.department_id;
+
+
+--
+-- Name: django_admin_log; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.django_admin_log (
+    id integer NOT NULL,
+    action_time timestamp with time zone NOT NULL,
+    object_id text,
+    object_repr character varying(200) NOT NULL,
+    action_flag smallint NOT NULL,
+    change_message text NOT NULL,
+    content_type_id integer,
+    user_id integer NOT NULL,
+    CONSTRAINT django_admin_log_action_flag_check CHECK ((action_flag >= 0))
+);
+
+
+--
+-- Name: django_admin_log_id_seq; Type: SEQUENCE; Schema: public; Owner: -
+--
+
+ALTER TABLE public.django_admin_log ALTER COLUMN id ADD GENERATED BY DEFAULT AS IDENTITY (
+    SEQUENCE NAME public.django_admin_log_id_seq
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1
+);
+
+
+--
+-- Name: django_content_type; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.django_content_type (
+    id integer NOT NULL,
+    app_label character varying(100) NOT NULL,
+    model character varying(100) NOT NULL
+);
+
+
+--
+-- Name: django_content_type_id_seq; Type: SEQUENCE; Schema: public; Owner: -
+--
+
+ALTER TABLE public.django_content_type ALTER COLUMN id ADD GENERATED BY DEFAULT AS IDENTITY (
+    SEQUENCE NAME public.django_content_type_id_seq
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1
+);
+
+
+--
+-- Name: django_migrations; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.django_migrations (
+    id bigint NOT NULL,
+    app character varying(255) NOT NULL,
+    name character varying(255) NOT NULL,
+    applied timestamp with time zone NOT NULL
+);
+
+
+--
+-- Name: django_migrations_id_seq; Type: SEQUENCE; Schema: public; Owner: -
+--
+
+ALTER TABLE public.django_migrations ALTER COLUMN id ADD GENERATED BY DEFAULT AS IDENTITY (
+    SEQUENCE NAME public.django_migrations_id_seq
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1
+);
+
+
+--
+-- Name: django_session; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.django_session (
+    session_key character varying(40) NOT NULL,
+    session_data text NOT NULL,
+    expire_date timestamp with time zone NOT NULL
+);
+
+
+--
+-- Name: employee_assignments; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.employee_assignments (
+    assignment_id integer NOT NULL,
+    employee_id integer NOT NULL,
+    position_id integer NOT NULL,
+    shift_mode character varying(10) NOT NULL,
+    group_id integer,
+    fixed_shift_type_id integer,
+    start_date date DEFAULT CURRENT_DATE NOT NULL,
+    end_date date,
+    is_current boolean DEFAULT true NOT NULL,
+    CONSTRAINT chk_shift_mode_link CHECK (((((shift_mode)::text = 'rotating'::text) AND (group_id IS NOT NULL) AND (fixed_shift_type_id IS NULL)) OR (((shift_mode)::text = 'fixed'::text) AND (fixed_shift_type_id IS NOT NULL) AND (group_id IS NULL)))),
+    CONSTRAINT employee_assignments_shift_mode_check CHECK (((shift_mode)::text = ANY ((ARRAY['rotating'::character varying, 'fixed'::character varying])::text[])))
+);
+
+
+--
+-- Name: employee_assignments_assignment_id_seq; Type: SEQUENCE; Schema: public; Owner: -
+--
+
+CREATE SEQUENCE public.employee_assignments_assignment_id_seq
+    AS integer
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1;
+
+
+--
+-- Name: employee_assignments_assignment_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: -
+--
+
+ALTER SEQUENCE public.employee_assignments_assignment_id_seq OWNED BY public.employee_assignments.assignment_id;
+
+
+--
+-- Name: employees; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.employees (
+    employee_id integer NOT NULL,
+    full_name character varying(100) NOT NULL,
+    national_id character varying(20),
+    phone character varying(20),
+    hire_date date,
+    is_active boolean DEFAULT true NOT NULL
+);
+
+
+--
+-- Name: employees_employee_id_seq; Type: SEQUENCE; Schema: public; Owner: -
+--
+
+CREATE SEQUENCE public.employees_employee_id_seq
+    AS integer
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1;
+
+
+--
+-- Name: employees_employee_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: -
+--
+
+ALTER SEQUENCE public.employees_employee_id_seq OWNED BY public.employees.employee_id;
+
+
+--
+-- Name: factory_conformity_rules; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.factory_conformity_rules (
+    id bigint NOT NULL,
+    name character varying(100) NOT NULL,
+    description text NOT NULL,
+    plant_id integer NOT NULL,
+    quality_grade_id bigint NOT NULL,
+    max_value numeric(10,3),
+    min_value numeric(10,3),
+    source_type character varying(30) NOT NULL,
+    test_id bigint
+);
+
+
+--
+-- Name: factory_conformity_rules_id_seq; Type: SEQUENCE; Schema: public; Owner: -
+--
+
+ALTER TABLE public.factory_conformity_rules ALTER COLUMN id ADD GENERATED BY DEFAULT AS IDENTITY (
+    SEQUENCE NAME public.factory_conformity_rules_id_seq
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1
+);
+
+
+--
+-- Name: factory_field_definitions; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.factory_field_definitions (
+    id bigint NOT NULL,
+    key character varying(50) NOT NULL,
+    name character varying(100) NOT NULL,
+    field_type character varying(15) NOT NULL,
+    category character varying(15) NOT NULL,
+    unit character varying(20) NOT NULL,
+    choices jsonb,
+    is_active boolean NOT NULL
+);
+
+
+--
+-- Name: factory_field_definitions_id_seq; Type: SEQUENCE; Schema: public; Owner: -
+--
+
+ALTER TABLE public.factory_field_definitions ALTER COLUMN id ADD GENERATED BY DEFAULT AS IDENTITY (
+    SEQUENCE NAME public.factory_field_definitions_id_seq
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1
+);
+
+
+--
+-- Name: factory_floor_stock_balances; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.factory_floor_stock_balances (
+    id bigint NOT NULL,
+    quantity numeric(12,2) NOT NULL,
+    updated_at timestamp with time zone NOT NULL,
+    grade_id bigint,
+    plant_id integer NOT NULL,
+    status character varying(30) NOT NULL
+);
+
+
+--
+-- Name: factory_floor_stock_balances_id_seq; Type: SEQUENCE; Schema: public; Owner: -
+--
+
+ALTER TABLE public.factory_floor_stock_balances ALTER COLUMN id ADD GENERATED BY DEFAULT AS IDENTITY (
+    SEQUENCE NAME public.factory_floor_stock_balances_id_seq
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1
+);
+
+
+--
+-- Name: factory_floor_stock_movements; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.factory_floor_stock_movements (
+    id bigint NOT NULL,
+    movement_type character varying(10) NOT NULL,
+    quantity numeric(12,2) NOT NULL,
+    occurred_at timestamp with time zone NOT NULL,
+    notes text NOT NULL,
+    grade_id bigint,
+    plant_id integer NOT NULL,
+    ton_id bigint,
+    status character varying(30) NOT NULL
+);
+
+
+--
+-- Name: factory_floor_stock_movements_id_seq; Type: SEQUENCE; Schema: public; Owner: -
+--
+
+ALTER TABLE public.factory_floor_stock_movements ALTER COLUMN id ADD GENERATED BY DEFAULT AS IDENTITY (
+    SEQUENCE NAME public.factory_floor_stock_movements_id_seq
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1
+);
+
+
+--
+-- Name: factory_grade_reasons; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.factory_grade_reasons (
+    id bigint NOT NULL,
+    reason_type character varying(20) NOT NULL,
+    text character varying(255) NOT NULL,
+    plant_id integer NOT NULL
+);
+
+
+--
+-- Name: factory_grade_reasons_id_seq; Type: SEQUENCE; Schema: public; Owner: -
+--
+
+ALTER TABLE public.factory_grade_reasons ALTER COLUMN id ADD GENERATED BY DEFAULT AS IDENTITY (
+    SEQUENCE NAME public.factory_grade_reasons_id_seq
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1
+);
+
+
+--
+-- Name: factory_grades; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.factory_grades (
+    id bigint NOT NULL,
+    code character varying(20) NOT NULL,
+    is_active boolean NOT NULL,
+    plant_id integer NOT NULL,
+    grade_type character varying(10) NOT NULL
+);
+
+
+--
+-- Name: factory_grades_id_seq; Type: SEQUENCE; Schema: public; Owner: -
+--
+
+ALTER TABLE public.factory_grades ALTER COLUMN id ADD GENERATED BY DEFAULT AS IDENTITY (
+    SEQUENCE NAME public.factory_grades_id_seq
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1
+);
+
+
+--
+-- Name: factory_output_analysis_results; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.factory_output_analysis_results (
+    id bigint NOT NULL,
+    result numeric(10,3),
+    reading_id bigint NOT NULL,
+    test_id bigint NOT NULL
+);
+
+
+--
+-- Name: factory_output_analysis_results_id_seq; Type: SEQUENCE; Schema: public; Owner: -
+--
+
+ALTER TABLE public.factory_output_analysis_results ALTER COLUMN id ADD GENERATED BY DEFAULT AS IDENTITY (
+    SEQUENCE NAME public.factory_output_analysis_results_id_seq
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1
+);
+
+
+--
+-- Name: factory_output_point_tests; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.factory_output_point_tests (
+    id bigint NOT NULL,
+    output_point_id bigint NOT NULL,
+    test_id bigint NOT NULL
+);
+
+
+--
+-- Name: factory_output_point_tests_id_seq; Type: SEQUENCE; Schema: public; Owner: -
+--
+
+ALTER TABLE public.factory_output_point_tests ALTER COLUMN id ADD GENERATED BY DEFAULT AS IDENTITY (
+    SEQUENCE NAME public.factory_output_point_tests_id_seq
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1
+);
+
+
+--
+-- Name: factory_output_points; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.factory_output_points (
+    id bigint NOT NULL,
+    code character varying(20) NOT NULL,
+    name character varying(100) NOT NULL,
+    plant_id integer NOT NULL
+);
+
+
+--
+-- Name: factory_output_points_id_seq; Type: SEQUENCE; Schema: public; Owner: -
+--
+
+ALTER TABLE public.factory_output_points ALTER COLUMN id ADD GENERATED BY DEFAULT AS IDENTITY (
+    SEQUENCE NAME public.factory_output_points_id_seq
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1
+);
+
+
+--
+-- Name: factory_output_readings; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.factory_output_readings (
+    id bigint NOT NULL,
+    sampled_at timestamp with time zone NOT NULL,
+    created_at timestamp with time zone NOT NULL,
+    output_point_id bigint NOT NULL,
+    plant_id integer NOT NULL,
+    shift_id integer,
+    packing_location_id bigint,
+    packing_type_id bigint,
+    analyzed_by_id integer,
+    product_name character varying(100) NOT NULL,
+    reviewed_by_id integer,
+    sampled_by_id integer,
+    notes text NOT NULL,
+    sample_code character varying(100) NOT NULL,
+    lab_shift_head_id integer,
+    sampling_status character varying(20) NOT NULL,
+    result_time time without time zone,
+    dynamic_data jsonb NOT NULL
+);
+
+
+--
+-- Name: factory_output_readings_id_seq; Type: SEQUENCE; Schema: public; Owner: -
+--
+
+ALTER TABLE public.factory_output_readings ALTER COLUMN id ADD GENERATED BY DEFAULT AS IDENTITY (
+    SEQUENCE NAME public.factory_output_readings_id_seq
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1
+);
+
+
+--
+-- Name: factory_packaging_stock; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.factory_packaging_stock (
+    id bigint NOT NULL,
+    quantity numeric(10,3) NOT NULL,
+    updated_at timestamp with time zone NOT NULL,
+    factory_id integer NOT NULL,
+    material_id bigint NOT NULL
+);
+
+
+--
+-- Name: factory_packaging_stock_id_seq; Type: SEQUENCE; Schema: public; Owner: -
+--
+
+ALTER TABLE public.factory_packaging_stock ALTER COLUMN id ADD GENERATED BY DEFAULT AS IDENTITY (
+    SEQUENCE NAME public.factory_packaging_stock_id_seq
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1
+);
+
+
+--
+-- Name: factory_packing_conversions; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.factory_packing_conversions (
+    id bigint NOT NULL,
+    quantity numeric(10,2) NOT NULL,
+    unit character varying(20) NOT NULL,
+    converted_at timestamp with time zone NOT NULL,
+    plant_id integer NOT NULL,
+    source_event_id bigint NOT NULL,
+    target_packing_type_id bigint NOT NULL,
+    created_at timestamp with time zone NOT NULL,
+    notes text NOT NULL
+);
+
+
+--
+-- Name: factory_packing_conversions_id_seq; Type: SEQUENCE; Schema: public; Owner: -
+--
+
+ALTER TABLE public.factory_packing_conversions ALTER COLUMN id ADD GENERATED BY DEFAULT AS IDENTITY (
+    SEQUENCE NAME public.factory_packing_conversions_id_seq
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1
+);
+
+
+--
+-- Name: factory_packing_events; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.factory_packing_events (
+    id bigint NOT NULL,
+    quantity numeric(10,2) NOT NULL,
+    unit character varying(20) NOT NULL,
+    packed_at timestamp with time zone NOT NULL,
+    output_reading_id bigint NOT NULL,
+    plant_id integer NOT NULL,
+    packing_type_id bigint NOT NULL,
+    created_at timestamp with time zone NOT NULL
+);
+
+
+--
+-- Name: factory_packing_events_id_seq; Type: SEQUENCE; Schema: public; Owner: -
+--
+
+ALTER TABLE public.factory_packing_events ALTER COLUMN id ADD GENERATED BY DEFAULT AS IDENTITY (
+    SEQUENCE NAME public.factory_packing_events_id_seq
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1
+);
+
+
+--
+-- Name: factory_packing_locations; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.factory_packing_locations (
+    id bigint NOT NULL,
+    name character varying(100) NOT NULL,
+    plant_id integer NOT NULL
+);
+
+
+--
+-- Name: factory_packing_locations_id_seq; Type: SEQUENCE; Schema: public; Owner: -
+--
+
+ALTER TABLE public.factory_packing_locations ALTER COLUMN id ADD GENERATED BY DEFAULT AS IDENTITY (
+    SEQUENCE NAME public.factory_packing_locations_id_seq
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1
+);
+
+
+--
+-- Name: factory_packing_type_fields; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.factory_packing_type_fields (
+    id bigint NOT NULL,
+    "order" integer NOT NULL,
+    is_required boolean NOT NULL,
+    field_id bigint NOT NULL,
+    packing_type_id bigint NOT NULL,
+    CONSTRAINT factory_packing_type_fields_order_check CHECK (("order" >= 0))
+);
+
+
+--
+-- Name: factory_packing_type_fields_id_seq; Type: SEQUENCE; Schema: public; Owner: -
+--
+
+ALTER TABLE public.factory_packing_type_fields ALTER COLUMN id ADD GENERATED BY DEFAULT AS IDENTITY (
+    SEQUENCE NAME public.factory_packing_type_fields_id_seq
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1
+);
+
+
+--
+-- Name: factory_packing_types; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.factory_packing_types (
+    id bigint NOT NULL,
+    name character varying(50) NOT NULL,
+    plant_id integer NOT NULL
+);
+
+
+--
+-- Name: factory_packing_types_id_seq; Type: SEQUENCE; Schema: public; Owner: -
+--
+
+ALTER TABLE public.factory_packing_types ALTER COLUMN id ADD GENERATED BY DEFAULT AS IDENTITY (
+    SEQUENCE NAME public.factory_packing_types_id_seq
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1
+);
+
+
+--
+-- Name: factory_plant_lot_settings; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.factory_plant_lot_settings (
+    id bigint NOT NULL,
+    lot_mode character varying(20) NOT NULL,
+    reset_threshold numeric(12,2) NOT NULL,
+    current_cycle integer NOT NULL,
+    current_sequence integer NOT NULL,
+    plant_id integer NOT NULL,
+    sampling_department character varying(100) NOT NULL,
+    cumulative_weight numeric(14,2) NOT NULL,
+    CONSTRAINT factory_plant_lot_settings_current_cycle_11817139_check CHECK ((current_cycle >= 0)),
+    CONSTRAINT factory_plant_lot_settings_current_sequence_e3ff6ad7_check CHECK ((current_sequence >= 0))
+);
+
+
+--
+-- Name: factory_plant_lot_settings_id_seq; Type: SEQUENCE; Schema: public; Owner: -
+--
+
+ALTER TABLE public.factory_plant_lot_settings ALTER COLUMN id ADD GENERATED BY DEFAULT AS IDENTITY (
+    SEQUENCE NAME public.factory_plant_lot_settings_id_seq
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1
+);
+
+
+--
+-- Name: factory_process_analysis_results; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.factory_process_analysis_results (
+    id bigint NOT NULL,
+    result numeric(10,3),
+    reading_id bigint NOT NULL,
+    test_id bigint NOT NULL
+);
+
+
+--
+-- Name: factory_process_analysis_results_id_seq; Type: SEQUENCE; Schema: public; Owner: -
+--
+
+ALTER TABLE public.factory_process_analysis_results ALTER COLUMN id ADD GENERATED BY DEFAULT AS IDENTITY (
+    SEQUENCE NAME public.factory_process_analysis_results_id_seq
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1
+);
+
+
+--
+-- Name: factory_process_readings; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.factory_process_readings (
+    id bigint NOT NULL,
+    sampled_at timestamp with time zone NOT NULL,
+    notes text NOT NULL,
+    created_at timestamp with time zone NOT NULL,
+    plant_id integer NOT NULL,
+    stage_id bigint NOT NULL,
+    shift_id integer
+);
+
+
+--
+-- Name: factory_process_readings_id_seq; Type: SEQUENCE; Schema: public; Owner: -
+--
+
+ALTER TABLE public.factory_process_readings ALTER COLUMN id ADD GENERATED BY DEFAULT AS IDENTITY (
+    SEQUENCE NAME public.factory_process_readings_id_seq
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1
+);
+
+
+--
+-- Name: factory_process_stage_tests; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.factory_process_stage_tests (
+    id bigint NOT NULL,
+    stage_id bigint NOT NULL,
+    test_id bigint NOT NULL
+);
+
+
+--
+-- Name: factory_process_stage_tests_id_seq; Type: SEQUENCE; Schema: public; Owner: -
+--
+
+ALTER TABLE public.factory_process_stage_tests ALTER COLUMN id ADD GENERATED BY DEFAULT AS IDENTITY (
+    SEQUENCE NAME public.factory_process_stage_tests_id_seq
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1
+);
+
+
+--
+-- Name: factory_process_stages; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.factory_process_stages (
+    id bigint NOT NULL,
+    code character varying(20) NOT NULL,
+    name character varying(100) NOT NULL,
+    plant_id integer NOT NULL,
+    is_active boolean NOT NULL,
+    "order" integer NOT NULL,
+    CONSTRAINT factory_process_stages_order_check CHECK (("order" >= 0))
+);
+
+
+--
+-- Name: factory_process_stages_id_seq; Type: SEQUENCE; Schema: public; Owner: -
+--
+
+ALTER TABLE public.factory_process_stages ALTER COLUMN id ADD GENERATED BY DEFAULT AS IDENTITY (
+    SEQUENCE NAME public.factory_process_stages_id_seq
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1
+);
+
+
+--
+-- Name: factory_quality_conformity_results; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.factory_quality_conformity_results (
+    id bigint NOT NULL,
+    conformity_rule_id bigint NOT NULL,
+    quality_grade_id bigint NOT NULL,
+    reading_id bigint NOT NULL,
+    grade_id bigint,
+    notes text NOT NULL
+);
+
+
+--
+-- Name: factory_quality_conformity_results_id_seq; Type: SEQUENCE; Schema: public; Owner: -
+--
+
+ALTER TABLE public.factory_quality_conformity_results ALTER COLUMN id ADD GENERATED BY DEFAULT AS IDENTITY (
+    SEQUENCE NAME public.factory_quality_conformity_results_id_seq
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1
+);
+
+
+--
+-- Name: factory_representative_group_sizes; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.factory_representative_group_sizes (
+    id bigint NOT NULL,
+    default_group_size smallint NOT NULL,
+    packing_type_id bigint NOT NULL,
+    plant_id integer NOT NULL,
+    CONSTRAINT factory_representative_group_sizes_default_group_size_check CHECK ((default_group_size >= 0))
+);
+
+
+--
+-- Name: factory_representative_group_sizes_id_seq; Type: SEQUENCE; Schema: public; Owner: -
+--
+
+ALTER TABLE public.factory_representative_group_sizes ALTER COLUMN id ADD GENERATED BY DEFAULT AS IDENTITY (
+    SEQUENCE NAME public.factory_representative_group_sizes_id_seq
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1
+);
+
+
+--
+-- Name: factory_representative_samples; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.factory_representative_samples (
+    id bigint NOT NULL,
+    cycle_number integer NOT NULL,
+    code character varying(40) NOT NULL,
+    weight numeric(10,3) NOT NULL,
+    created_at timestamp with time zone NOT NULL,
+    plant_id integer NOT NULL,
+    CONSTRAINT factory_representative_samples_cycle_number_3b260715_check CHECK ((cycle_number >= 0))
+);
+
+
+--
+-- Name: factory_representative_samples_id_seq; Type: SEQUENCE; Schema: public; Owner: -
+--
+
+ALTER TABLE public.factory_representative_samples ALTER COLUMN id ADD GENERATED BY DEFAULT AS IDENTITY (
+    SEQUENCE NAME public.factory_representative_samples_id_seq
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1
+);
+
+
+--
+-- Name: factory_representative_samples_tons; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.factory_representative_samples_tons (
+    id bigint NOT NULL,
+    representativesample_id bigint NOT NULL,
+    ton_id bigint NOT NULL
+);
+
+
+--
+-- Name: factory_representative_samples_tons_id_seq; Type: SEQUENCE; Schema: public; Owner: -
+--
+
+ALTER TABLE public.factory_representative_samples_tons ALTER COLUMN id ADD GENERATED BY DEFAULT AS IDENTITY (
+    SEQUENCE NAME public.factory_representative_samples_tons_id_seq
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1
+);
+
+
+--
+-- Name: factory_sample_chemical_results; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.factory_sample_chemical_results (
+    id bigint NOT NULL,
+    result numeric(10,3),
+    is_overridden boolean NOT NULL,
+    representative_sample_id bigint,
+    test_id bigint NOT NULL,
+    ton_id bigint NOT NULL
+);
+
+
+--
+-- Name: factory_sample_chemical_results_id_seq; Type: SEQUENCE; Schema: public; Owner: -
+--
+
+ALTER TABLE public.factory_sample_chemical_results ALTER COLUMN id ADD GENERATED BY DEFAULT AS IDENTITY (
+    SEQUENCE NAME public.factory_sample_chemical_results_id_seq
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1
+);
+
+
+--
+-- Name: factory_test_definitions; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.factory_test_definitions (
+    id bigint NOT NULL,
+    name character varying(100) NOT NULL,
+    category character varying(15) NOT NULL,
+    unit character varying(20) NOT NULL,
+    plant_id integer NOT NULL,
+    scopes jsonb NOT NULL
+);
+
+
+--
+-- Name: factory_test_definitions_id_seq; Type: SEQUENCE; Schema: public; Owner: -
+--
+
+ALTER TABLE public.factory_test_definitions ALTER COLUMN id ADD GENERATED BY DEFAULT AS IDENTITY (
+    SEQUENCE NAME public.factory_test_definitions_id_seq
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1
+);
+
+
+--
+-- Name: factory_ton_grade_assignments; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.factory_ton_grade_assignments (
+    id bigint NOT NULL,
+    assigned_at timestamp with time zone NOT NULL,
+    assigned_by_id integer,
+    ton_id bigint NOT NULL,
+    reason_id bigint,
+    notes text NOT NULL,
+    primary_grade_id bigint NOT NULL,
+    secondary_grade_id bigint
+);
+
+
+--
+-- Name: factory_ton_grade_assignments_id_seq; Type: SEQUENCE; Schema: public; Owner: -
+--
+
+ALTER TABLE public.factory_ton_grade_assignments ALTER COLUMN id ADD GENERATED BY DEFAULT AS IDENTITY (
+    SEQUENCE NAME public.factory_ton_grade_assignments_id_seq
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1
+);
+
+
+--
+-- Name: factory_ton_physical_results; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.factory_ton_physical_results (
+    id bigint NOT NULL,
+    result numeric(10,3),
+    test_id bigint NOT NULL,
+    ton_id bigint NOT NULL
+);
+
+
+--
+-- Name: factory_ton_physical_results_id_seq; Type: SEQUENCE; Schema: public; Owner: -
+--
+
+ALTER TABLE public.factory_ton_physical_results ALTER COLUMN id ADD GENERATED BY DEFAULT AS IDENTITY (
+    SEQUENCE NAME public.factory_ton_physical_results_id_seq
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1
+);
+
+
+--
+-- Name: factory_tons; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.factory_tons (
+    id bigint NOT NULL,
+    cycle_number integer NOT NULL,
+    sequence_number integer NOT NULL,
+    weight numeric(10,3) NOT NULL,
+    code character varying(30) NOT NULL,
+    production_date date NOT NULL,
+    created_at timestamp with time zone NOT NULL,
+    plant_id integer NOT NULL,
+    production_shift_id integer,
+    output_reading_id bigint,
+    status character varying(20) NOT NULL,
+    lab_sample_id bigint,
+    CONSTRAINT factory_tons_cycle_number_b1e33710_check CHECK ((cycle_number >= 0)),
+    CONSTRAINT factory_tons_sequence_number_2f9be8ae_check CHECK ((sequence_number >= 0))
+);
+
+
+--
+-- Name: factory_tons_id_seq; Type: SEQUENCE; Schema: public; Owner: -
+--
+
+ALTER TABLE public.factory_tons ALTER COLUMN id ADD GENERATED BY DEFAULT AS IDENTITY (
+    SEQUENCE NAME public.factory_tons_id_seq
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1
+);
+
+
+--
+-- Name: finished_products_products; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.finished_products_products (
+    id bigint NOT NULL,
+    product_code character varying(30) NOT NULL,
+    product_name character varying(150) NOT NULL,
+    product_type character varying(50) NOT NULL,
+    unit_of_measure character varying(20) NOT NULL,
+    traceability_level smallint NOT NULL,
+    batch_required boolean NOT NULL,
+    chemical_tests_required boolean NOT NULL,
+    physical_tests_required boolean NOT NULL,
+    stock_product boolean NOT NULL,
+    is_active boolean NOT NULL,
+    created_at timestamp with time zone NOT NULL,
+    CONSTRAINT finished_products_products_traceability_level_check CHECK ((traceability_level >= 0))
+);
+
+
+--
+-- Name: finished_products_products_id_seq; Type: SEQUENCE; Schema: public; Owner: -
+--
+
+ALTER TABLE public.finished_products_products ALTER COLUMN id ADD GENERATED BY DEFAULT AS IDENTITY (
+    SEQUENCE NAME public.finished_products_products_id_seq
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1
+);
+
+
+--
+-- Name: finished_products_products_packing_types; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.finished_products_products_packing_types (
+    id bigint NOT NULL,
+    product_id bigint NOT NULL,
+    packingtype_id bigint NOT NULL
+);
+
+
+--
+-- Name: finished_products_products_packing_types_id_seq; Type: SEQUENCE; Schema: public; Owner: -
+--
+
+ALTER TABLE public.finished_products_products_packing_types ALTER COLUMN id ADD GENERATED BY DEFAULT AS IDENTITY (
+    SEQUENCE NAME public.finished_products_products_packing_types_id_seq
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1
+);
+
+
+--
+-- Name: finished_products_products_plants; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.finished_products_products_plants (
+    id bigint NOT NULL,
+    product_id bigint NOT NULL,
+    plant_id integer NOT NULL
+);
+
+
+--
+-- Name: finished_products_products_plants_id_seq; Type: SEQUENCE; Schema: public; Owner: -
+--
+
+ALTER TABLE public.finished_products_products_plants ALTER COLUMN id ADD GENERATED BY DEFAULT AS IDENTITY (
+    SEQUENCE NAME public.finished_products_products_plants_id_seq
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1
+);
+
+
+--
+-- Name: finished_products_stock_balances; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.finished_products_stock_balances (
+    id bigint NOT NULL,
+    total_stock numeric(12,3) NOT NULL,
+    reserved numeric(12,3) NOT NULL,
+    available numeric(12,3) NOT NULL,
+    under_preparation numeric(12,3) NOT NULL,
+    qc_hold numeric(12,3) NOT NULL,
+    updated_at timestamp with time zone NOT NULL,
+    packaging_type_id bigint NOT NULL,
+    plant_id integer NOT NULL,
+    product_id bigint NOT NULL
+);
+
+
+--
+-- Name: finished_products_stock_balances_id_seq; Type: SEQUENCE; Schema: public; Owner: -
+--
+
+ALTER TABLE public.finished_products_stock_balances ALTER COLUMN id ADD GENERATED BY DEFAULT AS IDENTITY (
+    SEQUENCE NAME public.finished_products_stock_balances_id_seq
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1
+);
+
+
+--
+-- Name: finished_products_stock_ledger; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.finished_products_stock_ledger (
+    id bigint NOT NULL,
+    transaction_type character varying(20) NOT NULL,
+    quantity numeric(12,3) NOT NULL,
+    reference_text character varying(200) NOT NULL,
+    occurred_at timestamp with time zone NOT NULL,
+    notes text NOT NULL,
+    created_at timestamp with time zone NOT NULL,
+    packaging_type_id bigint NOT NULL,
+    plant_id integer NOT NULL,
+    product_id bigint NOT NULL,
+    user_id integer
+);
+
+
+--
+-- Name: finished_products_stock_ledger_id_seq; Type: SEQUENCE; Schema: public; Owner: -
+--
+
+ALTER TABLE public.finished_products_stock_ledger ALTER COLUMN id ADD GENERATED BY DEFAULT AS IDENTITY (
+    SEQUENCE NAME public.finished_products_stock_ledger_id_seq
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1
+);
+
+
+--
+-- Name: inventory_transactions; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.inventory_transactions (
+    id bigint NOT NULL,
+    movement_type character varying(20) NOT NULL,
+    accuracy_type character varying(20) NOT NULL,
+    quantity_tons numeric(12,3) NOT NULL,
+    transaction_date timestamp with time zone NOT NULL,
+    notes text NOT NULL,
+    created_at timestamp with time zone NOT NULL,
+    plant_id integer NOT NULL,
+    material_id bigint NOT NULL,
+    storage_id bigint NOT NULL,
+    reference_delivery_id bigint
+);
+
+
+--
+-- Name: inventory_transactions_id_seq; Type: SEQUENCE; Schema: public; Owner: -
+--
+
+ALTER TABLE public.inventory_transactions ALTER COLUMN id ADD GENERATED BY DEFAULT AS IDENTITY (
+    SEQUENCE NAME public.inventory_transactions_id_seq
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1
+);
+
+
+--
+-- Name: lab_sample_groups; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.lab_sample_groups (
+    id bigint NOT NULL,
+    group_code character varying(30) NOT NULL,
+    location_label character varying(100) NOT NULL,
+    packing_type_name character varying(50) NOT NULL,
+    packing_type_ref integer,
+    period_start timestamp with time zone NOT NULL,
+    period_end timestamp with time zone,
+    is_open boolean NOT NULL,
+    created_at timestamp with time zone NOT NULL,
+    plant_id integer NOT NULL,
+    CONSTRAINT lab_sample_groups_packing_type_ref_check CHECK ((packing_type_ref >= 0))
+);
+
+
+--
+-- Name: lab_sample_groups_id_seq; Type: SEQUENCE; Schema: public; Owner: -
+--
+
+ALTER TABLE public.lab_sample_groups ALTER COLUMN id ADD GENERATED BY DEFAULT AS IDENTITY (
+    SEQUENCE NAME public.lab_sample_groups_id_seq
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1
+);
+
+
+--
+-- Name: lab_sample_required_tests; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.lab_sample_required_tests (
+    id bigint NOT NULL,
+    test_name character varying(100) NOT NULL,
+    test_object_id bigint,
+    is_completed boolean NOT NULL,
+    sample_id bigint NOT NULL,
+    test_content_type_id integer,
+    CONSTRAINT lab_sample_required_tests_test_object_id_check CHECK ((test_object_id >= 0))
+);
+
+
+--
+-- Name: lab_sample_required_tests_id_seq; Type: SEQUENCE; Schema: public; Owner: -
+--
+
+ALTER TABLE public.lab_sample_required_tests ALTER COLUMN id ADD GENERATED BY DEFAULT AS IDENTITY (
+    SEQUENCE NAME public.lab_sample_required_tests_id_seq
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1
+);
+
+
+--
+-- Name: lab_sample_test_results; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.lab_sample_test_results (
+    id bigint NOT NULL,
+    test_name character varying(100) NOT NULL,
+    test_object_id bigint,
+    result numeric(10,3),
+    entered_at timestamp with time zone NOT NULL,
+    entered_by_id integer,
+    sample_id bigint NOT NULL,
+    test_content_type_id integer,
+    CONSTRAINT lab_sample_test_results_test_object_id_check CHECK ((test_object_id >= 0))
+);
+
+
+--
+-- Name: lab_sample_test_results_id_seq; Type: SEQUENCE; Schema: public; Owner: -
+--
+
+ALTER TABLE public.lab_sample_test_results ALTER COLUMN id ADD GENERATED BY DEFAULT AS IDENTITY (
+    SEQUENCE NAME public.lab_sample_test_results_id_seq
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1
+);
+
+
+--
+-- Name: lab_samples; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.lab_samples (
+    id bigint NOT NULL,
+    sample_code character varying(30) NOT NULL,
+    source_type character varying(30) NOT NULL,
+    object_id bigint,
+    status character varying(20) NOT NULL,
+    collected_at timestamp with time zone,
+    ready_for_decision_at timestamp with time zone,
+    notes text NOT NULL,
+    created_at timestamp with time zone NOT NULL,
+    collected_by_id integer,
+    content_type_id integer,
+    lab_department_id integer,
+    plant_id integer NOT NULL,
+    group_id bigint,
+    CONSTRAINT lab_samples_object_id_check CHECK ((object_id >= 0))
+);
+
+
+--
+-- Name: lab_samples_id_seq; Type: SEQUENCE; Schema: public; Owner: -
+--
+
+ALTER TABLE public.lab_samples ALTER COLUMN id ADD GENERATED BY DEFAULT AS IDENTITY (
+    SEQUENCE NAME public.lab_samples_id_seq
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1
+);
+
+
+--
+-- Name: material_specifications; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.material_specifications (
+    id bigint NOT NULL,
+    specification_min numeric(10,3),
+    specification_max numeric(10,3),
+    is_active boolean NOT NULL,
+    notes text NOT NULL,
+    material_id bigint NOT NULL,
+    test_id bigint NOT NULL
+);
+
+
+--
+-- Name: material_specifications_id_seq; Type: SEQUENCE; Schema: public; Owner: -
+--
+
+ALTER TABLE public.material_specifications ALTER COLUMN id ADD GENERATED BY DEFAULT AS IDENTITY (
+    SEQUENCE NAME public.material_specifications_id_seq
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1
+);
+
+
+--
+-- Name: material_storages; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.material_storages (
+    id bigint NOT NULL,
+    storage_code character varying(30) NOT NULL,
+    storage_name character varying(100) NOT NULL,
+    description text NOT NULL,
+    allow_estimated_issue boolean NOT NULL,
+    is_active boolean NOT NULL,
+    material_id bigint NOT NULL,
+    plant_id integer NOT NULL
+);
+
+
+--
+-- Name: material_storages_id_seq; Type: SEQUENCE; Schema: public; Owner: -
+--
+
+ALTER TABLE public.material_storages ALTER COLUMN id ADD GENERATED BY DEFAULT AS IDENTITY (
+    SEQUENCE NAME public.material_storages_id_seq
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1
+);
+
+
+--
+-- Name: material_tests; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.material_tests (
+    id bigint NOT NULL,
+    test_code character varying(30) NOT NULL,
+    test_name character varying(100) NOT NULL,
+    unit character varying(20) NOT NULL,
+    material_id bigint NOT NULL
+);
+
+
+--
+-- Name: material_tests_id_seq; Type: SEQUENCE; Schema: public; Owner: -
+--
+
+ALTER TABLE public.material_tests ALTER COLUMN id ADD GENERATED BY DEFAULT AS IDENTITY (
+    SEQUENCE NAME public.material_tests_id_seq
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1
+);
+
+
+--
+-- Name: materials; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.materials (
+    id bigint NOT NULL,
+    material_code character varying(20) NOT NULL,
+    material_name character varying(100) NOT NULL,
+    description text NOT NULL,
+    is_active boolean NOT NULL
+);
+
+
+--
+-- Name: materials_id_seq; Type: SEQUENCE; Schema: public; Owner: -
+--
+
+ALTER TABLE public.materials ALTER COLUMN id ADD GENERATED BY DEFAULT AS IDENTITY (
+    SEQUENCE NAME public.materials_id_seq
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1
+);
+
+
+--
+-- Name: order_movements; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.order_movements (
+    id bigint NOT NULL,
+    movement_type character varying(20) NOT NULL,
+    quantity numeric(12,3) NOT NULL,
+    occurred_at timestamp with time zone NOT NULL,
+    recorded_at timestamp with time zone NOT NULL,
+    notes text NOT NULL,
+    grade_id bigint,
+    source_plant_id integer NOT NULL,
+    order_id bigint NOT NULL
+);
+
+
+--
+-- Name: order_movements_id_seq; Type: SEQUENCE; Schema: public; Owner: -
+--
+
+ALTER TABLE public.order_movements ALTER COLUMN id ADD GENERATED BY DEFAULT AS IDENTITY (
+    SEQUENCE NAME public.order_movements_id_seq
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1
+);
+
+
+--
+-- Name: order_plant_allocation_change_log; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.order_plant_allocation_change_log (
+    id bigint NOT NULL,
+    quantity numeric(12,3) NOT NULL,
+    reason text NOT NULL,
+    changed_at timestamp with time zone NOT NULL,
+    changed_by_id integer,
+    from_plant_id integer,
+    to_plant_id integer NOT NULL,
+    order_id bigint NOT NULL
+);
+
+
+--
+-- Name: order_plant_allocation_change_log_id_seq; Type: SEQUENCE; Schema: public; Owner: -
+--
+
+ALTER TABLE public.order_plant_allocation_change_log ALTER COLUMN id ADD GENERATED BY DEFAULT AS IDENTITY (
+    SEQUENCE NAME public.order_plant_allocation_change_log_id_seq
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1
+);
+
+
+--
+-- Name: order_plant_allocations; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.order_plant_allocations (
+    id bigint NOT NULL,
+    allocated_quantity numeric(12,3) NOT NULL,
+    updated_at timestamp with time zone NOT NULL,
+    plant_id integer NOT NULL,
+    order_id bigint NOT NULL
+);
+
+
+--
+-- Name: order_plant_allocations_id_seq; Type: SEQUENCE; Schema: public; Owner: -
+--
+
+ALTER TABLE public.order_plant_allocations ALTER COLUMN id ADD GENERATED BY DEFAULT AS IDENTITY (
+    SEQUENCE NAME public.order_plant_allocations_id_seq
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1
+);
+
+
+--
+-- Name: orders_customers; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.orders_customers (
+    id bigint NOT NULL,
+    customer_code character varying(30) NOT NULL,
+    customer_name character varying(200) NOT NULL,
+    contact_person character varying(100) NOT NULL,
+    phone character varying(30) NOT NULL,
+    email character varying(254) NOT NULL,
+    address text NOT NULL,
+    credit_limit numeric(12,2) NOT NULL,
+    payment_terms character varying(50) NOT NULL,
+    status character varying(20) NOT NULL
+);
+
+
+--
+-- Name: orders_customers_id_seq; Type: SEQUENCE; Schema: public; Owner: -
+--
+
+ALTER TABLE public.orders_customers ALTER COLUMN id ADD GENERATED BY DEFAULT AS IDENTITY (
+    SEQUENCE NAME public.orders_customers_id_seq
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1
+);
+
+
+--
+-- Name: orders_price_lists; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.orders_price_lists (
+    id bigint NOT NULL,
+    customer_type character varying(50) NOT NULL,
+    price numeric(10,2) NOT NULL,
+    currency character varying(3) NOT NULL,
+    valid_from date NOT NULL,
+    valid_to date,
+    packaging_type_id bigint NOT NULL,
+    product_id bigint NOT NULL
+);
+
+
+--
+-- Name: orders_price_lists_id_seq; Type: SEQUENCE; Schema: public; Owner: -
+--
+
+ALTER TABLE public.orders_price_lists ALTER COLUMN id ADD GENERATED BY DEFAULT AS IDENTITY (
+    SEQUENCE NAME public.orders_price_lists_id_seq
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1
+);
+
+
+--
+-- Name: orders_quotation_lines; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.orders_quotation_lines (
+    id bigint NOT NULL,
+    quantity numeric(10,3) NOT NULL,
+    unit_price numeric(10,2) NOT NULL,
+    packaging_type_id bigint NOT NULL,
+    product_id bigint NOT NULL,
+    quotation_id bigint NOT NULL
+);
+
+
+--
+-- Name: orders_quotation_lines_id_seq; Type: SEQUENCE; Schema: public; Owner: -
+--
+
+ALTER TABLE public.orders_quotation_lines ALTER COLUMN id ADD GENERATED BY DEFAULT AS IDENTITY (
+    SEQUENCE NAME public.orders_quotation_lines_id_seq
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1
+);
+
+
+--
+-- Name: orders_quotations; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.orders_quotations (
+    id bigint NOT NULL,
+    quotation_number character varying(30) NOT NULL,
+    status character varying(20) NOT NULL,
+    valid_until date NOT NULL,
+    notes text NOT NULL,
+    created_at timestamp with time zone NOT NULL,
+    customer_id bigint NOT NULL
+);
+
+
+--
+-- Name: orders_quotations_id_seq; Type: SEQUENCE; Schema: public; Owner: -
+--
+
+ALTER TABLE public.orders_quotations ALTER COLUMN id ADD GENERATED BY DEFAULT AS IDENTITY (
+    SEQUENCE NAME public.orders_quotations_id_seq
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1
+);
+
+
+--
+-- Name: orders_sales_order_lines; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.orders_sales_order_lines (
+    id bigint NOT NULL,
+    quantity numeric(10,3) NOT NULL,
+    unit_price numeric(10,2) NOT NULL,
+    order_id bigint NOT NULL,
+    packaging_type_id bigint NOT NULL,
+    plant_id integer NOT NULL,
+    product_id bigint NOT NULL
+);
+
+
+--
+-- Name: orders_sales_order_lines_id_seq; Type: SEQUENCE; Schema: public; Owner: -
+--
+
+ALTER TABLE public.orders_sales_order_lines ALTER COLUMN id ADD GENERATED BY DEFAULT AS IDENTITY (
+    SEQUENCE NAME public.orders_sales_order_lines_id_seq
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1
+);
+
+
+--
+-- Name: org_position_department_scope; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.org_position_department_scope (
+    id integer NOT NULL,
+    position_id integer NOT NULL,
+    department_id integer NOT NULL
+);
+
+
+--
+-- Name: org_position_department_scope_id_seq; Type: SEQUENCE; Schema: public; Owner: -
+--
+
+CREATE SEQUENCE public.org_position_department_scope_id_seq
+    AS integer
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1;
+
+
+--
+-- Name: org_position_department_scope_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: -
+--
+
+ALTER SEQUENCE public.org_position_department_scope_id_seq OWNED BY public.org_position_department_scope.id;
+
+
+--
+-- Name: org_positions; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.org_positions (
+    position_id integer NOT NULL,
+    entity_type character varying(10) NOT NULL,
+    plant_id integer,
+    department_id integer,
+    role_id integer NOT NULL,
+    hierarchy_level integer NOT NULL,
+    CONSTRAINT chk_entity_link CHECK (((((entity_type)::text = 'plant'::text) AND (plant_id IS NOT NULL) AND (department_id IS NULL)) OR (((entity_type)::text = 'department'::text) AND (department_id IS NOT NULL) AND (plant_id IS NULL)))),
+    CONSTRAINT chk_hierarchy_level CHECK (((hierarchy_level >= 1) AND (hierarchy_level <= 10))),
+    CONSTRAINT org_positions_entity_type_check CHECK (((entity_type)::text = ANY ((ARRAY['plant'::character varying, 'department'::character varying])::text[])))
+);
+
+
+--
+-- Name: org_positions_position_id_seq; Type: SEQUENCE; Schema: public; Owner: -
+--
+
+CREATE SEQUENCE public.org_positions_position_id_seq
+    AS integer
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1;
+
+
+--
+-- Name: org_positions_position_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: -
+--
+
+ALTER SEQUENCE public.org_positions_position_id_seq OWNED BY public.org_positions.position_id;
+
+
+--
+-- Name: packaging_materials; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.packaging_materials (
+    id bigint NOT NULL,
+    material_code character varying(30) NOT NULL,
+    material_name character varying(150) NOT NULL,
+    category character varying(50) NOT NULL,
+    subcategory character varying(50) NOT NULL,
+    unit character varying(20) NOT NULL,
+    minimum_stock numeric(10,3) NOT NULL,
+    maximum_stock numeric(10,3) NOT NULL,
+    reorder_point numeric(10,3) NOT NULL,
+    inspection_required boolean NOT NULL,
+    inspection_template jsonb NOT NULL,
+    is_active boolean NOT NULL
+);
+
+
+--
+-- Name: packaging_materials_id_seq; Type: SEQUENCE; Schema: public; Owner: -
+--
+
+ALTER TABLE public.packaging_materials ALTER COLUMN id ADD GENERATED BY DEFAULT AS IDENTITY (
+    SEQUENCE NAME public.packaging_materials_id_seq
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1
+);
+
+
+--
+-- Name: packaging_materials_products; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.packaging_materials_products (
+    id bigint NOT NULL,
+    packagingmaterial_id bigint NOT NULL,
+    product_id bigint NOT NULL
+);
+
+
+--
+-- Name: packaging_materials_products_id_seq; Type: SEQUENCE; Schema: public; Owner: -
+--
+
+ALTER TABLE public.packaging_materials_products ALTER COLUMN id ADD GENERATED BY DEFAULT AS IDENTITY (
+    SEQUENCE NAME public.packaging_materials_products_id_seq
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1
+);
+
+
+--
+-- Name: packaging_receiving; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.packaging_receiving (
+    id bigint NOT NULL,
+    receiving_number character varying(30) NOT NULL,
+    date date NOT NULL,
+    quantity_received numeric(10,3) NOT NULL,
+    batch_number character varying(50) NOT NULL,
+    expiry_date date,
+    status character varying(20) NOT NULL,
+    created_at timestamp with time zone NOT NULL,
+    lab_sample_id bigint,
+    material_id bigint NOT NULL,
+    product_id bigint NOT NULL,
+    supplier_id bigint NOT NULL
+);
+
+
+--
+-- Name: packaging_receiving_id_seq; Type: SEQUENCE; Schema: public; Owner: -
+--
+
+ALTER TABLE public.packaging_receiving ALTER COLUMN id ADD GENERATED BY DEFAULT AS IDENTITY (
+    SEQUENCE NAME public.packaging_receiving_id_seq
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1
+);
+
+
+--
+-- Name: packaging_reconciliation; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.packaging_reconciliation (
+    id bigint NOT NULL,
+    warehouse_qty numeric(10,3) NOT NULL,
+    factory_qty numeric(10,3) NOT NULL,
+    status character varying(10) NOT NULL,
+    reconciled_at timestamp with time zone NOT NULL,
+    material_id bigint NOT NULL
+);
+
+
+--
+-- Name: packaging_reconciliation_id_seq; Type: SEQUENCE; Schema: public; Owner: -
+--
+
+ALTER TABLE public.packaging_reconciliation ALTER COLUMN id ADD GENERATED BY DEFAULT AS IDENTITY (
+    SEQUENCE NAME public.packaging_reconciliation_id_seq
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1
+);
+
+
+--
+-- Name: packaging_stock_balances; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.packaging_stock_balances (
+    id bigint NOT NULL,
+    status character varying(20) NOT NULL,
+    quantity numeric(10,3) NOT NULL,
+    updated_at timestamp with time zone NOT NULL,
+    material_id bigint NOT NULL
+);
+
+
+--
+-- Name: packaging_stock_balances_id_seq; Type: SEQUENCE; Schema: public; Owner: -
+--
+
+ALTER TABLE public.packaging_stock_balances ALTER COLUMN id ADD GENERATED BY DEFAULT AS IDENTITY (
+    SEQUENCE NAME public.packaging_stock_balances_id_seq
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1
+);
+
+
+--
+-- Name: packaging_stock_ledger; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.packaging_stock_ledger (
+    id bigint NOT NULL,
+    transaction_type character varying(20) NOT NULL,
+    quantity numeric(10,3) NOT NULL,
+    status character varying(20) NOT NULL,
+    reference_text character varying(200) NOT NULL,
+    occurred_at timestamp with time zone NOT NULL,
+    notes text NOT NULL,
+    created_at timestamp with time zone NOT NULL,
+    material_id bigint NOT NULL,
+    user_id integer
+);
+
+
+--
+-- Name: packaging_stock_ledger_id_seq; Type: SEQUENCE; Schema: public; Owner: -
+--
+
+ALTER TABLE public.packaging_stock_ledger ALTER COLUMN id ADD GENERATED BY DEFAULT AS IDENTITY (
+    SEQUENCE NAME public.packaging_stock_ledger_id_seq
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1
+);
+
+
+--
+-- Name: packaging_supplier_evaluations; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.packaging_supplier_evaluations (
+    id bigint NOT NULL,
+    acceptance_rate numeric(5,2) NOT NULL,
+    rejection_rate numeric(5,2) NOT NULL,
+    quality_score numeric(5,2) NOT NULL,
+    evaluated_at timestamp with time zone NOT NULL,
+    supplier_id bigint NOT NULL
+);
+
+
+--
+-- Name: packaging_supplier_evaluations_id_seq; Type: SEQUENCE; Schema: public; Owner: -
+--
+
+ALTER TABLE public.packaging_supplier_evaluations ALTER COLUMN id ADD GENERATED BY DEFAULT AS IDENTITY (
+    SEQUENCE NAME public.packaging_supplier_evaluations_id_seq
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1
+);
+
+
+--
+-- Name: packaging_suppliers; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.packaging_suppliers (
+    id bigint NOT NULL,
+    supplier_code character varying(30) NOT NULL,
+    supplier_name character varying(150) NOT NULL,
+    phone character varying(30) NOT NULL,
+    email character varying(254) NOT NULL,
+    address text NOT NULL,
+    is_active boolean NOT NULL
+);
+
+
+--
+-- Name: packaging_suppliers_id_seq; Type: SEQUENCE; Schema: public; Owner: -
+--
+
+ALTER TABLE public.packaging_suppliers ALTER COLUMN id ADD GENERATED BY DEFAULT AS IDENTITY (
+    SEQUENCE NAME public.packaging_suppliers_id_seq
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1
+);
+
+
+--
+-- Name: packaging_suppliers_materials_supplied; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.packaging_suppliers_materials_supplied (
+    id bigint NOT NULL,
+    packagingsupplier_id bigint NOT NULL,
+    packagingmaterial_id bigint NOT NULL
+);
+
+
+--
+-- Name: packaging_suppliers_materials_supplied_id_seq; Type: SEQUENCE; Schema: public; Owner: -
+--
+
+ALTER TABLE public.packaging_suppliers_materials_supplied ALTER COLUMN id ADD GENERATED BY DEFAULT AS IDENTITY (
+    SEQUENCE NAME public.packaging_suppliers_materials_supplied_id_seq
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1
+);
+
+
+--
+-- Name: packing_operations; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.packing_operations (
+    id bigint NOT NULL,
+    quantity_used numeric(10,3) NOT NULL,
+    quantity_waste numeric(10,3) NOT NULL,
+    quantity_remaining numeric(10,3) NOT NULL,
+    operated_at timestamp with time zone NOT NULL,
+    factory_id integer NOT NULL,
+    material_id bigint NOT NULL,
+    product_id bigint NOT NULL,
+    user_id integer
+);
+
+
+--
+-- Name: packing_operations_id_seq; Type: SEQUENCE; Schema: public; Owner: -
+--
+
+ALTER TABLE public.packing_operations ALTER COLUMN id ADD GENERATED BY DEFAULT AS IDENTITY (
+    SEQUENCE NAME public.packing_operations_id_seq
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1
+);
+
+
+--
+-- Name: plants; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.plants (
+    plant_id integer NOT NULL,
+    product_type character varying(20) NOT NULL,
+    plant_name character varying(50) NOT NULL
+);
+
+
+--
+-- Name: plants_plant_id_seq; Type: SEQUENCE; Schema: public; Owner: -
+--
+
+CREATE SEQUENCE public.plants_plant_id_seq
+    AS integer
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1;
+
+
+--
+-- Name: plants_plant_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: -
+--
+
+ALTER SEQUENCE public.plants_plant_id_seq OWNED BY public.plants.plant_id;
+
+
+--
+-- Name: quality_control_decisions; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.quality_control_decisions (
+    id bigint NOT NULL,
+    suggested_decision character varying(30) NOT NULL,
+    final_decision character varying(30) NOT NULL,
+    decided_at timestamp with time zone NOT NULL,
+    reason text NOT NULL,
+    decided_by_id integer,
+    sample_id bigint NOT NULL,
+    suggested_by_rule_id bigint
+);
+
+
+--
+-- Name: quality_control_decisions_id_seq; Type: SEQUENCE; Schema: public; Owner: -
+--
+
+ALTER TABLE public.quality_control_decisions ALTER COLUMN id ADD GENERATED BY DEFAULT AS IDENTITY (
+    SEQUENCE NAME public.quality_control_decisions_id_seq
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1
+);
+
+
+--
+-- Name: quality_grades; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.quality_grades (
+    id bigint NOT NULL,
+    code character varying(20) NOT NULL,
+    description text NOT NULL
+);
+
+
+--
+-- Name: quality_grades_id_seq; Type: SEQUENCE; Schema: public; Owner: -
+--
+
+ALTER TABLE public.quality_grades ALTER COLUMN id ADD GENERATED BY DEFAULT AS IDENTITY (
+    SEQUENCE NAME public.quality_grades_id_seq
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1
+);
+
+
+--
+-- Name: raw_material_analysis; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.raw_material_analysis (
+    id bigint NOT NULL,
+    result numeric(10,3),
+    is_conforming boolean,
+    remarks text NOT NULL,
+    created_at timestamp with time zone NOT NULL,
+    test_id bigint NOT NULL,
+    sample_id bigint NOT NULL
+);
+
+
+--
+-- Name: raw_material_analysis_id_seq; Type: SEQUENCE; Schema: public; Owner: -
+--
+
+ALTER TABLE public.raw_material_analysis ALTER COLUMN id ADD GENERATED BY DEFAULT AS IDENTITY (
+    SEQUENCE NAME public.raw_material_analysis_id_seq
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1
+);
+
+
+--
+-- Name: raw_material_deliveries; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.raw_material_deliveries (
+    id bigint NOT NULL,
+    vehicle_number character varying(30) NOT NULL,
+    weight_tons numeric(8,3) NOT NULL,
+    arrived_at timestamp with time zone NOT NULL,
+    decision character varying(25) NOT NULL,
+    deduction_percentage numeric(5,2),
+    notes text NOT NULL,
+    created_at timestamp with time zone NOT NULL,
+    material_id bigint NOT NULL,
+    plant_id integer NOT NULL,
+    storage_id bigint,
+    supplier_id bigint NOT NULL
+);
+
+
+--
+-- Name: raw_material_deliveries_id_seq; Type: SEQUENCE; Schema: public; Owner: -
+--
+
+ALTER TABLE public.raw_material_deliveries ALTER COLUMN id ADD GENERATED BY DEFAULT AS IDENTITY (
+    SEQUENCE NAME public.raw_material_deliveries_id_seq
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1
+);
+
+
+--
+-- Name: raw_material_lots; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.raw_material_lots (
+    id bigint NOT NULL,
+    lot_number character varying(50) NOT NULL,
+    received_quantity numeric(10,3) NOT NULL,
+    created_at timestamp with time zone NOT NULL,
+    delivery_id bigint NOT NULL
+);
+
+
+--
+-- Name: raw_material_lots_id_seq; Type: SEQUENCE; Schema: public; Owner: -
+--
+
+ALTER TABLE public.raw_material_lots ALTER COLUMN id ADD GENERATED BY DEFAULT AS IDENTITY (
+    SEQUENCE NAME public.raw_material_lots_id_seq
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1
+);
+
+
+--
+-- Name: raw_material_samples; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.raw_material_samples (
+    id bigint NOT NULL,
+    sample_stage character varying(15) NOT NULL,
+    sample_number integer NOT NULL,
+    sampled_at timestamp with time zone NOT NULL,
+    sampled_by character varying(100) NOT NULL,
+    notes text NOT NULL,
+    created_at timestamp with time zone NOT NULL,
+    delivery_id bigint,
+    material_id bigint NOT NULL,
+    plant_id integer NOT NULL,
+    lab_sample_id bigint,
+    CONSTRAINT raw_material_samples_sample_number_check CHECK ((sample_number >= 0))
+);
+
+
+--
+-- Name: raw_material_samples_id_seq; Type: SEQUENCE; Schema: public; Owner: -
+--
+
+ALTER TABLE public.raw_material_samples ALTER COLUMN id ADD GENERATED BY DEFAULT AS IDENTITY (
+    SEQUENCE NAME public.raw_material_samples_id_seq
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1
+);
+
+
+--
+-- Name: roles; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.roles (
+    role_id integer NOT NULL,
+    role_name character varying(50) NOT NULL
+);
+
+
+--
+-- Name: roles_role_id_seq; Type: SEQUENCE; Schema: public; Owner: -
+--
+
+CREATE SEQUENCE public.roles_role_id_seq
+    AS integer
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1;
+
+
+--
+-- Name: roles_role_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: -
+--
+
+ALTER SEQUENCE public.roles_role_id_seq OWNED BY public.roles.role_id;
+
+
+--
+-- Name: rotation_reference; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.rotation_reference (
+    reference_date date NOT NULL,
+    id bigint NOT NULL
+);
+
+
+--
+-- Name: rotation_reference_id_seq; Type: SEQUENCE; Schema: public; Owner: -
+--
+
+CREATE SEQUENCE public.rotation_reference_id_seq
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1;
+
+
+--
+-- Name: rotation_reference_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: -
+--
+
+ALTER SEQUENCE public.rotation_reference_id_seq OWNED BY public.rotation_reference.id;
+
+
+--
+-- Name: sales_orders; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.sales_orders (
+    id bigint NOT NULL,
+    order_number character varying(50) NOT NULL,
+    customer_name character varying(150) NOT NULL,
+    status character varying(20) NOT NULL,
+    grade_policy character varying(20) NOT NULL,
+    batch_source character varying(20) NOT NULL,
+    total_quantity numeric(12,3) NOT NULL,
+    unit character varying(20) NOT NULL,
+    created_at timestamp with time zone NOT NULL,
+    customer_id bigint,
+    fixed_grade_id bigint,
+    product_classification_id bigint NOT NULL
+);
+
+
+--
+-- Name: sales_orders_id_seq; Type: SEQUENCE; Schema: public; Owner: -
+--
+
+ALTER TABLE public.sales_orders ALTER COLUMN id ADD GENERATED BY DEFAULT AS IDENTITY (
+    SEQUENCE NAME public.sales_orders_id_seq
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1
+);
+
+
+--
+-- Name: shift_groups; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.shift_groups (
+    group_id integer NOT NULL,
+    group_name character varying(5) NOT NULL
+);
+
+
+--
+-- Name: shift_groups_group_id_seq; Type: SEQUENCE; Schema: public; Owner: -
+--
+
+CREATE SEQUENCE public.shift_groups_group_id_seq
+    AS integer
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1;
+
+
+--
+-- Name: shift_groups_group_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: -
+--
+
+ALTER SEQUENCE public.shift_groups_group_id_seq OWNED BY public.shift_groups.group_id;
+
+
+--
+-- Name: shift_rotation_pattern; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.shift_rotation_pattern (
+    group_id integer NOT NULL,
+    day_offset integer NOT NULL,
+    shift_type_id integer NOT NULL,
+    id bigint NOT NULL,
+    CONSTRAINT shift_rotation_pattern_day_offset_check CHECK (((day_offset >= 0) AND (day_offset <= 7)))
+);
+
+
+--
+-- Name: shift_rotation_pattern_id_seq; Type: SEQUENCE; Schema: public; Owner: -
+--
+
+CREATE SEQUENCE public.shift_rotation_pattern_id_seq
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1;
+
+
+--
+-- Name: shift_rotation_pattern_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: -
+--
+
+ALTER SEQUENCE public.shift_rotation_pattern_id_seq OWNED BY public.shift_rotation_pattern.id;
+
+
+--
+-- Name: shift_types; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.shift_types (
+    shift_type_id integer NOT NULL,
+    shift_type_name character varying(20) NOT NULL,
+    start_time time without time zone,
+    end_time time without time zone
+);
+
+
+--
+-- Name: shift_types_shift_type_id_seq; Type: SEQUENCE; Schema: public; Owner: -
+--
+
+CREATE SEQUENCE public.shift_types_shift_type_id_seq
+    AS integer
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1;
+
+
+--
+-- Name: shift_types_shift_type_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: -
+--
+
+ALTER SEQUENCE public.shift_types_shift_type_id_seq OWNED BY public.shift_types.shift_type_id;
+
+
+--
+-- Name: spare_part_issue_vouchers; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.spare_part_issue_vouchers (
+    id bigint NOT NULL,
+    voucher_number character varying(30) NOT NULL,
+    date date NOT NULL,
+    issued_to character varying(150) NOT NULL,
+    quantity numeric(10,3) NOT NULL,
+    purpose text NOT NULL,
+    status character varying(20) NOT NULL,
+    created_at timestamp with time zone NOT NULL,
+    item_id bigint NOT NULL
+);
+
+
+--
+-- Name: spare_part_issue_vouchers_id_seq; Type: SEQUENCE; Schema: public; Owner: -
+--
+
+ALTER TABLE public.spare_part_issue_vouchers ALTER COLUMN id ADD GENERATED BY DEFAULT AS IDENTITY (
+    SEQUENCE NAME public.spare_part_issue_vouchers_id_seq
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1
+);
+
+
+--
+-- Name: spare_part_items; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.spare_part_items (
+    id bigint NOT NULL,
+    item_code character varying(30) NOT NULL,
+    item_name character varying(150) NOT NULL,
+    category character varying(50) NOT NULL,
+    subcategory character varying(50) NOT NULL,
+    unit character varying(20) NOT NULL,
+    minimum_stock numeric(10,3) NOT NULL,
+    maximum_stock numeric(10,3) NOT NULL,
+    reorder_point numeric(10,3) NOT NULL,
+    is_active boolean NOT NULL,
+    plant_id integer NOT NULL
+);
+
+
+--
+-- Name: spare_part_items_id_seq; Type: SEQUENCE; Schema: public; Owner: -
+--
+
+ALTER TABLE public.spare_part_items ALTER COLUMN id ADD GENERATED BY DEFAULT AS IDENTITY (
+    SEQUENCE NAME public.spare_part_items_id_seq
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1
+);
+
+
+--
+-- Name: spare_part_receiving_vouchers; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.spare_part_receiving_vouchers (
+    id bigint NOT NULL,
+    voucher_number character varying(30) NOT NULL,
+    date date NOT NULL,
+    supplier_name character varying(150) NOT NULL,
+    quantity numeric(10,3) NOT NULL,
+    unit_price numeric(10,2) NOT NULL,
+    status character varying(20) NOT NULL,
+    created_at timestamp with time zone NOT NULL,
+    item_id bigint NOT NULL
+);
+
+
+--
+-- Name: spare_part_receiving_vouchers_id_seq; Type: SEQUENCE; Schema: public; Owner: -
+--
+
+ALTER TABLE public.spare_part_receiving_vouchers ALTER COLUMN id ADD GENERATED BY DEFAULT AS IDENTITY (
+    SEQUENCE NAME public.spare_part_receiving_vouchers_id_seq
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1
+);
+
+
+--
+-- Name: spare_part_stock_balances; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.spare_part_stock_balances (
+    id bigint NOT NULL,
+    total_stock numeric(10,3) NOT NULL,
+    available numeric(10,3) NOT NULL,
+    on_loan numeric(10,3) NOT NULL,
+    in_maintenance numeric(10,3) NOT NULL,
+    updated_at timestamp with time zone NOT NULL,
+    item_id bigint NOT NULL
+);
+
+
+--
+-- Name: spare_part_stock_balances_id_seq; Type: SEQUENCE; Schema: public; Owner: -
+--
+
+ALTER TABLE public.spare_part_stock_balances ALTER COLUMN id ADD GENERATED BY DEFAULT AS IDENTITY (
+    SEQUENCE NAME public.spare_part_stock_balances_id_seq
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1
+);
+
+
+--
+-- Name: spare_part_stock_counts; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.spare_part_stock_counts (
+    id bigint NOT NULL,
+    count_date date NOT NULL,
+    system_quantity numeric(10,3) NOT NULL,
+    physical_quantity numeric(10,3) NOT NULL,
+    variance numeric(10,3) NOT NULL,
+    counted_by character varying(100) NOT NULL,
+    notes text NOT NULL,
+    created_at timestamp with time zone NOT NULL,
+    item_id bigint NOT NULL
+);
+
+
+--
+-- Name: spare_part_stock_counts_id_seq; Type: SEQUENCE; Schema: public; Owner: -
+--
+
+ALTER TABLE public.spare_part_stock_counts ALTER COLUMN id ADD GENERATED BY DEFAULT AS IDENTITY (
+    SEQUENCE NAME public.spare_part_stock_counts_id_seq
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1
+);
+
+
+--
+-- Name: spare_part_stock_transactions; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.spare_part_stock_transactions (
+    id bigint NOT NULL,
+    transaction_type character varying(20) NOT NULL,
+    quantity numeric(10,3) NOT NULL,
+    reference_text character varying(200) NOT NULL,
+    occurred_at timestamp with time zone NOT NULL,
+    notes text NOT NULL,
+    created_at timestamp with time zone NOT NULL,
+    item_id bigint NOT NULL,
+    user_id integer
+);
+
+
+--
+-- Name: spare_part_stock_transactions_id_seq; Type: SEQUENCE; Schema: public; Owner: -
+--
+
+ALTER TABLE public.spare_part_stock_transactions ALTER COLUMN id ADD GENERATED BY DEFAULT AS IDENTITY (
+    SEQUENCE NAME public.spare_part_stock_transactions_id_seq
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1
+);
+
+
+--
+-- Name: suppliers; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.suppliers (
+    id bigint NOT NULL,
+    supplier_code character varying(20) NOT NULL,
+    supplier_name character varying(150) NOT NULL,
+    phone character varying(30) NOT NULL,
+    email character varying(254) NOT NULL,
+    address text NOT NULL,
+    is_active boolean NOT NULL
+);
+
+
+--
+-- Name: suppliers_id_seq; Type: SEQUENCE; Schema: public; Owner: -
+--
+
+ALTER TABLE public.suppliers ALTER COLUMN id ADD GENERATED BY DEFAULT AS IDENTITY (
+    SEQUENCE NAME public.suppliers_id_seq
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1
+);
+
+
+--
+-- Name: user_account_userprofile; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.user_account_userprofile (
+    id bigint NOT NULL,
+    org_position_id integer,
+    user_id integer NOT NULL
+);
+
+
+--
+-- Name: user_account_userprofile_id_seq; Type: SEQUENCE; Schema: public; Owner: -
+--
+
+ALTER TABLE public.user_account_userprofile ALTER COLUMN id ADD GENERATED BY DEFAULT AS IDENTITY (
+    SEQUENCE NAME public.user_account_userprofile_id_seq
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1
+);
+
+
+--
+-- Name: v_today_shift_rotating; Type: VIEW; Schema: public; Owner: -
+--
+
+CREATE VIEW public.v_today_shift_rotating AS
+ SELECT e.employee_id,
+    e.full_name,
+    sg.group_name,
+    public.get_group_shift(sg.group_name, CURRENT_DATE) AS today_shift
+   FROM ((public.employee_assignments ea
+     JOIN public.employees e ON ((e.employee_id = ea.employee_id)))
+     JOIN public.shift_groups sg ON ((sg.group_id = ea.group_id)))
+  WHERE (((ea.shift_mode)::text = 'rotating'::text) AND (ea.is_current = true));
+
+
+--
+-- Name: department_plant_scope id; Type: DEFAULT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.department_plant_scope ALTER COLUMN id SET DEFAULT nextval('public.department_plant_scope_id_seq'::regclass);
+
+
+--
+-- Name: departments department_id; Type: DEFAULT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.departments ALTER COLUMN department_id SET DEFAULT nextval('public.departments_department_id_seq'::regclass);
+
+
+--
+-- Name: employee_assignments assignment_id; Type: DEFAULT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.employee_assignments ALTER COLUMN assignment_id SET DEFAULT nextval('public.employee_assignments_assignment_id_seq'::regclass);
+
+
+--
+-- Name: employees employee_id; Type: DEFAULT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.employees ALTER COLUMN employee_id SET DEFAULT nextval('public.employees_employee_id_seq'::regclass);
+
+
+--
+-- Name: org_position_department_scope id; Type: DEFAULT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.org_position_department_scope ALTER COLUMN id SET DEFAULT nextval('public.org_position_department_scope_id_seq'::regclass);
+
+
+--
+-- Name: org_positions position_id; Type: DEFAULT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.org_positions ALTER COLUMN position_id SET DEFAULT nextval('public.org_positions_position_id_seq'::regclass);
+
+
+--
+-- Name: plants plant_id; Type: DEFAULT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.plants ALTER COLUMN plant_id SET DEFAULT nextval('public.plants_plant_id_seq'::regclass);
+
+
+--
+-- Name: roles role_id; Type: DEFAULT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.roles ALTER COLUMN role_id SET DEFAULT nextval('public.roles_role_id_seq'::regclass);
+
+
+--
+-- Name: rotation_reference id; Type: DEFAULT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.rotation_reference ALTER COLUMN id SET DEFAULT nextval('public.rotation_reference_id_seq'::regclass);
+
+
+--
+-- Name: shift_groups group_id; Type: DEFAULT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.shift_groups ALTER COLUMN group_id SET DEFAULT nextval('public.shift_groups_group_id_seq'::regclass);
+
+
+--
+-- Name: shift_rotation_pattern id; Type: DEFAULT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.shift_rotation_pattern ALTER COLUMN id SET DEFAULT nextval('public.shift_rotation_pattern_id_seq'::regclass);
+
+
+--
+-- Name: shift_types shift_type_id; Type: DEFAULT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.shift_types ALTER COLUMN shift_type_id SET DEFAULT nextval('public.shift_types_shift_type_id_seq'::regclass);
+
+
+--
+-- Data for Name: auth_group; Type: TABLE DATA; Schema: public; Owner: -
+--
+
+COPY public.auth_group (id, name) FROM stdin;
+\.
+
+
+--
+-- Data for Name: auth_group_permissions; Type: TABLE DATA; Schema: public; Owner: -
+--
+
+COPY public.auth_group_permissions (id, group_id, permission_id) FROM stdin;
+\.
+
+
+--
+-- Data for Name: auth_permission; Type: TABLE DATA; Schema: public; Owner: -
+--
+
+COPY public.auth_permission (id, name, content_type_id, codename) FROM stdin;
+1	Can add log entry	1	add_logentry
+2	Can change log entry	1	change_logentry
+3	Can delete log entry	1	delete_logentry
+4	Can view log entry	1	view_logentry
+5	Can add permission	2	add_permission
+6	Can change permission	2	change_permission
+7	Can delete permission	2	delete_permission
+8	Can view permission	2	view_permission
+9	Can add group	3	add_group
+10	Can change group	3	change_group
+11	Can delete group	3	delete_group
+12	Can view group	3	view_group
+13	Can add user	4	add_user
+14	Can change user	4	change_user
+15	Can delete user	4	delete_user
+16	Can view user	4	view_user
+17	Can add content type	5	add_contenttype
+18	Can change content type	5	change_contenttype
+19	Can delete content type	5	delete_contenttype
+20	Can view content type	5	view_contenttype
+21	Can add session	6	add_session
+22	Can change session	6	change_session
+23	Can delete session	6	delete_session
+24	Can view session	6	view_session
+25	Can add role	7	add_role
+26	Can change role	7	change_role
+27	Can delete role	7	delete_role
+28	Can view role	7	view_role
+29	Can add department	8	add_department
+30	Can change department	8	change_department
+31	Can delete department	8	delete_department
+32	Can view department	8	view_department
+33	Can add plant	9	add_plant
+34	Can change plant	9	change_plant
+35	Can delete plant	9	delete_plant
+36	Can view plant	9	view_plant
+37	Can add org position	10	add_orgposition
+38	Can change org position	10	change_orgposition
+39	Can delete org position	10	delete_orgposition
+40	Can view org position	10	view_orgposition
+41	Can add department plant scope	11	add_departmentplantscope
+42	Can change department plant scope	11	change_departmentplantscope
+43	Can delete department plant scope	11	delete_departmentplantscope
+44	Can view department plant scope	11	view_departmentplantscope
+45	Can add org position department scope	12	add_orgpositiondepartmentscope
+46	Can change org position department scope	12	change_orgpositiondepartmentscope
+47	Can delete org position department scope	12	delete_orgpositiondepartmentscope
+48	Can view org position department scope	12	view_orgpositiondepartmentscope
+49	Can add User Profile (ملف المستخدم)	13	add_userprofile
+50	Can change User Profile (ملف المستخدم)	13	change_userprofile
+51	Can delete User Profile (ملف المستخدم)	13	delete_userprofile
+52	Can view User Profile (ملف المستخدم)	13	view_userprofile
+53	Can add employee	14	add_employee
+54	Can change employee	14	change_employee
+55	Can delete employee	14	delete_employee
+56	Can view employee	14	view_employee
+57	Can add employee assignment	15	add_employeeassignment
+58	Can change employee assignment	15	change_employeeassignment
+59	Can delete employee assignment	15	delete_employeeassignment
+60	Can view employee assignment	15	view_employeeassignment
+61	Can add rotation reference	16	add_rotationreference
+62	Can change rotation reference	16	change_rotationreference
+63	Can delete rotation reference	16	delete_rotationreference
+64	Can view rotation reference	16	view_rotationreference
+65	Can add shift group	17	add_shiftgroup
+66	Can change shift group	17	change_shiftgroup
+67	Can delete shift group	17	delete_shiftgroup
+68	Can view shift group	17	view_shiftgroup
+69	Can add shift rotation pattern	18	add_shiftrotationpattern
+70	Can change shift rotation pattern	18	change_shiftrotationpattern
+71	Can delete shift rotation pattern	18	delete_shiftrotationpattern
+72	Can view shift rotation pattern	18	view_shiftrotationpattern
+73	Can add shift type	19	add_shifttype
+74	Can change shift type	19	change_shifttype
+75	Can delete shift type	19	delete_shifttype
+76	Can view shift type	19	view_shifttype
+77	Can add material	20	add_material
+78	Can change material	20	change_material
+79	Can delete material	20	delete_material
+80	Can view material	20	view_material
+81	Can add supplier	21	add_supplier
+82	Can change supplier	21	change_supplier
+83	Can delete supplier	21	delete_supplier
+84	Can view supplier	21	view_supplier
+85	Can add material storage	22	add_materialstorage
+86	Can change material storage	22	change_materialstorage
+87	Can delete material storage	22	delete_materialstorage
+88	Can view material storage	22	view_materialstorage
+89	Can add material test	23	add_materialtest
+90	Can change material test	23	change_materialtest
+91	Can delete material test	23	delete_materialtest
+92	Can view material test	23	view_materialtest
+93	Can add raw material delivery	24	add_rawmaterialdelivery
+94	Can change raw material delivery	24	change_rawmaterialdelivery
+95	Can delete raw material delivery	24	delete_rawmaterialdelivery
+96	Can view raw material delivery	24	view_rawmaterialdelivery
+97	Can add inventory transaction	25	add_inventorytransaction
+98	Can change inventory transaction	25	change_inventorytransaction
+99	Can delete inventory transaction	25	delete_inventorytransaction
+100	Can view inventory transaction	25	view_inventorytransaction
+101	Can add raw material lot	26	add_rawmateriallot
+102	Can change raw material lot	26	change_rawmateriallot
+103	Can delete raw material lot	26	delete_rawmateriallot
+104	Can view raw material lot	26	view_rawmateriallot
+105	Can add raw material sample	27	add_rawmaterialsample
+106	Can change raw material sample	27	change_rawmaterialsample
+107	Can delete raw material sample	27	delete_rawmaterialsample
+108	Can view raw material sample	27	view_rawmaterialsample
+109	Can add material specification	28	add_materialspecification
+110	Can change material specification	28	change_materialspecification
+111	Can delete material specification	28	delete_materialspecification
+112	Can view material specification	28	view_materialspecification
+113	Can add raw material analysis	29	add_rawmaterialanalysis
+114	Can change raw material analysis	29	change_rawmaterialanalysis
+115	Can delete raw material analysis	29	delete_rawmaterialanalysis
+116	Can view raw material analysis	29	view_rawmaterialanalysis
+117	Can add quality grade	30	add_qualitygrade
+118	Can change quality grade	30	change_qualitygrade
+119	Can delete quality grade	30	delete_qualitygrade
+120	Can view quality grade	30	view_qualitygrade
+121	Can add conformity rule	31	add_conformityrule
+122	Can change conformity rule	31	change_conformityrule
+123	Can delete conformity rule	31	delete_conformityrule
+124	Can view conformity rule	31	view_conformityrule
+125	Can add output point	32	add_outputpoint
+126	Can change output point	32	change_outputpoint
+127	Can delete output point	32	delete_outputpoint
+128	Can view output point	32	view_outputpoint
+129	Can add packing location	33	add_packinglocation
+130	Can change packing location	33	change_packinglocation
+131	Can delete packing location	33	delete_packinglocation
+132	Can view packing location	33	view_packinglocation
+133	Can add output reading	34	add_outputreading
+134	Can change output reading	34	change_outputreading
+135	Can delete output reading	34	delete_outputreading
+136	Can view output reading	34	view_outputreading
+137	Can add packing type	35	add_packingtype
+138	Can change packing type	35	change_packingtype
+139	Can delete packing type	35	delete_packingtype
+140	Can view packing type	35	view_packingtype
+141	Can add packing event	36	add_packingevent
+142	Can change packing event	36	change_packingevent
+143	Can delete packing event	36	delete_packingevent
+144	Can view packing event	36	view_packingevent
+145	Can add packing conversion	37	add_packingconversion
+146	Can change packing conversion	37	change_packingconversion
+147	Can delete packing conversion	37	delete_packingconversion
+148	Can view packing conversion	37	view_packingconversion
+149	Can add مرحلة تفاعل	38	add_processstage
+150	Can change مرحلة تفاعل	38	change_processstage
+151	Can delete مرحلة تفاعل	38	delete_processstage
+152	Can view مرحلة تفاعل	38	view_processstage
+153	Can add process reading	39	add_processreading
+154	Can change process reading	39	change_processreading
+155	Can delete process reading	39	delete_processreading
+156	Can view process reading	39	view_processreading
+157	Can add quality conformity result	40	add_qualityconformityresult
+158	Can change quality conformity result	40	change_qualityconformityresult
+159	Can delete quality conformity result	40	delete_qualityconformityresult
+160	Can view quality conformity result	40	view_qualityconformityresult
+161	Can add test definition	41	add_testdefinition
+162	Can change test definition	41	change_testdefinition
+163	Can delete test definition	41	delete_testdefinition
+164	Can view test definition	41	view_testdefinition
+165	Can add process stage test	42	add_processstagetest
+166	Can change process stage test	42	change_processstagetest
+167	Can delete process stage test	42	delete_processstagetest
+168	Can view process stage test	42	view_processstagetest
+169	Can add process analysis result	43	add_processanalysisresult
+170	Can change process analysis result	43	change_processanalysisresult
+171	Can delete process analysis result	43	delete_processanalysisresult
+172	Can view process analysis result	43	view_processanalysisresult
+173	Can add output point test	44	add_outputpointtest
+174	Can change output point test	44	change_outputpointtest
+175	Can delete output point test	44	delete_outputpointtest
+176	Can view output point test	44	view_outputpointtest
+177	Can add output analysis result	45	add_outputanalysisresult
+178	Can change output analysis result	45	change_outputanalysisresult
+179	Can delete output analysis result	45	delete_outputanalysisresult
+180	Can view output analysis result	45	view_outputanalysisresult
+181	Can add grade	46	add_grade
+182	Can change grade	46	change_grade
+183	Can delete grade	46	delete_grade
+184	Can view grade	46	view_grade
+185	Can add plant lot setting	47	add_plantlotsetting
+186	Can change plant lot setting	47	change_plantlotsetting
+187	Can delete plant lot setting	47	delete_plantlotsetting
+188	Can view plant lot setting	47	view_plantlotsetting
+189	Can add ton	48	add_ton
+190	Can change ton	48	change_ton
+191	Can delete ton	48	delete_ton
+192	Can view ton	48	view_ton
+193	Can add representative sample	49	add_representativesample
+194	Can change representative sample	49	change_representativesample
+195	Can delete representative sample	49	delete_representativesample
+196	Can view representative sample	49	view_representativesample
+197	Can add ton grade assignment	50	add_tongradeassignment
+198	Can change ton grade assignment	50	change_tongradeassignment
+199	Can delete ton grade assignment	50	delete_tongradeassignment
+200	Can view ton grade assignment	50	view_tongradeassignment
+201	Can add sample chemical result	51	add_samplechemicalresult
+202	Can change sample chemical result	51	change_samplechemicalresult
+203	Can delete sample chemical result	51	delete_samplechemicalresult
+204	Can view sample chemical result	51	view_samplechemicalresult
+205	Can add ton physical result	52	add_tonphysicalresult
+206	Can change ton physical result	52	change_tonphysicalresult
+207	Can delete ton physical result	52	delete_tonphysicalresult
+208	Can view ton physical result	52	view_tonphysicalresult
+209	Can add Plant (مصنع)	53	add_factoryplant
+210	Can change Plant (مصنع)	53	change_factoryplant
+211	Can delete Plant (مصنع)	53	delete_factoryplant
+212	Can view Plant (مصنع)	53	view_factoryplant
+213	Can add grade reason	54	add_gradereason
+214	Can change grade reason	54	change_gradereason
+215	Can delete grade reason	54	delete_gradereason
+216	Can view grade reason	54	view_gradereason
+217	Can add representative group size	55	add_representativegroupsize
+218	Can change representative group size	55	change_representativegroupsize
+219	Can delete representative group size	55	delete_representativegroupsize
+220	Can view representative group size	55	view_representativegroupsize
+221	Can add floor stock movement	56	add_floorstockmovement
+222	Can change floor stock movement	56	change_floorstockmovement
+223	Can delete floor stock movement	56	delete_floorstockmovement
+224	Can view floor stock movement	56	view_floorstockmovement
+225	Can add floor stock balance	57	add_floorstockbalance
+226	Can change floor stock balance	57	change_floorstockbalance
+227	Can delete floor stock balance	57	delete_floorstockbalance
+228	Can view floor stock balance	57	view_floorstockbalance
+229	Can add field definition	58	add_fielddefinition
+230	Can change field definition	58	change_fielddefinition
+231	Can delete field definition	58	delete_fielddefinition
+232	Can view field definition	58	view_fielddefinition
+233	Can add packing type field	59	add_packingtypefield
+234	Can change packing type field	59	change_packingtypefield
+235	Can delete packing type field	59	delete_packingtypefield
+236	Can view packing type field	59	view_packingtypefield
+237	Can add screen	60	add_screen
+238	Can change screen	60	change_screen
+239	Can delete screen	60	delete_screen
+240	Can view screen	60	view_screen
+241	Can add screen column	61	add_screencolumn
+242	Can change screen column	61	change_screencolumn
+243	Can delete screen column	61	delete_screencolumn
+244	Can view screen column	61	view_screencolumn
+245	Can add column permission	62	add_columnpermission
+246	Can change column permission	62	change_columnpermission
+247	Can delete column permission	62	delete_columnpermission
+248	Can view column permission	62	view_columnpermission
+249	Can add spare part item	63	add_sparepartitem
+250	Can change spare part item	63	change_sparepartitem
+251	Can delete spare part item	63	delete_sparepartitem
+252	Can view spare part item	63	view_sparepartitem
+253	Can add receiving voucher	64	add_receivingvoucher
+254	Can change receiving voucher	64	change_receivingvoucher
+255	Can delete receiving voucher	64	delete_receivingvoucher
+256	Can view receiving voucher	64	view_receivingvoucher
+257	Can add issue voucher	65	add_issuevoucher
+258	Can change issue voucher	65	change_issuevoucher
+259	Can delete issue voucher	65	delete_issuevoucher
+260	Can view issue voucher	65	view_issuevoucher
+261	Can add spare part stock balance	66	add_sparepartstockbalance
+262	Can change spare part stock balance	66	change_sparepartstockbalance
+263	Can delete spare part stock balance	66	delete_sparepartstockbalance
+264	Can view spare part stock balance	66	view_sparepartstockbalance
+265	Can add spare part stock transaction	67	add_sparepartstocktransaction
+266	Can change spare part stock transaction	67	change_sparepartstocktransaction
+267	Can delete spare part stock transaction	67	delete_sparepartstocktransaction
+268	Can view spare part stock transaction	67	view_sparepartstocktransaction
+269	Can add stock count	68	add_stockcount
+270	Can change stock count	68	change_stockcount
+271	Can delete stock count	68	delete_stockcount
+272	Can view stock count	68	view_stockcount
+273	Can add packaging material	69	add_packagingmaterial
+274	Can change packaging material	69	change_packagingmaterial
+275	Can delete packaging material	69	delete_packagingmaterial
+276	Can view packaging material	69	view_packagingmaterial
+277	Can add packaging reconciliation	70	add_packagingreconciliation
+278	Can change packaging reconciliation	70	change_packagingreconciliation
+279	Can delete packaging reconciliation	70	delete_packagingreconciliation
+280	Can view packaging reconciliation	70	view_packagingreconciliation
+281	Can add packaging stock ledger	71	add_packagingstockledger
+282	Can change packaging stock ledger	71	change_packagingstockledger
+283	Can delete packaging stock ledger	71	delete_packagingstockledger
+284	Can view packaging stock ledger	71	view_packagingstockledger
+285	Can add packaging supplier	72	add_packagingsupplier
+286	Can change packaging supplier	72	change_packagingsupplier
+287	Can delete packaging supplier	72	delete_packagingsupplier
+288	Can view packaging supplier	72	view_packagingsupplier
+289	Can add packaging receiving	73	add_packagingreceiving
+290	Can change packaging receiving	73	change_packagingreceiving
+291	Can delete packaging receiving	73	delete_packagingreceiving
+292	Can view packaging receiving	73	view_packagingreceiving
+293	Can add packing operation	74	add_packingoperation
+294	Can change packing operation	74	change_packingoperation
+295	Can delete packing operation	74	delete_packingoperation
+296	Can view packing operation	74	view_packingoperation
+297	Can add supplier evaluation	75	add_supplierevaluation
+298	Can change supplier evaluation	75	change_supplierevaluation
+299	Can delete supplier evaluation	75	delete_supplierevaluation
+300	Can view supplier evaluation	75	view_supplierevaluation
+301	Can add factory packaging stock	76	add_factorypackagingstock
+302	Can change factory packaging stock	76	change_factorypackagingstock
+303	Can delete factory packaging stock	76	delete_factorypackagingstock
+304	Can view factory packaging stock	76	view_factorypackagingstock
+305	Can add packaging stock balance	77	add_packagingstockbalance
+306	Can change packaging stock balance	77	change_packagingstockbalance
+307	Can delete packaging stock balance	77	delete_packagingstockbalance
+308	Can view packaging stock balance	77	view_packagingstockbalance
+309	Can add customer	78	add_customer
+310	Can change customer	78	change_customer
+311	Can delete customer	78	delete_customer
+312	Can view customer	78	view_customer
+313	Can add quotation	79	add_quotation
+314	Can change quotation	79	change_quotation
+315	Can delete quotation	79	delete_quotation
+316	Can view quotation	79	view_quotation
+317	Can add quotation line	80	add_quotationline
+318	Can change quotation line	80	change_quotationline
+319	Can delete quotation line	80	delete_quotationline
+320	Can view quotation line	80	view_quotationline
+321	Can add sales order	81	add_salesorder
+322	Can change sales order	81	change_salesorder
+323	Can delete sales order	81	delete_salesorder
+324	Can view sales order	81	view_salesorder
+325	Can add order plant allocation change log	82	add_orderplantallocationchangelog
+326	Can change order plant allocation change log	82	change_orderplantallocationchangelog
+327	Can delete order plant allocation change log	82	delete_orderplantallocationchangelog
+328	Can view order plant allocation change log	82	view_orderplantallocationchangelog
+329	Can add order movement	83	add_ordermovement
+330	Can change order movement	83	change_ordermovement
+331	Can delete order movement	83	delete_ordermovement
+332	Can view order movement	83	view_ordermovement
+333	Can add sales order line	84	add_salesorderline
+334	Can change sales order line	84	change_salesorderline
+335	Can delete sales order line	84	delete_salesorderline
+336	Can view sales order line	84	view_salesorderline
+337	Can add sales price list	85	add_salespricelist
+338	Can change sales price list	85	change_salespricelist
+339	Can delete sales price list	85	delete_salespricelist
+340	Can view sales price list	85	view_salespricelist
+341	Can add order plant allocation	86	add_orderplantallocation
+342	Can change order plant allocation	86	change_orderplantallocation
+343	Can delete order plant allocation	86	delete_orderplantallocation
+344	Can view order plant allocation	86	view_orderplantallocation
+345	Can add sample group	87	add_samplegroup
+346	Can change sample group	87	change_samplegroup
+347	Can delete sample group	87	delete_samplegroup
+348	Can view sample group	87	view_samplegroup
+349	Can add sample	88	add_sample
+350	Can change sample	88	change_sample
+351	Can delete sample	88	delete_sample
+352	Can view sample	88	view_sample
+353	Can add sample required test	89	add_samplerequiredtest
+354	Can change sample required test	89	change_samplerequiredtest
+355	Can delete sample required test	89	delete_samplerequiredtest
+356	Can view sample required test	89	view_samplerequiredtest
+357	Can add sample test result	90	add_sampletestresult
+358	Can change sample test result	90	change_sampletestresult
+359	Can delete sample test result	90	delete_sampletestresult
+360	Can view sample test result	90	view_sampletestresult
+361	Can add quality decision	91	add_qualitydecision
+362	Can change quality decision	91	change_qualitydecision
+363	Can delete quality decision	91	delete_qualitydecision
+364	Can view quality decision	91	view_qualitydecision
+365	Can add product	92	add_product
+366	Can change product	92	change_product
+367	Can delete product	92	delete_product
+368	Can view product	92	view_product
+369	Can add stock ledger	93	add_stockledger
+370	Can change stock ledger	93	change_stockledger
+371	Can delete stock ledger	93	delete_stockledger
+372	Can view stock ledger	93	view_stockledger
+373	Can add stock balance	94	add_stockbalance
+374	Can change stock balance	94	change_stockbalance
+375	Can delete stock balance	94	delete_stockbalance
+376	Can view stock balance	94	view_stockbalance
+\.
+
+
+--
+-- Data for Name: auth_user; Type: TABLE DATA; Schema: public; Owner: -
+--
+
+COPY public.auth_user (id, password, last_login, is_superuser, username, first_name, last_name, email, is_staff, is_active, date_joined) FROM stdin;
+1	pbkdf2_sha256$720000$ulFU0iTH97fYNsiyiyzDkp$L++Mlcqp3LYgj/eaXP+bhN/RVM5GgBxXJg4N4LnTIko=	2026-08-18 23:34:29.926086+00	t	asd				t	t	2026-08-18 23:33:51.84042+00
+\.
+
+
+--
+-- Data for Name: auth_user_groups; Type: TABLE DATA; Schema: public; Owner: -
+--
+
+COPY public.auth_user_groups (id, user_id, group_id) FROM stdin;
+\.
+
+
+--
+-- Data for Name: auth_user_user_permissions; Type: TABLE DATA; Schema: public; Owner: -
+--
+
+COPY public.auth_user_user_permissions (id, user_id, permission_id) FROM stdin;
+\.
+
+
+--
+-- Data for Name: custom_permissions_column_permissions; Type: TABLE DATA; Schema: public; Owner: -
+--
+
+COPY public.custom_permissions_column_permissions (id, level, role_id, column_id) FROM stdin;
+\.
+
+
+--
+-- Data for Name: custom_permissions_screen_columns; Type: TABLE DATA; Schema: public; Owner: -
+--
+
+COPY public.custom_permissions_screen_columns (id, code, label, "order", screen_id) FROM stdin;
+\.
+
+
+--
+-- Data for Name: custom_permissions_screens; Type: TABLE DATA; Schema: public; Owner: -
+--
+
+COPY public.custom_permissions_screens (id, code, name) FROM stdin;
+\.
+
+
+--
+-- Data for Name: department_plant_scope; Type: TABLE DATA; Schema: public; Owner: -
+--
+
+COPY public.department_plant_scope (department_id, plant_id, id) FROM stdin;
+\.
+
+
+--
+-- Data for Name: departments; Type: TABLE DATA; Schema: public; Owner: -
+--
+
+COPY public.departments (department_id, department_code, department_name, parent_department_id) FROM stdin;
+1	QA	QA	\N
+2	QC	QC	\N
+3	LAB_SOP	Lab SOP	\N
+5	WH	Warehouse	\N
+6	SALES	Sales	\N
+4	LAB_ECOPHOS	ECOPHOS LAB	\N
+7	QC_ECOPHOS	QC ECOPHOS	\N
+8	QC_SOP	QC SOP	\N
+9	EXEC	Executive Office	\N
+\.
+
+
+--
+-- Data for Name: django_admin_log; Type: TABLE DATA; Schema: public; Owner: -
+--
+
+COPY public.django_admin_log (id, action_time, object_id, object_repr, action_flag, change_message, content_type_id, user_id) FROM stdin;
+\.
+
+
+--
+-- Data for Name: django_content_type; Type: TABLE DATA; Schema: public; Owner: -
+--
+
+COPY public.django_content_type (id, app_label, model) FROM stdin;
+1	admin	logentry
+2	auth	permission
+3	auth	group
+4	auth	user
+5	contenttypes	contenttype
+6	sessions	session
+7	plants	role
+8	plants	department
+9	plants	plant
+10	plants	orgposition
+11	plants	departmentplantscope
+12	plants	orgpositiondepartmentscope
+13	user_account	userprofile
+14	employees	employee
+15	employees	employeeassignment
+16	employees	rotationreference
+17	employees	shiftgroup
+18	employees	shiftrotationpattern
+19	employees	shifttype
+20	raw_materials	material
+21	raw_materials	supplier
+22	raw_materials	materialstorage
+23	raw_materials	materialtest
+24	raw_materials	rawmaterialdelivery
+25	raw_materials	inventorytransaction
+26	raw_materials	rawmateriallot
+27	raw_materials	rawmaterialsample
+28	raw_materials	materialspecification
+29	raw_materials	rawmaterialanalysis
+30	shared_definitions	qualitygrade
+31	factory	conformityrule
+32	factory	outputpoint
+33	factory	packinglocation
+34	factory	outputreading
+35	factory	packingtype
+36	factory	packingevent
+37	factory	packingconversion
+38	factory	processstage
+39	factory	processreading
+40	factory	qualityconformityresult
+41	factory	testdefinition
+42	factory	processstagetest
+43	factory	processanalysisresult
+44	factory	outputpointtest
+45	factory	outputanalysisresult
+46	factory	grade
+47	factory	plantlotsetting
+48	factory	ton
+49	factory	representativesample
+50	factory	tongradeassignment
+51	factory	samplechemicalresult
+52	factory	tonphysicalresult
+53	factory	factoryplant
+54	factory	gradereason
+55	factory	representativegroupsize
+56	factory	floorstockmovement
+57	factory	floorstockbalance
+58	factory	fielddefinition
+59	factory	packingtypefield
+60	custom_permissions	screen
+61	custom_permissions	screencolumn
+62	custom_permissions	columnpermission
+63	spare_parts	sparepartitem
+64	spare_parts	receivingvoucher
+65	spare_parts	issuevoucher
+66	spare_parts	sparepartstockbalance
+67	spare_parts	sparepartstocktransaction
+68	spare_parts	stockcount
+69	packaging	packagingmaterial
+70	packaging	packagingreconciliation
+71	packaging	packagingstockledger
+72	packaging	packagingsupplier
+73	packaging	packagingreceiving
+74	packaging	packingoperation
+75	packaging	supplierevaluation
+76	packaging	factorypackagingstock
+77	packaging	packagingstockbalance
+78	orders	customer
+79	orders	quotation
+80	orders	quotationline
+81	orders	salesorder
+82	orders	orderplantallocationchangelog
+83	orders	ordermovement
+84	orders	salesorderline
+85	orders	salespricelist
+86	orders	orderplantallocation
+87	lab	samplegroup
+88	lab	sample
+89	lab	samplerequiredtest
+90	lab	sampletestresult
+91	quality_control	qualitydecision
+92	finished_products	product
+93	finished_products	stockledger
+94	finished_products	stockbalance
+\.
+
+
+--
+-- Data for Name: django_migrations; Type: TABLE DATA; Schema: public; Owner: -
+--
+
+COPY public.django_migrations (id, app, name, applied) FROM stdin;
+1	contenttypes	0001_initial	2026-08-18 23:28:28.400856+00
+2	auth	0001_initial	2026-08-18 23:28:28.56209+00
+3	admin	0001_initial	2026-08-18 23:28:28.601938+00
+4	admin	0002_logentry_remove_auto_add	2026-08-18 23:28:28.607357+00
+5	admin	0003_logentry_add_action_flag_choices	2026-08-18 23:28:28.614704+00
+6	contenttypes	0002_remove_content_type_name	2026-08-18 23:28:28.628657+00
+7	auth	0002_alter_permission_name_max_length	2026-08-18 23:28:28.63497+00
+8	auth	0003_alter_user_email_max_length	2026-08-18 23:28:28.645269+00
+9	auth	0004_alter_user_username_opts	2026-08-18 23:28:28.651181+00
+10	auth	0005_alter_user_last_login_null	2026-08-18 23:28:28.661041+00
+11	auth	0006_require_contenttypes_0002	2026-08-18 23:28:28.662977+00
+12	auth	0007_alter_validators_add_error_messages	2026-08-18 23:28:28.672472+00
+13	auth	0008_alter_user_username_max_length	2026-08-18 23:28:28.679668+00
+14	auth	0009_alter_user_last_name_max_length	2026-08-18 23:28:28.68948+00
+15	auth	0010_alter_group_name_max_length	2026-08-18 23:28:28.699494+00
+16	auth	0011_update_proxy_permissions	2026-08-18 23:28:28.707347+00
+17	auth	0012_alter_user_first_name_max_length	2026-08-18 23:28:28.716333+00
+18	employees	0001_initial	2026-08-18 23:28:28.722441+00
+19	employees	0002_shift_tables_id	2026-08-18 23:28:28.73191+00
+20	plants	0001_initial	2026-08-18 23:28:28.739815+00
+21	plants	0002_phase_and_org_updates	2026-08-18 23:28:28.787487+00
+22	plants	0003_departmentplantscope	2026-08-18 23:28:28.792412+00
+23	plants	0004_add_department_category	2026-08-18 23:28:28.795199+00
+24	plants	0005_restructure_org_hierarchy	2026-08-18 23:28:28.818781+00
+25	plants	0006_alter_orgpositiondepartmentscope_options	2026-08-18 23:28:28.828213+00
+26	plants	0007_rename_plant_code_to_product_type	2026-08-18 23:28:28.835513+00
+27	shared_definitions	0001_initial	2026-08-18 23:28:28.842646+00
+28	factory	0001_initial	2026-08-18 23:28:29.212649+00
+29	factory	0002_grade_qualityconformityresult_grade	2026-08-18 23:28:29.252669+00
+30	factory	0003_alter_conformityrule_unique_together_plantlotsetting_and_more	2026-08-18 23:28:29.435273+00
+31	factory	0004_alter_plantlotsetting_reset_threshold	2026-08-18 23:28:29.449207+00
+32	factory	0005_factoryplant_outputreading_analyzed_by_and_more	2026-08-18 23:28:29.760684+00
+33	factory	0006_gradereason_tongradeassignment_reason_and_more	2026-08-18 23:28:29.8414+00
+34	factory	0007_testdefinition_scope	2026-08-18 23:28:29.862644+00
+35	factory	0008_remove_floorstockmovement_grade_and_more	2026-08-18 23:28:31.939277+00
+36	factory	0009_outputreading_notes_outputreading_sample_code_and_more	2026-08-18 23:28:32.370135+00
+37	factory	0010_outputreading_lab_shift_head	2026-08-18 23:28:32.398224+00
+38	factory	0011_fielddefinition_packingtypefield	2026-08-18 23:28:32.432298+00
+39	factory	0012_outputreading_sampling_status_result_time	2026-08-18 23:28:32.47701+00
+40	factory	0013_outputreading_dynamic_data	2026-08-18 23:28:32.562943+00
+41	factory	0014_processstage_order_active	2026-08-18 23:28:32.638855+00
+42	factory	0015_alter_processstage_name	2026-08-18 23:28:32.657963+00
+43	factory	0016_drop_processstage_code_unique	2026-08-18 23:28:32.661255+00
+44	factory	0017_final_product_grade_hierarchy_ton_status_floor_stock_status	2026-08-18 23:28:33.061863+00
+45	factory	0018_alter_tongradeassignment_primary_grade	2026-08-18 23:28:33.102075+00
+46	factory	0019_testdefinition_scopes_json	2026-08-18 23:28:33.159579+00
+47	factory	0020_remove_grade_parent	2026-08-18 23:28:33.264231+00
+48	factory	0021_grade_type	2026-08-18 23:28:33.282692+00
+49	factory	0022_remove_grade_classification	2026-08-18 23:28:33.448874+00
+50	factory	0023_packingtype_ordering	2026-08-18 23:28:33.468241+00
+51	factory	0024_processreading_shift	2026-08-18 23:28:33.498227+00
+52	raw_materials	0001_initial	2026-08-18 23:28:33.772568+00
+53	sessions	0001_initial	2026-08-18 23:28:33.780607+00
+54	user_account	0001_initial	2026-08-18 23:28:33.819126+00
+55	custom_permissions	0001_initial	2026-08-18 23:42:40.554718+00
+56	lab	0001_initial	2026-08-18 23:42:40.725958+00
+57	factory	0025_conformityrule_max_value_conformityrule_min_value_and_more	2026-08-18 23:42:40.867486+00
+58	factory	0026_ton_lab_sample	2026-08-18 23:42:40.904737+00
+59	finished_products	0001_initial	2026-08-18 23:42:41.057276+00
+60	orders	0001_initial	2026-08-18 23:42:41.600707+00
+61	packaging	0001_initial	2026-08-18 23:42:42.335898+00
+62	quality_control	0001_initial	2026-08-18 23:42:42.43471+00
+63	raw_materials	0002_rawmaterialsample_lab_sample	2026-08-18 23:42:42.532841+00
+64	spare_parts	0001_initial	2026-08-18 23:42:43.096643+00
+\.
+
+
+--
+-- Data for Name: django_session; Type: TABLE DATA; Schema: public; Owner: -
+--
+
+COPY public.django_session (session_key, session_data, expire_date) FROM stdin;
+md8m8dl4de5r05z91u7391bzrwqmy99u	.eJxVjEEOwiAQAP_C2RCQsks8evcNZGG3UjWQlPZk_Lsh6UGvM5N5q0j7VuLeZY0Lq4uy6vTLEuWn1CH4QfXedG51W5ekR6IP2_WtsbyuR_s3KNTL2AYzs0GX5ZzFsgtgASzilMgERvZ-sgHJzYIhCxgvDkwiFnCJgJL6fAHT7Df6:1wwTK9:6GwaKPW1AGgr6k36Cb_1oSZh7HwmJOxr0Q1PYMnzl6E	2026-09-01 23:34:29.928429+00
+\.
+
+
+--
+-- Data for Name: employee_assignments; Type: TABLE DATA; Schema: public; Owner: -
+--
+
+COPY public.employee_assignments (assignment_id, employee_id, position_id, shift_mode, group_id, fixed_shift_type_id, start_date, end_date, is_current) FROM stdin;
+\.
+
+
+--
+-- Data for Name: employees; Type: TABLE DATA; Schema: public; Owner: -
+--
+
+COPY public.employees (employee_id, full_name, national_id, phone, hire_date, is_active) FROM stdin;
+\.
+
+
+--
+-- Data for Name: factory_conformity_rules; Type: TABLE DATA; Schema: public; Owner: -
+--
+
+COPY public.factory_conformity_rules (id, name, description, plant_id, quality_grade_id, max_value, min_value, source_type, test_id) FROM stdin;
+\.
+
+
+--
+-- Data for Name: factory_field_definitions; Type: TABLE DATA; Schema: public; Owner: -
+--
+
+COPY public.factory_field_definitions (id, key, name, field_type, category, unit, choices, is_active) FROM stdin;
+\.
+
+
+--
+-- Data for Name: factory_floor_stock_balances; Type: TABLE DATA; Schema: public; Owner: -
+--
+
+COPY public.factory_floor_stock_balances (id, quantity, updated_at, grade_id, plant_id, status) FROM stdin;
+\.
+
+
+--
+-- Data for Name: factory_floor_stock_movements; Type: TABLE DATA; Schema: public; Owner: -
+--
+
+COPY public.factory_floor_stock_movements (id, movement_type, quantity, occurred_at, notes, grade_id, plant_id, ton_id, status) FROM stdin;
+\.
+
+
+--
+-- Data for Name: factory_grade_reasons; Type: TABLE DATA; Schema: public; Owner: -
+--
+
+COPY public.factory_grade_reasons (id, reason_type, text, plant_id) FROM stdin;
+\.
+
+
+--
+-- Data for Name: factory_grades; Type: TABLE DATA; Schema: public; Owner: -
+--
+
+COPY public.factory_grades (id, code, is_active, plant_id, grade_type) FROM stdin;
+\.
+
+
+--
+-- Data for Name: factory_output_analysis_results; Type: TABLE DATA; Schema: public; Owner: -
+--
+
+COPY public.factory_output_analysis_results (id, result, reading_id, test_id) FROM stdin;
+\.
+
+
+--
+-- Data for Name: factory_output_point_tests; Type: TABLE DATA; Schema: public; Owner: -
+--
+
+COPY public.factory_output_point_tests (id, output_point_id, test_id) FROM stdin;
+\.
+
+
+--
+-- Data for Name: factory_output_points; Type: TABLE DATA; Schema: public; Owner: -
+--
+
+COPY public.factory_output_points (id, code, name, plant_id) FROM stdin;
+\.
+
+
+--
+-- Data for Name: factory_output_readings; Type: TABLE DATA; Schema: public; Owner: -
+--
+
+COPY public.factory_output_readings (id, sampled_at, created_at, output_point_id, plant_id, shift_id, packing_location_id, packing_type_id, analyzed_by_id, product_name, reviewed_by_id, sampled_by_id, notes, sample_code, lab_shift_head_id, sampling_status, result_time, dynamic_data) FROM stdin;
+\.
+
+
+--
+-- Data for Name: factory_packaging_stock; Type: TABLE DATA; Schema: public; Owner: -
+--
+
+COPY public.factory_packaging_stock (id, quantity, updated_at, factory_id, material_id) FROM stdin;
+\.
+
+
+--
+-- Data for Name: factory_packing_conversions; Type: TABLE DATA; Schema: public; Owner: -
+--
+
+COPY public.factory_packing_conversions (id, quantity, unit, converted_at, plant_id, source_event_id, target_packing_type_id, created_at, notes) FROM stdin;
+\.
+
+
+--
+-- Data for Name: factory_packing_events; Type: TABLE DATA; Schema: public; Owner: -
+--
+
+COPY public.factory_packing_events (id, quantity, unit, packed_at, output_reading_id, plant_id, packing_type_id, created_at) FROM stdin;
+\.
+
+
+--
+-- Data for Name: factory_packing_locations; Type: TABLE DATA; Schema: public; Owner: -
+--
+
+COPY public.factory_packing_locations (id, name, plant_id) FROM stdin;
+\.
+
+
+--
+-- Data for Name: factory_packing_type_fields; Type: TABLE DATA; Schema: public; Owner: -
+--
+
+COPY public.factory_packing_type_fields (id, "order", is_required, field_id, packing_type_id) FROM stdin;
+\.
+
+
+--
+-- Data for Name: factory_packing_types; Type: TABLE DATA; Schema: public; Owner: -
+--
+
+COPY public.factory_packing_types (id, name, plant_id) FROM stdin;
+\.
+
+
+--
+-- Data for Name: factory_plant_lot_settings; Type: TABLE DATA; Schema: public; Owner: -
+--
+
+COPY public.factory_plant_lot_settings (id, lot_mode, reset_threshold, current_cycle, current_sequence, plant_id, sampling_department, cumulative_weight) FROM stdin;
+\.
+
+
+--
+-- Data for Name: factory_process_analysis_results; Type: TABLE DATA; Schema: public; Owner: -
+--
+
+COPY public.factory_process_analysis_results (id, result, reading_id, test_id) FROM stdin;
+\.
+
+
+--
+-- Data for Name: factory_process_readings; Type: TABLE DATA; Schema: public; Owner: -
+--
+
+COPY public.factory_process_readings (id, sampled_at, notes, created_at, plant_id, stage_id, shift_id) FROM stdin;
+\.
+
+
+--
+-- Data for Name: factory_process_stage_tests; Type: TABLE DATA; Schema: public; Owner: -
+--
+
+COPY public.factory_process_stage_tests (id, stage_id, test_id) FROM stdin;
+\.
+
+
+--
+-- Data for Name: factory_process_stages; Type: TABLE DATA; Schema: public; Owner: -
+--
+
+COPY public.factory_process_stages (id, code, name, plant_id, is_active, "order") FROM stdin;
+\.
+
+
+--
+-- Data for Name: factory_quality_conformity_results; Type: TABLE DATA; Schema: public; Owner: -
+--
+
+COPY public.factory_quality_conformity_results (id, conformity_rule_id, quality_grade_id, reading_id, grade_id, notes) FROM stdin;
+\.
+
+
+--
+-- Data for Name: factory_representative_group_sizes; Type: TABLE DATA; Schema: public; Owner: -
+--
+
+COPY public.factory_representative_group_sizes (id, default_group_size, packing_type_id, plant_id) FROM stdin;
+\.
+
+
+--
+-- Data for Name: factory_representative_samples; Type: TABLE DATA; Schema: public; Owner: -
+--
+
+COPY public.factory_representative_samples (id, cycle_number, code, weight, created_at, plant_id) FROM stdin;
+\.
+
+
+--
+-- Data for Name: factory_representative_samples_tons; Type: TABLE DATA; Schema: public; Owner: -
+--
+
+COPY public.factory_representative_samples_tons (id, representativesample_id, ton_id) FROM stdin;
+\.
+
+
+--
+-- Data for Name: factory_sample_chemical_results; Type: TABLE DATA; Schema: public; Owner: -
+--
+
+COPY public.factory_sample_chemical_results (id, result, is_overridden, representative_sample_id, test_id, ton_id) FROM stdin;
+\.
+
+
+--
+-- Data for Name: factory_test_definitions; Type: TABLE DATA; Schema: public; Owner: -
+--
+
+COPY public.factory_test_definitions (id, name, category, unit, plant_id, scopes) FROM stdin;
+\.
+
+
+--
+-- Data for Name: factory_ton_grade_assignments; Type: TABLE DATA; Schema: public; Owner: -
+--
+
+COPY public.factory_ton_grade_assignments (id, assigned_at, assigned_by_id, ton_id, reason_id, notes, primary_grade_id, secondary_grade_id) FROM stdin;
+\.
+
+
+--
+-- Data for Name: factory_ton_physical_results; Type: TABLE DATA; Schema: public; Owner: -
+--
+
+COPY public.factory_ton_physical_results (id, result, test_id, ton_id) FROM stdin;
+\.
+
+
+--
+-- Data for Name: factory_tons; Type: TABLE DATA; Schema: public; Owner: -
+--
+
+COPY public.factory_tons (id, cycle_number, sequence_number, weight, code, production_date, created_at, plant_id, production_shift_id, output_reading_id, status, lab_sample_id) FROM stdin;
+\.
+
+
+--
+-- Data for Name: finished_products_products; Type: TABLE DATA; Schema: public; Owner: -
+--
+
+COPY public.finished_products_products (id, product_code, product_name, product_type, unit_of_measure, traceability_level, batch_required, chemical_tests_required, physical_tests_required, stock_product, is_active, created_at) FROM stdin;
+\.
+
+
+--
+-- Data for Name: finished_products_products_packing_types; Type: TABLE DATA; Schema: public; Owner: -
+--
+
+COPY public.finished_products_products_packing_types (id, product_id, packingtype_id) FROM stdin;
+\.
+
+
+--
+-- Data for Name: finished_products_products_plants; Type: TABLE DATA; Schema: public; Owner: -
+--
+
+COPY public.finished_products_products_plants (id, product_id, plant_id) FROM stdin;
+\.
+
+
+--
+-- Data for Name: finished_products_stock_balances; Type: TABLE DATA; Schema: public; Owner: -
+--
+
+COPY public.finished_products_stock_balances (id, total_stock, reserved, available, under_preparation, qc_hold, updated_at, packaging_type_id, plant_id, product_id) FROM stdin;
+\.
+
+
+--
+-- Data for Name: finished_products_stock_ledger; Type: TABLE DATA; Schema: public; Owner: -
+--
+
+COPY public.finished_products_stock_ledger (id, transaction_type, quantity, reference_text, occurred_at, notes, created_at, packaging_type_id, plant_id, product_id, user_id) FROM stdin;
+\.
+
+
+--
+-- Data for Name: inventory_transactions; Type: TABLE DATA; Schema: public; Owner: -
+--
+
+COPY public.inventory_transactions (id, movement_type, accuracy_type, quantity_tons, transaction_date, notes, created_at, plant_id, material_id, storage_id, reference_delivery_id) FROM stdin;
+\.
+
+
+--
+-- Data for Name: lab_sample_groups; Type: TABLE DATA; Schema: public; Owner: -
+--
+
+COPY public.lab_sample_groups (id, group_code, location_label, packing_type_name, packing_type_ref, period_start, period_end, is_open, created_at, plant_id) FROM stdin;
+\.
+
+
+--
+-- Data for Name: lab_sample_required_tests; Type: TABLE DATA; Schema: public; Owner: -
+--
+
+COPY public.lab_sample_required_tests (id, test_name, test_object_id, is_completed, sample_id, test_content_type_id) FROM stdin;
+\.
+
+
+--
+-- Data for Name: lab_sample_test_results; Type: TABLE DATA; Schema: public; Owner: -
+--
+
+COPY public.lab_sample_test_results (id, test_name, test_object_id, result, entered_at, entered_by_id, sample_id, test_content_type_id) FROM stdin;
+\.
+
+
+--
+-- Data for Name: lab_samples; Type: TABLE DATA; Schema: public; Owner: -
+--
+
+COPY public.lab_samples (id, sample_code, source_type, object_id, status, collected_at, ready_for_decision_at, notes, created_at, collected_by_id, content_type_id, lab_department_id, plant_id, group_id) FROM stdin;
+\.
+
+
+--
+-- Data for Name: material_specifications; Type: TABLE DATA; Schema: public; Owner: -
+--
+
+COPY public.material_specifications (id, specification_min, specification_max, is_active, notes, material_id, test_id) FROM stdin;
+\.
+
+
+--
+-- Data for Name: material_storages; Type: TABLE DATA; Schema: public; Owner: -
+--
+
+COPY public.material_storages (id, storage_code, storage_name, description, allow_estimated_issue, is_active, material_id, plant_id) FROM stdin;
+\.
+
+
+--
+-- Data for Name: material_tests; Type: TABLE DATA; Schema: public; Owner: -
+--
+
+COPY public.material_tests (id, test_code, test_name, unit, material_id) FROM stdin;
+\.
+
+
+--
+-- Data for Name: materials; Type: TABLE DATA; Schema: public; Owner: -
+--
+
+COPY public.materials (id, material_code, material_name, description, is_active) FROM stdin;
+\.
+
+
+--
+-- Data for Name: order_movements; Type: TABLE DATA; Schema: public; Owner: -
+--
+
+COPY public.order_movements (id, movement_type, quantity, occurred_at, recorded_at, notes, grade_id, source_plant_id, order_id) FROM stdin;
+\.
+
+
+--
+-- Data for Name: order_plant_allocation_change_log; Type: TABLE DATA; Schema: public; Owner: -
+--
+
+COPY public.order_plant_allocation_change_log (id, quantity, reason, changed_at, changed_by_id, from_plant_id, to_plant_id, order_id) FROM stdin;
+\.
+
+
+--
+-- Data for Name: order_plant_allocations; Type: TABLE DATA; Schema: public; Owner: -
+--
+
+COPY public.order_plant_allocations (id, allocated_quantity, updated_at, plant_id, order_id) FROM stdin;
+\.
+
+
+--
+-- Data for Name: orders_customers; Type: TABLE DATA; Schema: public; Owner: -
+--
+
+COPY public.orders_customers (id, customer_code, customer_name, contact_person, phone, email, address, credit_limit, payment_terms, status) FROM stdin;
+\.
+
+
+--
+-- Data for Name: orders_price_lists; Type: TABLE DATA; Schema: public; Owner: -
+--
+
+COPY public.orders_price_lists (id, customer_type, price, currency, valid_from, valid_to, packaging_type_id, product_id) FROM stdin;
+\.
+
+
+--
+-- Data for Name: orders_quotation_lines; Type: TABLE DATA; Schema: public; Owner: -
+--
+
+COPY public.orders_quotation_lines (id, quantity, unit_price, packaging_type_id, product_id, quotation_id) FROM stdin;
+\.
+
+
+--
+-- Data for Name: orders_quotations; Type: TABLE DATA; Schema: public; Owner: -
+--
+
+COPY public.orders_quotations (id, quotation_number, status, valid_until, notes, created_at, customer_id) FROM stdin;
+\.
+
+
+--
+-- Data for Name: orders_sales_order_lines; Type: TABLE DATA; Schema: public; Owner: -
+--
+
+COPY public.orders_sales_order_lines (id, quantity, unit_price, order_id, packaging_type_id, plant_id, product_id) FROM stdin;
+\.
+
+
+--
+-- Data for Name: org_position_department_scope; Type: TABLE DATA; Schema: public; Owner: -
+--
+
+COPY public.org_position_department_scope (id, position_id, department_id) FROM stdin;
+\.
+
+
+--
+-- Data for Name: org_positions; Type: TABLE DATA; Schema: public; Owner: -
+--
+
+COPY public.org_positions (position_id, entity_type, plant_id, department_id, role_id, hierarchy_level) FROM stdin;
+61	department	\N	1	2	2
+62	department	\N	1	3	3
+63	department	\N	1	4	4
+64	department	\N	1	5	5
+65	department	\N	1	6	1
+66	department	\N	2	2	2
+67	department	\N	2	3	3
+68	department	\N	2	4	4
+69	department	\N	2	5	5
+70	department	\N	2	6	1
+71	department	\N	3	2	2
+72	department	\N	3	3	3
+73	department	\N	3	4	4
+74	department	\N	3	5	5
+75	department	\N	3	7	1
+76	department	\N	4	2	2
+77	department	\N	4	3	3
+78	department	\N	4	4	4
+79	department	\N	4	5	5
+80	department	\N	4	7	1
+81	department	\N	5	2	2
+82	department	\N	5	3	3
+83	department	\N	5	5	5
+84	department	\N	5	8	1
+85	department	\N	5	9	4
+86	department	\N	6	2	2
+87	department	\N	6	5	4
+88	department	\N	6	10	1
+89	department	\N	6	11	3
+90	department	\N	9	12	1
+91	department	\N	9	13	1
+92	department	\N	9	14	2
+93	department	\N	9	15	1
+94	department	\N	9	16	1
+95	department	\N	9	17	1
+\.
+
+
+--
+-- Data for Name: packaging_materials; Type: TABLE DATA; Schema: public; Owner: -
+--
+
+COPY public.packaging_materials (id, material_code, material_name, category, subcategory, unit, minimum_stock, maximum_stock, reorder_point, inspection_required, inspection_template, is_active) FROM stdin;
+\.
+
+
+--
+-- Data for Name: packaging_materials_products; Type: TABLE DATA; Schema: public; Owner: -
+--
+
+COPY public.packaging_materials_products (id, packagingmaterial_id, product_id) FROM stdin;
+\.
+
+
+--
+-- Data for Name: packaging_receiving; Type: TABLE DATA; Schema: public; Owner: -
+--
+
+COPY public.packaging_receiving (id, receiving_number, date, quantity_received, batch_number, expiry_date, status, created_at, lab_sample_id, material_id, product_id, supplier_id) FROM stdin;
+\.
+
+
+--
+-- Data for Name: packaging_reconciliation; Type: TABLE DATA; Schema: public; Owner: -
+--
+
+COPY public.packaging_reconciliation (id, warehouse_qty, factory_qty, status, reconciled_at, material_id) FROM stdin;
+\.
+
+
+--
+-- Data for Name: packaging_stock_balances; Type: TABLE DATA; Schema: public; Owner: -
+--
+
+COPY public.packaging_stock_balances (id, status, quantity, updated_at, material_id) FROM stdin;
+\.
+
+
+--
+-- Data for Name: packaging_stock_ledger; Type: TABLE DATA; Schema: public; Owner: -
+--
+
+COPY public.packaging_stock_ledger (id, transaction_type, quantity, status, reference_text, occurred_at, notes, created_at, material_id, user_id) FROM stdin;
+\.
+
+
+--
+-- Data for Name: packaging_supplier_evaluations; Type: TABLE DATA; Schema: public; Owner: -
+--
+
+COPY public.packaging_supplier_evaluations (id, acceptance_rate, rejection_rate, quality_score, evaluated_at, supplier_id) FROM stdin;
+\.
+
+
+--
+-- Data for Name: packaging_suppliers; Type: TABLE DATA; Schema: public; Owner: -
+--
+
+COPY public.packaging_suppliers (id, supplier_code, supplier_name, phone, email, address, is_active) FROM stdin;
+\.
+
+
+--
+-- Data for Name: packaging_suppliers_materials_supplied; Type: TABLE DATA; Schema: public; Owner: -
+--
+
+COPY public.packaging_suppliers_materials_supplied (id, packagingsupplier_id, packagingmaterial_id) FROM stdin;
+\.
+
+
+--
+-- Data for Name: packing_operations; Type: TABLE DATA; Schema: public; Owner: -
+--
+
+COPY public.packing_operations (id, quantity_used, quantity_waste, quantity_remaining, operated_at, factory_id, material_id, product_id, user_id) FROM stdin;
+\.
+
+
+--
+-- Data for Name: plants; Type: TABLE DATA; Schema: public; Owner: -
+--
+
+COPY public.plants (plant_id, product_type, plant_name) FROM stdin;
+\.
+
+
+--
+-- Data for Name: quality_control_decisions; Type: TABLE DATA; Schema: public; Owner: -
+--
+
+COPY public.quality_control_decisions (id, suggested_decision, final_decision, decided_at, reason, decided_by_id, sample_id, suggested_by_rule_id) FROM stdin;
+\.
+
+
+--
+-- Data for Name: quality_grades; Type: TABLE DATA; Schema: public; Owner: -
+--
+
+COPY public.quality_grades (id, code, description) FROM stdin;
+\.
+
+
+--
+-- Data for Name: raw_material_analysis; Type: TABLE DATA; Schema: public; Owner: -
+--
+
+COPY public.raw_material_analysis (id, result, is_conforming, remarks, created_at, test_id, sample_id) FROM stdin;
+\.
+
+
+--
+-- Data for Name: raw_material_deliveries; Type: TABLE DATA; Schema: public; Owner: -
+--
+
+COPY public.raw_material_deliveries (id, vehicle_number, weight_tons, arrived_at, decision, deduction_percentage, notes, created_at, material_id, plant_id, storage_id, supplier_id) FROM stdin;
+\.
+
+
+--
+-- Data for Name: raw_material_lots; Type: TABLE DATA; Schema: public; Owner: -
+--
+
+COPY public.raw_material_lots (id, lot_number, received_quantity, created_at, delivery_id) FROM stdin;
+\.
+
+
+--
+-- Data for Name: raw_material_samples; Type: TABLE DATA; Schema: public; Owner: -
+--
+
+COPY public.raw_material_samples (id, sample_stage, sample_number, sampled_at, sampled_by, notes, created_at, delivery_id, material_id, plant_id, lab_sample_id) FROM stdin;
+\.
+
+
+--
+-- Data for Name: roles; Type: TABLE DATA; Schema: public; Owner: -
+--
+
+COPY public.roles (role_id, role_name) FROM stdin;
+1	مدير إنتاج
+2	رئيس قسم
+3	رئيس وردية
+4	الكيميائي
+5	مشرف
+6	مدير الإدارة
+7	مدير المعمل
+8	مدير المخازن
+9	أمين مخزن
+10	مدير المبيعات
+11	مهندس مسؤول
+12	CEO
+13	Deputy CEO
+14	Head of Quality Sector
+15	Head of ECOPHOS Production Sector
+16	Head of SOP Production Sector
+17	Head of SA Production Sector
+\.
+
+
+--
+-- Data for Name: rotation_reference; Type: TABLE DATA; Schema: public; Owner: -
+--
+
+COPY public.rotation_reference (reference_date, id) FROM stdin;
+2026-07-20	1
+\.
+
+
+--
+-- Data for Name: sales_orders; Type: TABLE DATA; Schema: public; Owner: -
+--
+
+COPY public.sales_orders (id, order_number, customer_name, status, grade_policy, batch_source, total_quantity, unit, created_at, customer_id, fixed_grade_id, product_classification_id) FROM stdin;
+\.
+
+
+--
+-- Data for Name: shift_groups; Type: TABLE DATA; Schema: public; Owner: -
+--
+
+COPY public.shift_groups (group_id, group_name) FROM stdin;
+1	A
+2	B
+3	C
+4	D
+\.
+
+
+--
+-- Data for Name: shift_rotation_pattern; Type: TABLE DATA; Schema: public; Owner: -
+--
+
+COPY public.shift_rotation_pattern (group_id, day_offset, shift_type_id, id) FROM stdin;
+1	4	5	1
+1	5	5	2
+1	2	4	3
+1	3	4	4
+1	0	3	5
+1	1	3	6
+1	6	2	7
+1	7	2	8
+2	2	5	9
+2	3	5	10
+2	0	4	11
+2	1	4	12
+2	6	3	13
+2	7	3	14
+2	4	2	15
+2	5	2	16
+3	6	5	17
+3	7	5	18
+3	4	4	19
+3	5	4	20
+3	2	3	21
+3	3	3	22
+3	0	2	23
+3	1	2	24
+4	0	5	25
+4	1	5	26
+4	6	4	27
+4	7	4	28
+4	4	3	29
+4	5	3	30
+4	2	2	31
+4	3	2	32
+\.
+
+
+--
+-- Data for Name: shift_types; Type: TABLE DATA; Schema: public; Owner: -
+--
+
+COPY public.shift_types (shift_type_id, shift_type_name, start_time, end_time) FROM stdin;
+1	نهاري	08:00:00	16:00:00
+2	أولى	08:00:00	16:00:00
+3	ثانية	16:00:00	00:00:00
+4	ثالثة	00:00:00	08:00:00
+5	إجازة	\N	\N
+\.
+
+
+--
+-- Data for Name: spare_part_issue_vouchers; Type: TABLE DATA; Schema: public; Owner: -
+--
+
+COPY public.spare_part_issue_vouchers (id, voucher_number, date, issued_to, quantity, purpose, status, created_at, item_id) FROM stdin;
+\.
+
+
+--
+-- Data for Name: spare_part_items; Type: TABLE DATA; Schema: public; Owner: -
+--
+
+COPY public.spare_part_items (id, item_code, item_name, category, subcategory, unit, minimum_stock, maximum_stock, reorder_point, is_active, plant_id) FROM stdin;
+\.
+
+
+--
+-- Data for Name: spare_part_receiving_vouchers; Type: TABLE DATA; Schema: public; Owner: -
+--
+
+COPY public.spare_part_receiving_vouchers (id, voucher_number, date, supplier_name, quantity, unit_price, status, created_at, item_id) FROM stdin;
+\.
+
+
+--
+-- Data for Name: spare_part_stock_balances; Type: TABLE DATA; Schema: public; Owner: -
+--
+
+COPY public.spare_part_stock_balances (id, total_stock, available, on_loan, in_maintenance, updated_at, item_id) FROM stdin;
+\.
+
+
+--
+-- Data for Name: spare_part_stock_counts; Type: TABLE DATA; Schema: public; Owner: -
+--
+
+COPY public.spare_part_stock_counts (id, count_date, system_quantity, physical_quantity, variance, counted_by, notes, created_at, item_id) FROM stdin;
+\.
+
+
+--
+-- Data for Name: spare_part_stock_transactions; Type: TABLE DATA; Schema: public; Owner: -
+--
+
+COPY public.spare_part_stock_transactions (id, transaction_type, quantity, reference_text, occurred_at, notes, created_at, item_id, user_id) FROM stdin;
+\.
+
+
+--
+-- Data for Name: suppliers; Type: TABLE DATA; Schema: public; Owner: -
+--
+
+COPY public.suppliers (id, supplier_code, supplier_name, phone, email, address, is_active) FROM stdin;
+\.
+
+
+--
+-- Data for Name: user_account_userprofile; Type: TABLE DATA; Schema: public; Owner: -
+--
+
+COPY public.user_account_userprofile (id, org_position_id, user_id) FROM stdin;
+\.
+
+
+--
+-- Name: auth_group_id_seq; Type: SEQUENCE SET; Schema: public; Owner: -
+--
+
+SELECT pg_catalog.setval('public.auth_group_id_seq', 1, false);
+
+
+--
+-- Name: auth_group_permissions_id_seq; Type: SEQUENCE SET; Schema: public; Owner: -
+--
+
+SELECT pg_catalog.setval('public.auth_group_permissions_id_seq', 1, false);
+
+
+--
+-- Name: auth_permission_id_seq; Type: SEQUENCE SET; Schema: public; Owner: -
+--
+
+SELECT pg_catalog.setval('public.auth_permission_id_seq', 376, true);
+
+
+--
+-- Name: auth_user_groups_id_seq; Type: SEQUENCE SET; Schema: public; Owner: -
+--
+
+SELECT pg_catalog.setval('public.auth_user_groups_id_seq', 1, false);
+
+
+--
+-- Name: auth_user_id_seq; Type: SEQUENCE SET; Schema: public; Owner: -
+--
+
+SELECT pg_catalog.setval('public.auth_user_id_seq', 1, true);
+
+
+--
+-- Name: auth_user_user_permissions_id_seq; Type: SEQUENCE SET; Schema: public; Owner: -
+--
+
+SELECT pg_catalog.setval('public.auth_user_user_permissions_id_seq', 1, false);
+
+
+--
+-- Name: custom_permissions_column_permissions_id_seq; Type: SEQUENCE SET; Schema: public; Owner: -
+--
+
+SELECT pg_catalog.setval('public.custom_permissions_column_permissions_id_seq', 1, false);
+
+
+--
+-- Name: custom_permissions_screen_columns_id_seq; Type: SEQUENCE SET; Schema: public; Owner: -
+--
+
+SELECT pg_catalog.setval('public.custom_permissions_screen_columns_id_seq', 1, false);
+
+
+--
+-- Name: custom_permissions_screens_id_seq; Type: SEQUENCE SET; Schema: public; Owner: -
+--
+
+SELECT pg_catalog.setval('public.custom_permissions_screens_id_seq', 1, false);
+
+
+--
+-- Name: department_plant_scope_id_seq; Type: SEQUENCE SET; Schema: public; Owner: -
+--
+
+SELECT pg_catalog.setval('public.department_plant_scope_id_seq', 60, true);
+
+
+--
+-- Name: departments_department_id_seq; Type: SEQUENCE SET; Schema: public; Owner: -
+--
+
+SELECT pg_catalog.setval('public.departments_department_id_seq', 9, true);
+
+
+--
+-- Name: django_admin_log_id_seq; Type: SEQUENCE SET; Schema: public; Owner: -
+--
+
+SELECT pg_catalog.setval('public.django_admin_log_id_seq', 1, false);
+
+
+--
+-- Name: django_content_type_id_seq; Type: SEQUENCE SET; Schema: public; Owner: -
+--
+
+SELECT pg_catalog.setval('public.django_content_type_id_seq', 94, true);
+
+
+--
+-- Name: django_migrations_id_seq; Type: SEQUENCE SET; Schema: public; Owner: -
+--
+
+SELECT pg_catalog.setval('public.django_migrations_id_seq', 64, true);
+
+
+--
+-- Name: employee_assignments_assignment_id_seq; Type: SEQUENCE SET; Schema: public; Owner: -
+--
+
+SELECT pg_catalog.setval('public.employee_assignments_assignment_id_seq', 1, false);
+
+
+--
+-- Name: employees_employee_id_seq; Type: SEQUENCE SET; Schema: public; Owner: -
+--
+
+SELECT pg_catalog.setval('public.employees_employee_id_seq', 1, false);
+
+
+--
+-- Name: factory_conformity_rules_id_seq; Type: SEQUENCE SET; Schema: public; Owner: -
+--
+
+SELECT pg_catalog.setval('public.factory_conformity_rules_id_seq', 1, false);
+
+
+--
+-- Name: factory_field_definitions_id_seq; Type: SEQUENCE SET; Schema: public; Owner: -
+--
+
+SELECT pg_catalog.setval('public.factory_field_definitions_id_seq', 1, false);
+
+
+--
+-- Name: factory_floor_stock_balances_id_seq; Type: SEQUENCE SET; Schema: public; Owner: -
+--
+
+SELECT pg_catalog.setval('public.factory_floor_stock_balances_id_seq', 1, false);
+
+
+--
+-- Name: factory_floor_stock_movements_id_seq; Type: SEQUENCE SET; Schema: public; Owner: -
+--
+
+SELECT pg_catalog.setval('public.factory_floor_stock_movements_id_seq', 1, false);
+
+
+--
+-- Name: factory_grade_reasons_id_seq; Type: SEQUENCE SET; Schema: public; Owner: -
+--
+
+SELECT pg_catalog.setval('public.factory_grade_reasons_id_seq', 1, false);
+
+
+--
+-- Name: factory_grades_id_seq; Type: SEQUENCE SET; Schema: public; Owner: -
+--
+
+SELECT pg_catalog.setval('public.factory_grades_id_seq', 1, false);
+
+
+--
+-- Name: factory_output_analysis_results_id_seq; Type: SEQUENCE SET; Schema: public; Owner: -
+--
+
+SELECT pg_catalog.setval('public.factory_output_analysis_results_id_seq', 1, false);
+
+
+--
+-- Name: factory_output_point_tests_id_seq; Type: SEQUENCE SET; Schema: public; Owner: -
+--
+
+SELECT pg_catalog.setval('public.factory_output_point_tests_id_seq', 1, false);
+
+
+--
+-- Name: factory_output_points_id_seq; Type: SEQUENCE SET; Schema: public; Owner: -
+--
+
+SELECT pg_catalog.setval('public.factory_output_points_id_seq', 1, false);
+
+
+--
+-- Name: factory_output_readings_id_seq; Type: SEQUENCE SET; Schema: public; Owner: -
+--
+
+SELECT pg_catalog.setval('public.factory_output_readings_id_seq', 1, false);
+
+
+--
+-- Name: factory_packaging_stock_id_seq; Type: SEQUENCE SET; Schema: public; Owner: -
+--
+
+SELECT pg_catalog.setval('public.factory_packaging_stock_id_seq', 1, false);
+
+
+--
+-- Name: factory_packing_conversions_id_seq; Type: SEQUENCE SET; Schema: public; Owner: -
+--
+
+SELECT pg_catalog.setval('public.factory_packing_conversions_id_seq', 1, false);
+
+
+--
+-- Name: factory_packing_events_id_seq; Type: SEQUENCE SET; Schema: public; Owner: -
+--
+
+SELECT pg_catalog.setval('public.factory_packing_events_id_seq', 1, false);
+
+
+--
+-- Name: factory_packing_locations_id_seq; Type: SEQUENCE SET; Schema: public; Owner: -
+--
+
+SELECT pg_catalog.setval('public.factory_packing_locations_id_seq', 1, false);
+
+
+--
+-- Name: factory_packing_type_fields_id_seq; Type: SEQUENCE SET; Schema: public; Owner: -
+--
+
+SELECT pg_catalog.setval('public.factory_packing_type_fields_id_seq', 1, false);
+
+
+--
+-- Name: factory_packing_types_id_seq; Type: SEQUENCE SET; Schema: public; Owner: -
+--
+
+SELECT pg_catalog.setval('public.factory_packing_types_id_seq', 1, false);
+
+
+--
+-- Name: factory_plant_lot_settings_id_seq; Type: SEQUENCE SET; Schema: public; Owner: -
+--
+
+SELECT pg_catalog.setval('public.factory_plant_lot_settings_id_seq', 1, false);
+
+
+--
+-- Name: factory_process_analysis_results_id_seq; Type: SEQUENCE SET; Schema: public; Owner: -
+--
+
+SELECT pg_catalog.setval('public.factory_process_analysis_results_id_seq', 1, false);
+
+
+--
+-- Name: factory_process_readings_id_seq; Type: SEQUENCE SET; Schema: public; Owner: -
+--
+
+SELECT pg_catalog.setval('public.factory_process_readings_id_seq', 1, false);
+
+
+--
+-- Name: factory_process_stage_tests_id_seq; Type: SEQUENCE SET; Schema: public; Owner: -
+--
+
+SELECT pg_catalog.setval('public.factory_process_stage_tests_id_seq', 1, false);
+
+
+--
+-- Name: factory_process_stages_id_seq; Type: SEQUENCE SET; Schema: public; Owner: -
+--
+
+SELECT pg_catalog.setval('public.factory_process_stages_id_seq', 1, false);
+
+
+--
+-- Name: factory_quality_conformity_results_id_seq; Type: SEQUENCE SET; Schema: public; Owner: -
+--
+
+SELECT pg_catalog.setval('public.factory_quality_conformity_results_id_seq', 1, false);
+
+
+--
+-- Name: factory_representative_group_sizes_id_seq; Type: SEQUENCE SET; Schema: public; Owner: -
+--
+
+SELECT pg_catalog.setval('public.factory_representative_group_sizes_id_seq', 1, false);
+
+
+--
+-- Name: factory_representative_samples_id_seq; Type: SEQUENCE SET; Schema: public; Owner: -
+--
+
+SELECT pg_catalog.setval('public.factory_representative_samples_id_seq', 1, false);
+
+
+--
+-- Name: factory_representative_samples_tons_id_seq; Type: SEQUENCE SET; Schema: public; Owner: -
+--
+
+SELECT pg_catalog.setval('public.factory_representative_samples_tons_id_seq', 1, false);
+
+
+--
+-- Name: factory_sample_chemical_results_id_seq; Type: SEQUENCE SET; Schema: public; Owner: -
+--
+
+SELECT pg_catalog.setval('public.factory_sample_chemical_results_id_seq', 1, false);
+
+
+--
+-- Name: factory_test_definitions_id_seq; Type: SEQUENCE SET; Schema: public; Owner: -
+--
+
+SELECT pg_catalog.setval('public.factory_test_definitions_id_seq', 1, false);
+
+
+--
+-- Name: factory_ton_grade_assignments_id_seq; Type: SEQUENCE SET; Schema: public; Owner: -
+--
+
+SELECT pg_catalog.setval('public.factory_ton_grade_assignments_id_seq', 1, false);
+
+
+--
+-- Name: factory_ton_physical_results_id_seq; Type: SEQUENCE SET; Schema: public; Owner: -
+--
+
+SELECT pg_catalog.setval('public.factory_ton_physical_results_id_seq', 1, false);
+
+
+--
+-- Name: factory_tons_id_seq; Type: SEQUENCE SET; Schema: public; Owner: -
+--
+
+SELECT pg_catalog.setval('public.factory_tons_id_seq', 1, false);
+
+
+--
+-- Name: finished_products_products_id_seq; Type: SEQUENCE SET; Schema: public; Owner: -
+--
+
+SELECT pg_catalog.setval('public.finished_products_products_id_seq', 1, false);
+
+
+--
+-- Name: finished_products_products_packing_types_id_seq; Type: SEQUENCE SET; Schema: public; Owner: -
+--
+
+SELECT pg_catalog.setval('public.finished_products_products_packing_types_id_seq', 1, false);
+
+
+--
+-- Name: finished_products_products_plants_id_seq; Type: SEQUENCE SET; Schema: public; Owner: -
+--
+
+SELECT pg_catalog.setval('public.finished_products_products_plants_id_seq', 1, false);
+
+
+--
+-- Name: finished_products_stock_balances_id_seq; Type: SEQUENCE SET; Schema: public; Owner: -
+--
+
+SELECT pg_catalog.setval('public.finished_products_stock_balances_id_seq', 1, false);
+
+
+--
+-- Name: finished_products_stock_ledger_id_seq; Type: SEQUENCE SET; Schema: public; Owner: -
+--
+
+SELECT pg_catalog.setval('public.finished_products_stock_ledger_id_seq', 1, false);
+
+
+--
+-- Name: inventory_transactions_id_seq; Type: SEQUENCE SET; Schema: public; Owner: -
+--
+
+SELECT pg_catalog.setval('public.inventory_transactions_id_seq', 1, false);
+
+
+--
+-- Name: lab_sample_groups_id_seq; Type: SEQUENCE SET; Schema: public; Owner: -
+--
+
+SELECT pg_catalog.setval('public.lab_sample_groups_id_seq', 1, false);
+
+
+--
+-- Name: lab_sample_required_tests_id_seq; Type: SEQUENCE SET; Schema: public; Owner: -
+--
+
+SELECT pg_catalog.setval('public.lab_sample_required_tests_id_seq', 1, false);
+
+
+--
+-- Name: lab_sample_test_results_id_seq; Type: SEQUENCE SET; Schema: public; Owner: -
+--
+
+SELECT pg_catalog.setval('public.lab_sample_test_results_id_seq', 1, false);
+
+
+--
+-- Name: lab_samples_id_seq; Type: SEQUENCE SET; Schema: public; Owner: -
+--
+
+SELECT pg_catalog.setval('public.lab_samples_id_seq', 1, false);
+
+
+--
+-- Name: material_specifications_id_seq; Type: SEQUENCE SET; Schema: public; Owner: -
+--
+
+SELECT pg_catalog.setval('public.material_specifications_id_seq', 1, false);
+
+
+--
+-- Name: material_storages_id_seq; Type: SEQUENCE SET; Schema: public; Owner: -
+--
+
+SELECT pg_catalog.setval('public.material_storages_id_seq', 1, false);
+
+
+--
+-- Name: material_tests_id_seq; Type: SEQUENCE SET; Schema: public; Owner: -
+--
+
+SELECT pg_catalog.setval('public.material_tests_id_seq', 1, false);
+
+
+--
+-- Name: materials_id_seq; Type: SEQUENCE SET; Schema: public; Owner: -
+--
+
+SELECT pg_catalog.setval('public.materials_id_seq', 1, false);
+
+
+--
+-- Name: order_movements_id_seq; Type: SEQUENCE SET; Schema: public; Owner: -
+--
+
+SELECT pg_catalog.setval('public.order_movements_id_seq', 1, false);
+
+
+--
+-- Name: order_plant_allocation_change_log_id_seq; Type: SEQUENCE SET; Schema: public; Owner: -
+--
+
+SELECT pg_catalog.setval('public.order_plant_allocation_change_log_id_seq', 1, false);
+
+
+--
+-- Name: order_plant_allocations_id_seq; Type: SEQUENCE SET; Schema: public; Owner: -
+--
+
+SELECT pg_catalog.setval('public.order_plant_allocations_id_seq', 1, false);
+
+
+--
+-- Name: orders_customers_id_seq; Type: SEQUENCE SET; Schema: public; Owner: -
+--
+
+SELECT pg_catalog.setval('public.orders_customers_id_seq', 1, false);
+
+
+--
+-- Name: orders_price_lists_id_seq; Type: SEQUENCE SET; Schema: public; Owner: -
+--
+
+SELECT pg_catalog.setval('public.orders_price_lists_id_seq', 1, false);
+
+
+--
+-- Name: orders_quotation_lines_id_seq; Type: SEQUENCE SET; Schema: public; Owner: -
+--
+
+SELECT pg_catalog.setval('public.orders_quotation_lines_id_seq', 1, false);
+
+
+--
+-- Name: orders_quotations_id_seq; Type: SEQUENCE SET; Schema: public; Owner: -
+--
+
+SELECT pg_catalog.setval('public.orders_quotations_id_seq', 1, false);
+
+
+--
+-- Name: orders_sales_order_lines_id_seq; Type: SEQUENCE SET; Schema: public; Owner: -
+--
+
+SELECT pg_catalog.setval('public.orders_sales_order_lines_id_seq', 1, false);
+
+
+--
+-- Name: org_position_department_scope_id_seq; Type: SEQUENCE SET; Schema: public; Owner: -
+--
+
+SELECT pg_catalog.setval('public.org_position_department_scope_id_seq', 1, false);
+
+
+--
+-- Name: org_positions_position_id_seq; Type: SEQUENCE SET; Schema: public; Owner: -
+--
+
+SELECT pg_catalog.setval('public.org_positions_position_id_seq', 95, true);
+
+
+--
+-- Name: packaging_materials_id_seq; Type: SEQUENCE SET; Schema: public; Owner: -
+--
+
+SELECT pg_catalog.setval('public.packaging_materials_id_seq', 1, false);
+
+
+--
+-- Name: packaging_materials_products_id_seq; Type: SEQUENCE SET; Schema: public; Owner: -
+--
+
+SELECT pg_catalog.setval('public.packaging_materials_products_id_seq', 1, false);
+
+
+--
+-- Name: packaging_receiving_id_seq; Type: SEQUENCE SET; Schema: public; Owner: -
+--
+
+SELECT pg_catalog.setval('public.packaging_receiving_id_seq', 1, false);
+
+
+--
+-- Name: packaging_reconciliation_id_seq; Type: SEQUENCE SET; Schema: public; Owner: -
+--
+
+SELECT pg_catalog.setval('public.packaging_reconciliation_id_seq', 1, false);
+
+
+--
+-- Name: packaging_stock_balances_id_seq; Type: SEQUENCE SET; Schema: public; Owner: -
+--
+
+SELECT pg_catalog.setval('public.packaging_stock_balances_id_seq', 1, false);
+
+
+--
+-- Name: packaging_stock_ledger_id_seq; Type: SEQUENCE SET; Schema: public; Owner: -
+--
+
+SELECT pg_catalog.setval('public.packaging_stock_ledger_id_seq', 1, false);
+
+
+--
+-- Name: packaging_supplier_evaluations_id_seq; Type: SEQUENCE SET; Schema: public; Owner: -
+--
+
+SELECT pg_catalog.setval('public.packaging_supplier_evaluations_id_seq', 1, false);
+
+
+--
+-- Name: packaging_suppliers_id_seq; Type: SEQUENCE SET; Schema: public; Owner: -
+--
+
+SELECT pg_catalog.setval('public.packaging_suppliers_id_seq', 1, false);
+
+
+--
+-- Name: packaging_suppliers_materials_supplied_id_seq; Type: SEQUENCE SET; Schema: public; Owner: -
+--
+
+SELECT pg_catalog.setval('public.packaging_suppliers_materials_supplied_id_seq', 1, false);
+
+
+--
+-- Name: packing_operations_id_seq; Type: SEQUENCE SET; Schema: public; Owner: -
+--
+
+SELECT pg_catalog.setval('public.packing_operations_id_seq', 1, false);
+
+
+--
+-- Name: plants_plant_id_seq; Type: SEQUENCE SET; Schema: public; Owner: -
+--
+
+SELECT pg_catalog.setval('public.plants_plant_id_seq', 12, true);
+
+
+--
+-- Name: quality_control_decisions_id_seq; Type: SEQUENCE SET; Schema: public; Owner: -
+--
+
+SELECT pg_catalog.setval('public.quality_control_decisions_id_seq', 1, false);
+
+
+--
+-- Name: quality_grades_id_seq; Type: SEQUENCE SET; Schema: public; Owner: -
+--
+
+SELECT pg_catalog.setval('public.quality_grades_id_seq', 1, false);
+
+
+--
+-- Name: raw_material_analysis_id_seq; Type: SEQUENCE SET; Schema: public; Owner: -
+--
+
+SELECT pg_catalog.setval('public.raw_material_analysis_id_seq', 1, false);
+
+
+--
+-- Name: raw_material_deliveries_id_seq; Type: SEQUENCE SET; Schema: public; Owner: -
+--
+
+SELECT pg_catalog.setval('public.raw_material_deliveries_id_seq', 1, false);
+
+
+--
+-- Name: raw_material_lots_id_seq; Type: SEQUENCE SET; Schema: public; Owner: -
+--
+
+SELECT pg_catalog.setval('public.raw_material_lots_id_seq', 1, false);
+
+
+--
+-- Name: raw_material_samples_id_seq; Type: SEQUENCE SET; Schema: public; Owner: -
+--
+
+SELECT pg_catalog.setval('public.raw_material_samples_id_seq', 1, false);
+
+
+--
+-- Name: roles_role_id_seq; Type: SEQUENCE SET; Schema: public; Owner: -
+--
+
+SELECT pg_catalog.setval('public.roles_role_id_seq', 17, true);
+
+
+--
+-- Name: rotation_reference_id_seq; Type: SEQUENCE SET; Schema: public; Owner: -
+--
+
+SELECT pg_catalog.setval('public.rotation_reference_id_seq', 1, true);
+
+
+--
+-- Name: sales_orders_id_seq; Type: SEQUENCE SET; Schema: public; Owner: -
+--
+
+SELECT pg_catalog.setval('public.sales_orders_id_seq', 1, false);
+
+
+--
+-- Name: shift_groups_group_id_seq; Type: SEQUENCE SET; Schema: public; Owner: -
+--
+
+SELECT pg_catalog.setval('public.shift_groups_group_id_seq', 4, true);
+
+
+--
+-- Name: shift_rotation_pattern_id_seq; Type: SEQUENCE SET; Schema: public; Owner: -
+--
+
+SELECT pg_catalog.setval('public.shift_rotation_pattern_id_seq', 32, true);
+
+
+--
+-- Name: shift_types_shift_type_id_seq; Type: SEQUENCE SET; Schema: public; Owner: -
+--
+
+SELECT pg_catalog.setval('public.shift_types_shift_type_id_seq', 5, true);
+
+
+--
+-- Name: spare_part_issue_vouchers_id_seq; Type: SEQUENCE SET; Schema: public; Owner: -
+--
+
+SELECT pg_catalog.setval('public.spare_part_issue_vouchers_id_seq', 1, false);
+
+
+--
+-- Name: spare_part_items_id_seq; Type: SEQUENCE SET; Schema: public; Owner: -
+--
+
+SELECT pg_catalog.setval('public.spare_part_items_id_seq', 1, false);
+
+
+--
+-- Name: spare_part_receiving_vouchers_id_seq; Type: SEQUENCE SET; Schema: public; Owner: -
+--
+
+SELECT pg_catalog.setval('public.spare_part_receiving_vouchers_id_seq', 1, false);
+
+
+--
+-- Name: spare_part_stock_balances_id_seq; Type: SEQUENCE SET; Schema: public; Owner: -
+--
+
+SELECT pg_catalog.setval('public.spare_part_stock_balances_id_seq', 1, false);
+
+
+--
+-- Name: spare_part_stock_counts_id_seq; Type: SEQUENCE SET; Schema: public; Owner: -
+--
+
+SELECT pg_catalog.setval('public.spare_part_stock_counts_id_seq', 1, false);
+
+
+--
+-- Name: spare_part_stock_transactions_id_seq; Type: SEQUENCE SET; Schema: public; Owner: -
+--
+
+SELECT pg_catalog.setval('public.spare_part_stock_transactions_id_seq', 1, false);
+
+
+--
+-- Name: suppliers_id_seq; Type: SEQUENCE SET; Schema: public; Owner: -
+--
+
+SELECT pg_catalog.setval('public.suppliers_id_seq', 1, false);
+
+
+--
+-- Name: user_account_userprofile_id_seq; Type: SEQUENCE SET; Schema: public; Owner: -
+--
+
+SELECT pg_catalog.setval('public.user_account_userprofile_id_seq', 1, false);
+
+
+--
+-- Name: auth_group auth_group_name_key; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.auth_group
+    ADD CONSTRAINT auth_group_name_key UNIQUE (name);
+
+
+--
+-- Name: auth_group_permissions auth_group_permissions_group_id_permission_id_0cd325b0_uniq; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.auth_group_permissions
+    ADD CONSTRAINT auth_group_permissions_group_id_permission_id_0cd325b0_uniq UNIQUE (group_id, permission_id);
+
+
+--
+-- Name: auth_group_permissions auth_group_permissions_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.auth_group_permissions
+    ADD CONSTRAINT auth_group_permissions_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: auth_group auth_group_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.auth_group
+    ADD CONSTRAINT auth_group_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: auth_permission auth_permission_content_type_id_codename_01ab375a_uniq; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.auth_permission
+    ADD CONSTRAINT auth_permission_content_type_id_codename_01ab375a_uniq UNIQUE (content_type_id, codename);
+
+
+--
+-- Name: auth_permission auth_permission_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.auth_permission
+    ADD CONSTRAINT auth_permission_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: auth_user_groups auth_user_groups_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.auth_user_groups
+    ADD CONSTRAINT auth_user_groups_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: auth_user_groups auth_user_groups_user_id_group_id_94350c0c_uniq; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.auth_user_groups
+    ADD CONSTRAINT auth_user_groups_user_id_group_id_94350c0c_uniq UNIQUE (user_id, group_id);
+
+
+--
+-- Name: auth_user auth_user_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.auth_user
+    ADD CONSTRAINT auth_user_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: auth_user_user_permissions auth_user_user_permissions_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.auth_user_user_permissions
+    ADD CONSTRAINT auth_user_user_permissions_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: auth_user_user_permissions auth_user_user_permissions_user_id_permission_id_14a6b632_uniq; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.auth_user_user_permissions
+    ADD CONSTRAINT auth_user_user_permissions_user_id_permission_id_14a6b632_uniq UNIQUE (user_id, permission_id);
+
+
+--
+-- Name: auth_user auth_user_username_key; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.auth_user
+    ADD CONSTRAINT auth_user_username_key UNIQUE (username);
+
+
+--
+-- Name: custom_permissions_column_permissions custom_permissions_colum_column_id_role_id_7fcfaf64_uniq; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.custom_permissions_column_permissions
+    ADD CONSTRAINT custom_permissions_colum_column_id_role_id_7fcfaf64_uniq UNIQUE (column_id, role_id);
+
+
+--
+-- Name: custom_permissions_column_permissions custom_permissions_column_permissions_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.custom_permissions_column_permissions
+    ADD CONSTRAINT custom_permissions_column_permissions_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: custom_permissions_screen_columns custom_permissions_screen_columns_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.custom_permissions_screen_columns
+    ADD CONSTRAINT custom_permissions_screen_columns_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: custom_permissions_screen_columns custom_permissions_screen_columns_screen_id_code_617e6373_uniq; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.custom_permissions_screen_columns
+    ADD CONSTRAINT custom_permissions_screen_columns_screen_id_code_617e6373_uniq UNIQUE (screen_id, code);
+
+
+--
+-- Name: custom_permissions_screens custom_permissions_screens_code_key; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.custom_permissions_screens
+    ADD CONSTRAINT custom_permissions_screens_code_key UNIQUE (code);
+
+
+--
+-- Name: custom_permissions_screens custom_permissions_screens_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.custom_permissions_screens
+    ADD CONSTRAINT custom_permissions_screens_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: department_plant_scope department_plant_scope_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.department_plant_scope
+    ADD CONSTRAINT department_plant_scope_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: departments departments_department_code_key; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.departments
+    ADD CONSTRAINT departments_department_code_key UNIQUE (department_code);
+
+
+--
+-- Name: departments departments_department_name_key; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.departments
+    ADD CONSTRAINT departments_department_name_key UNIQUE (department_name);
+
+
+--
+-- Name: departments departments_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.departments
+    ADD CONSTRAINT departments_pkey PRIMARY KEY (department_id);
+
+
+--
+-- Name: django_admin_log django_admin_log_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.django_admin_log
+    ADD CONSTRAINT django_admin_log_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: django_content_type django_content_type_app_label_model_76bd3d3b_uniq; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.django_content_type
+    ADD CONSTRAINT django_content_type_app_label_model_76bd3d3b_uniq UNIQUE (app_label, model);
+
+
+--
+-- Name: django_content_type django_content_type_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.django_content_type
+    ADD CONSTRAINT django_content_type_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: django_migrations django_migrations_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.django_migrations
+    ADD CONSTRAINT django_migrations_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: django_session django_session_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.django_session
+    ADD CONSTRAINT django_session_pkey PRIMARY KEY (session_key);
+
+
+--
+-- Name: employee_assignments employee_assignments_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.employee_assignments
+    ADD CONSTRAINT employee_assignments_pkey PRIMARY KEY (assignment_id);
+
+
+--
+-- Name: employees employees_national_id_key; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.employees
+    ADD CONSTRAINT employees_national_id_key UNIQUE (national_id);
+
+
+--
+-- Name: employees employees_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.employees
+    ADD CONSTRAINT employees_pkey PRIMARY KEY (employee_id);
+
+
+--
+-- Name: factory_conformity_rules factory_conformity_rules_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.factory_conformity_rules
+    ADD CONSTRAINT factory_conformity_rules_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: factory_conformity_rules factory_conformity_rules_plant_id_name_914d7a08_uniq; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.factory_conformity_rules
+    ADD CONSTRAINT factory_conformity_rules_plant_id_name_914d7a08_uniq UNIQUE (plant_id, name);
+
+
+--
+-- Name: factory_field_definitions factory_field_definitions_key_key; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.factory_field_definitions
+    ADD CONSTRAINT factory_field_definitions_key_key UNIQUE (key);
+
+
+--
+-- Name: factory_field_definitions factory_field_definitions_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.factory_field_definitions
+    ADD CONSTRAINT factory_field_definitions_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: factory_floor_stock_balances factory_floor_stock_balances_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.factory_floor_stock_balances
+    ADD CONSTRAINT factory_floor_stock_balances_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: factory_floor_stock_movements factory_floor_stock_movements_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.factory_floor_stock_movements
+    ADD CONSTRAINT factory_floor_stock_movements_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: factory_grade_reasons factory_grade_reasons_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.factory_grade_reasons
+    ADD CONSTRAINT factory_grade_reasons_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: factory_grades factory_grades_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.factory_grades
+    ADD CONSTRAINT factory_grades_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: factory_grades factory_grades_plant_id_code_53990652_uniq; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.factory_grades
+    ADD CONSTRAINT factory_grades_plant_id_code_53990652_uniq UNIQUE (plant_id, code);
+
+
+--
+-- Name: factory_output_analysis_results factory_output_analysis__reading_id_test_id_c830878f_uniq; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.factory_output_analysis_results
+    ADD CONSTRAINT factory_output_analysis__reading_id_test_id_c830878f_uniq UNIQUE (reading_id, test_id);
+
+
+--
+-- Name: factory_output_analysis_results factory_output_analysis_results_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.factory_output_analysis_results
+    ADD CONSTRAINT factory_output_analysis_results_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: factory_output_point_tests factory_output_point_tes_output_point_id_test_id_56a1ac05_uniq; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.factory_output_point_tests
+    ADD CONSTRAINT factory_output_point_tes_output_point_id_test_id_56a1ac05_uniq UNIQUE (output_point_id, test_id);
+
+
+--
+-- Name: factory_output_point_tests factory_output_point_tests_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.factory_output_point_tests
+    ADD CONSTRAINT factory_output_point_tests_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: factory_output_points factory_output_points_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.factory_output_points
+    ADD CONSTRAINT factory_output_points_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: factory_output_points factory_output_points_plant_id_code_212037a5_uniq; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.factory_output_points
+    ADD CONSTRAINT factory_output_points_plant_id_code_212037a5_uniq UNIQUE (plant_id, code);
+
+
+--
+-- Name: factory_output_readings factory_output_readings_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.factory_output_readings
+    ADD CONSTRAINT factory_output_readings_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: factory_packaging_stock factory_packaging_stock_factory_id_material_id_39993b81_uniq; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.factory_packaging_stock
+    ADD CONSTRAINT factory_packaging_stock_factory_id_material_id_39993b81_uniq UNIQUE (factory_id, material_id);
+
+
+--
+-- Name: factory_packaging_stock factory_packaging_stock_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.factory_packaging_stock
+    ADD CONSTRAINT factory_packaging_stock_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: factory_packing_conversions factory_packing_conversions_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.factory_packing_conversions
+    ADD CONSTRAINT factory_packing_conversions_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: factory_packing_events factory_packing_events_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.factory_packing_events
+    ADD CONSTRAINT factory_packing_events_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: factory_packing_locations factory_packing_locations_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.factory_packing_locations
+    ADD CONSTRAINT factory_packing_locations_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: factory_packing_locations factory_packing_locations_plant_id_name_e371e4c1_uniq; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.factory_packing_locations
+    ADD CONSTRAINT factory_packing_locations_plant_id_name_e371e4c1_uniq UNIQUE (plant_id, name);
+
+
+--
+-- Name: factory_packing_type_fields factory_packing_type_fie_packing_type_id_field_id_67810121_uniq; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.factory_packing_type_fields
+    ADD CONSTRAINT factory_packing_type_fie_packing_type_id_field_id_67810121_uniq UNIQUE (packing_type_id, field_id);
+
+
+--
+-- Name: factory_packing_type_fields factory_packing_type_fields_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.factory_packing_type_fields
+    ADD CONSTRAINT factory_packing_type_fields_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: factory_packing_types factory_packing_types_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.factory_packing_types
+    ADD CONSTRAINT factory_packing_types_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: factory_packing_types factory_packing_types_plant_id_name_5c37a0f3_uniq; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.factory_packing_types
+    ADD CONSTRAINT factory_packing_types_plant_id_name_5c37a0f3_uniq UNIQUE (plant_id, name);
+
+
+--
+-- Name: factory_plant_lot_settings factory_plant_lot_settings_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.factory_plant_lot_settings
+    ADD CONSTRAINT factory_plant_lot_settings_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: factory_plant_lot_settings factory_plant_lot_settings_plant_id_key; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.factory_plant_lot_settings
+    ADD CONSTRAINT factory_plant_lot_settings_plant_id_key UNIQUE (plant_id);
+
+
+--
+-- Name: factory_process_analysis_results factory_process_analysis_reading_id_test_id_e8709e7a_uniq; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.factory_process_analysis_results
+    ADD CONSTRAINT factory_process_analysis_reading_id_test_id_e8709e7a_uniq UNIQUE (reading_id, test_id);
+
+
+--
+-- Name: factory_process_analysis_results factory_process_analysis_results_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.factory_process_analysis_results
+    ADD CONSTRAINT factory_process_analysis_results_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: factory_process_readings factory_process_readings_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.factory_process_readings
+    ADD CONSTRAINT factory_process_readings_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: factory_process_stage_tests factory_process_stage_tests_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.factory_process_stage_tests
+    ADD CONSTRAINT factory_process_stage_tests_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: factory_process_stage_tests factory_process_stage_tests_stage_id_test_id_3bffb05e_uniq; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.factory_process_stage_tests
+    ADD CONSTRAINT factory_process_stage_tests_stage_id_test_id_3bffb05e_uniq UNIQUE (stage_id, test_id);
+
+
+--
+-- Name: factory_process_stages factory_process_stages_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.factory_process_stages
+    ADD CONSTRAINT factory_process_stages_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: factory_quality_conformity_results factory_quality_conformity_results_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.factory_quality_conformity_results
+    ADD CONSTRAINT factory_quality_conformity_results_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: factory_representative_group_sizes factory_representative_g_plant_id_packing_type_id_d723e97f_uniq; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.factory_representative_group_sizes
+    ADD CONSTRAINT factory_representative_g_plant_id_packing_type_id_d723e97f_uniq UNIQUE (plant_id, packing_type_id);
+
+
+--
+-- Name: factory_representative_group_sizes factory_representative_group_sizes_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.factory_representative_group_sizes
+    ADD CONSTRAINT factory_representative_group_sizes_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: factory_representative_samples_tons factory_representative_s_representativesample_id__37e0f25f_uniq; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.factory_representative_samples_tons
+    ADD CONSTRAINT factory_representative_s_representativesample_id__37e0f25f_uniq UNIQUE (representativesample_id, ton_id);
+
+
+--
+-- Name: factory_representative_samples factory_representative_samples_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.factory_representative_samples
+    ADD CONSTRAINT factory_representative_samples_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: factory_representative_samples_tons factory_representative_samples_tons_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.factory_representative_samples_tons
+    ADD CONSTRAINT factory_representative_samples_tons_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: factory_sample_chemical_results factory_sample_chemical_results_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.factory_sample_chemical_results
+    ADD CONSTRAINT factory_sample_chemical_results_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: factory_sample_chemical_results factory_sample_chemical_results_ton_id_test_id_f13c95ff_uniq; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.factory_sample_chemical_results
+    ADD CONSTRAINT factory_sample_chemical_results_ton_id_test_id_f13c95ff_uniq UNIQUE (ton_id, test_id);
+
+
+--
+-- Name: factory_test_definitions factory_test_definitions_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.factory_test_definitions
+    ADD CONSTRAINT factory_test_definitions_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: factory_test_definitions factory_test_definitions_plant_id_name_44a5a422_uniq; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.factory_test_definitions
+    ADD CONSTRAINT factory_test_definitions_plant_id_name_44a5a422_uniq UNIQUE (plant_id, name);
+
+
+--
+-- Name: factory_ton_grade_assignments factory_ton_grade_assignments_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.factory_ton_grade_assignments
+    ADD CONSTRAINT factory_ton_grade_assignments_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: factory_ton_grade_assignments factory_ton_grade_assignments_ton_id_key; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.factory_ton_grade_assignments
+    ADD CONSTRAINT factory_ton_grade_assignments_ton_id_key UNIQUE (ton_id);
+
+
+--
+-- Name: factory_ton_physical_results factory_ton_physical_results_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.factory_ton_physical_results
+    ADD CONSTRAINT factory_ton_physical_results_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: factory_ton_physical_results factory_ton_physical_results_ton_id_test_id_c97c435e_uniq; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.factory_ton_physical_results
+    ADD CONSTRAINT factory_ton_physical_results_ton_id_test_id_c97c435e_uniq UNIQUE (ton_id, test_id);
+
+
+--
+-- Name: factory_tons factory_tons_lab_sample_id_key; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.factory_tons
+    ADD CONSTRAINT factory_tons_lab_sample_id_key UNIQUE (lab_sample_id);
+
+
+--
+-- Name: factory_tons factory_tons_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.factory_tons
+    ADD CONSTRAINT factory_tons_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: factory_tons factory_tons_plant_id_code_f0763969_uniq; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.factory_tons
+    ADD CONSTRAINT factory_tons_plant_id_code_f0763969_uniq UNIQUE (plant_id, code);
+
+
+--
+-- Name: finished_products_products_packing_types finished_products_produc_product_id_packingtype_i_a54a39a7_uniq; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.finished_products_products_packing_types
+    ADD CONSTRAINT finished_products_produc_product_id_packingtype_i_a54a39a7_uniq UNIQUE (product_id, packingtype_id);
+
+
+--
+-- Name: finished_products_products_plants finished_products_produc_product_id_plant_id_75a6b6b9_uniq; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.finished_products_products_plants
+    ADD CONSTRAINT finished_products_produc_product_id_plant_id_75a6b6b9_uniq UNIQUE (product_id, plant_id);
+
+
+--
+-- Name: finished_products_products_packing_types finished_products_products_packing_types_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.finished_products_products_packing_types
+    ADD CONSTRAINT finished_products_products_packing_types_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: finished_products_products finished_products_products_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.finished_products_products
+    ADD CONSTRAINT finished_products_products_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: finished_products_products_plants finished_products_products_plants_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.finished_products_products_plants
+    ADD CONSTRAINT finished_products_products_plants_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: finished_products_products finished_products_products_product_code_key; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.finished_products_products
+    ADD CONSTRAINT finished_products_products_product_code_key UNIQUE (product_code);
+
+
+--
+-- Name: finished_products_stock_balances finished_products_stock__plant_id_product_id_pack_e316f726_uniq; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.finished_products_stock_balances
+    ADD CONSTRAINT finished_products_stock__plant_id_product_id_pack_e316f726_uniq UNIQUE (plant_id, product_id, packaging_type_id);
+
+
+--
+-- Name: finished_products_stock_balances finished_products_stock_balances_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.finished_products_stock_balances
+    ADD CONSTRAINT finished_products_stock_balances_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: finished_products_stock_ledger finished_products_stock_ledger_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.finished_products_stock_ledger
+    ADD CONSTRAINT finished_products_stock_ledger_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: inventory_transactions inventory_transactions_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.inventory_transactions
+    ADD CONSTRAINT inventory_transactions_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: lab_sample_groups lab_sample_groups_group_code_key; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.lab_sample_groups
+    ADD CONSTRAINT lab_sample_groups_group_code_key UNIQUE (group_code);
+
+
+--
+-- Name: lab_sample_groups lab_sample_groups_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.lab_sample_groups
+    ADD CONSTRAINT lab_sample_groups_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: lab_sample_required_tests lab_sample_required_tests_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.lab_sample_required_tests
+    ADD CONSTRAINT lab_sample_required_tests_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: lab_sample_required_tests lab_sample_required_tests_sample_id_test_name_dc407a02_uniq; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.lab_sample_required_tests
+    ADD CONSTRAINT lab_sample_required_tests_sample_id_test_name_dc407a02_uniq UNIQUE (sample_id, test_name);
+
+
+--
+-- Name: lab_sample_test_results lab_sample_test_results_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.lab_sample_test_results
+    ADD CONSTRAINT lab_sample_test_results_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: lab_sample_test_results lab_sample_test_results_sample_id_test_name_d6ef360e_uniq; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.lab_sample_test_results
+    ADD CONSTRAINT lab_sample_test_results_sample_id_test_name_d6ef360e_uniq UNIQUE (sample_id, test_name);
+
+
+--
+-- Name: lab_samples lab_samples_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.lab_samples
+    ADD CONSTRAINT lab_samples_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: lab_samples lab_samples_sample_code_key; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.lab_samples
+    ADD CONSTRAINT lab_samples_sample_code_key UNIQUE (sample_code);
+
+
+--
+-- Name: material_specifications material_specifications_material_id_test_id_5bffe90e_uniq; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.material_specifications
+    ADD CONSTRAINT material_specifications_material_id_test_id_5bffe90e_uniq UNIQUE (material_id, test_id);
+
+
+--
+-- Name: material_specifications material_specifications_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.material_specifications
+    ADD CONSTRAINT material_specifications_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: material_storages material_storages_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.material_storages
+    ADD CONSTRAINT material_storages_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: material_storages material_storages_plant_id_material_id_sto_f96377c8_uniq; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.material_storages
+    ADD CONSTRAINT material_storages_plant_id_material_id_sto_f96377c8_uniq UNIQUE (plant_id, material_id, storage_name);
+
+
+--
+-- Name: material_storages material_storages_storage_code_key; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.material_storages
+    ADD CONSTRAINT material_storages_storage_code_key UNIQUE (storage_code);
+
+
+--
+-- Name: material_tests material_tests_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.material_tests
+    ADD CONSTRAINT material_tests_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: material_tests material_tests_test_code_key; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.material_tests
+    ADD CONSTRAINT material_tests_test_code_key UNIQUE (test_code);
+
+
+--
+-- Name: materials materials_material_code_key; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.materials
+    ADD CONSTRAINT materials_material_code_key UNIQUE (material_code);
+
+
+--
+-- Name: materials materials_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.materials
+    ADD CONSTRAINT materials_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: order_movements order_movements_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.order_movements
+    ADD CONSTRAINT order_movements_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: order_plant_allocation_change_log order_plant_allocation_change_log_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.order_plant_allocation_change_log
+    ADD CONSTRAINT order_plant_allocation_change_log_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: order_plant_allocations order_plant_allocations_order_id_plant_id_81dc3268_uniq; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.order_plant_allocations
+    ADD CONSTRAINT order_plant_allocations_order_id_plant_id_81dc3268_uniq UNIQUE (order_id, plant_id);
+
+
+--
+-- Name: order_plant_allocations order_plant_allocations_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.order_plant_allocations
+    ADD CONSTRAINT order_plant_allocations_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: orders_customers orders_customers_customer_code_key; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.orders_customers
+    ADD CONSTRAINT orders_customers_customer_code_key UNIQUE (customer_code);
+
+
+--
+-- Name: orders_customers orders_customers_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.orders_customers
+    ADD CONSTRAINT orders_customers_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: orders_price_lists orders_price_lists_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.orders_price_lists
+    ADD CONSTRAINT orders_price_lists_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: orders_quotation_lines orders_quotation_lines_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.orders_quotation_lines
+    ADD CONSTRAINT orders_quotation_lines_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: orders_quotations orders_quotations_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.orders_quotations
+    ADD CONSTRAINT orders_quotations_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: orders_quotations orders_quotations_quotation_number_key; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.orders_quotations
+    ADD CONSTRAINT orders_quotations_quotation_number_key UNIQUE (quotation_number);
+
+
+--
+-- Name: orders_sales_order_lines orders_sales_order_lines_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.orders_sales_order_lines
+    ADD CONSTRAINT orders_sales_order_lines_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: org_position_department_scope org_position_department_scope_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.org_position_department_scope
+    ADD CONSTRAINT org_position_department_scope_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: org_position_department_scope org_position_department_scope_position_id_department_id_key; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.org_position_department_scope
+    ADD CONSTRAINT org_position_department_scope_position_id_department_id_key UNIQUE (position_id, department_id);
+
+
+--
+-- Name: org_positions org_positions_entity_type_plant_id_department_id_role_id_key; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.org_positions
+    ADD CONSTRAINT org_positions_entity_type_plant_id_department_id_role_id_key UNIQUE (entity_type, plant_id, department_id, role_id);
+
+
+--
+-- Name: org_positions org_positions_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.org_positions
+    ADD CONSTRAINT org_positions_pkey PRIMARY KEY (position_id);
+
+
+--
+-- Name: packaging_materials packaging_materials_material_code_key; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.packaging_materials
+    ADD CONSTRAINT packaging_materials_material_code_key UNIQUE (material_code);
+
+
+--
+-- Name: packaging_materials packaging_materials_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.packaging_materials
+    ADD CONSTRAINT packaging_materials_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: packaging_materials_products packaging_materials_prod_packagingmaterial_id_pro_f43d9244_uniq; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.packaging_materials_products
+    ADD CONSTRAINT packaging_materials_prod_packagingmaterial_id_pro_f43d9244_uniq UNIQUE (packagingmaterial_id, product_id);
+
+
+--
+-- Name: packaging_materials_products packaging_materials_products_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.packaging_materials_products
+    ADD CONSTRAINT packaging_materials_products_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: packaging_receiving packaging_receiving_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.packaging_receiving
+    ADD CONSTRAINT packaging_receiving_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: packaging_receiving packaging_receiving_receiving_number_key; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.packaging_receiving
+    ADD CONSTRAINT packaging_receiving_receiving_number_key UNIQUE (receiving_number);
+
+
+--
+-- Name: packaging_reconciliation packaging_reconciliation_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.packaging_reconciliation
+    ADD CONSTRAINT packaging_reconciliation_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: packaging_stock_balances packaging_stock_balances_material_id_status_a38f473d_uniq; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.packaging_stock_balances
+    ADD CONSTRAINT packaging_stock_balances_material_id_status_a38f473d_uniq UNIQUE (material_id, status);
+
+
+--
+-- Name: packaging_stock_balances packaging_stock_balances_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.packaging_stock_balances
+    ADD CONSTRAINT packaging_stock_balances_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: packaging_stock_ledger packaging_stock_ledger_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.packaging_stock_ledger
+    ADD CONSTRAINT packaging_stock_ledger_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: packaging_supplier_evaluations packaging_supplier_evaluations_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.packaging_supplier_evaluations
+    ADD CONSTRAINT packaging_supplier_evaluations_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: packaging_suppliers_materials_supplied packaging_suppliers_mate_packagingsupplier_id_pac_e264381e_uniq; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.packaging_suppliers_materials_supplied
+    ADD CONSTRAINT packaging_suppliers_mate_packagingsupplier_id_pac_e264381e_uniq UNIQUE (packagingsupplier_id, packagingmaterial_id);
+
+
+--
+-- Name: packaging_suppliers_materials_supplied packaging_suppliers_materials_supplied_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.packaging_suppliers_materials_supplied
+    ADD CONSTRAINT packaging_suppliers_materials_supplied_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: packaging_suppliers packaging_suppliers_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.packaging_suppliers
+    ADD CONSTRAINT packaging_suppliers_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: packaging_suppliers packaging_suppliers_supplier_code_key; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.packaging_suppliers
+    ADD CONSTRAINT packaging_suppliers_supplier_code_key UNIQUE (supplier_code);
+
+
+--
+-- Name: packing_operations packing_operations_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.packing_operations
+    ADD CONSTRAINT packing_operations_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: plants plants_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.plants
+    ADD CONSTRAINT plants_pkey PRIMARY KEY (plant_id);
+
+
+--
+-- Name: plants plants_plant_name_key; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.plants
+    ADD CONSTRAINT plants_plant_name_key UNIQUE (plant_name);
+
+
+--
+-- Name: quality_control_decisions quality_control_decisions_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.quality_control_decisions
+    ADD CONSTRAINT quality_control_decisions_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: quality_control_decisions quality_control_decisions_sample_id_key; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.quality_control_decisions
+    ADD CONSTRAINT quality_control_decisions_sample_id_key UNIQUE (sample_id);
+
+
+--
+-- Name: quality_grades quality_grades_code_key; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.quality_grades
+    ADD CONSTRAINT quality_grades_code_key UNIQUE (code);
+
+
+--
+-- Name: quality_grades quality_grades_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.quality_grades
+    ADD CONSTRAINT quality_grades_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: raw_material_analysis raw_material_analysis_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.raw_material_analysis
+    ADD CONSTRAINT raw_material_analysis_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: raw_material_analysis raw_material_analysis_sample_id_test_id_28dc2e69_uniq; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.raw_material_analysis
+    ADD CONSTRAINT raw_material_analysis_sample_id_test_id_28dc2e69_uniq UNIQUE (sample_id, test_id);
+
+
+--
+-- Name: raw_material_deliveries raw_material_deliveries_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.raw_material_deliveries
+    ADD CONSTRAINT raw_material_deliveries_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: raw_material_lots raw_material_lots_lot_number_key; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.raw_material_lots
+    ADD CONSTRAINT raw_material_lots_lot_number_key UNIQUE (lot_number);
+
+
+--
+-- Name: raw_material_lots raw_material_lots_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.raw_material_lots
+    ADD CONSTRAINT raw_material_lots_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: raw_material_samples raw_material_samples_lab_sample_id_key; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.raw_material_samples
+    ADD CONSTRAINT raw_material_samples_lab_sample_id_key UNIQUE (lab_sample_id);
+
+
+--
+-- Name: raw_material_samples raw_material_samples_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.raw_material_samples
+    ADD CONSTRAINT raw_material_samples_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: raw_material_samples raw_material_samples_plant_id_material_id_sam_24c46cb6_uniq; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.raw_material_samples
+    ADD CONSTRAINT raw_material_samples_plant_id_material_id_sam_24c46cb6_uniq UNIQUE (plant_id, material_id, sample_stage, sample_number);
+
+
+--
+-- Name: roles roles_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.roles
+    ADD CONSTRAINT roles_pkey PRIMARY KEY (role_id);
+
+
+--
+-- Name: roles roles_role_name_key; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.roles
+    ADD CONSTRAINT roles_role_name_key UNIQUE (role_name);
+
+
+--
+-- Name: sales_orders sales_orders_order_number_key; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.sales_orders
+    ADD CONSTRAINT sales_orders_order_number_key UNIQUE (order_number);
+
+
+--
+-- Name: sales_orders sales_orders_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.sales_orders
+    ADD CONSTRAINT sales_orders_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: shift_groups shift_groups_group_name_key; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.shift_groups
+    ADD CONSTRAINT shift_groups_group_name_key UNIQUE (group_name);
+
+
+--
+-- Name: shift_groups shift_groups_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.shift_groups
+    ADD CONSTRAINT shift_groups_pkey PRIMARY KEY (group_id);
+
+
+--
+-- Name: shift_rotation_pattern shift_rotation_pattern_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.shift_rotation_pattern
+    ADD CONSTRAINT shift_rotation_pattern_pkey PRIMARY KEY (group_id, day_offset);
+
+
+--
+-- Name: shift_types shift_types_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.shift_types
+    ADD CONSTRAINT shift_types_pkey PRIMARY KEY (shift_type_id);
+
+
+--
+-- Name: shift_types shift_types_shift_type_name_key; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.shift_types
+    ADD CONSTRAINT shift_types_shift_type_name_key UNIQUE (shift_type_name);
+
+
+--
+-- Name: spare_part_issue_vouchers spare_part_issue_vouchers_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.spare_part_issue_vouchers
+    ADD CONSTRAINT spare_part_issue_vouchers_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: spare_part_issue_vouchers spare_part_issue_vouchers_voucher_number_key; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.spare_part_issue_vouchers
+    ADD CONSTRAINT spare_part_issue_vouchers_voucher_number_key UNIQUE (voucher_number);
+
+
+--
+-- Name: spare_part_items spare_part_items_item_code_key; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.spare_part_items
+    ADD CONSTRAINT spare_part_items_item_code_key UNIQUE (item_code);
+
+
+--
+-- Name: spare_part_items spare_part_items_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.spare_part_items
+    ADD CONSTRAINT spare_part_items_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: spare_part_receiving_vouchers spare_part_receiving_vouchers_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.spare_part_receiving_vouchers
+    ADD CONSTRAINT spare_part_receiving_vouchers_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: spare_part_receiving_vouchers spare_part_receiving_vouchers_voucher_number_key; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.spare_part_receiving_vouchers
+    ADD CONSTRAINT spare_part_receiving_vouchers_voucher_number_key UNIQUE (voucher_number);
+
+
+--
+-- Name: spare_part_stock_balances spare_part_stock_balances_item_id_key; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.spare_part_stock_balances
+    ADD CONSTRAINT spare_part_stock_balances_item_id_key UNIQUE (item_id);
+
+
+--
+-- Name: spare_part_stock_balances spare_part_stock_balances_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.spare_part_stock_balances
+    ADD CONSTRAINT spare_part_stock_balances_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: spare_part_stock_counts spare_part_stock_counts_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.spare_part_stock_counts
+    ADD CONSTRAINT spare_part_stock_counts_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: spare_part_stock_transactions spare_part_stock_transactions_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.spare_part_stock_transactions
+    ADD CONSTRAINT spare_part_stock_transactions_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: suppliers suppliers_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.suppliers
+    ADD CONSTRAINT suppliers_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: suppliers suppliers_supplier_code_key; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.suppliers
+    ADD CONSTRAINT suppliers_supplier_code_key UNIQUE (supplier_code);
+
+
+--
+-- Name: department_plant_scope uq_dept_plant; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.department_plant_scope
+    ADD CONSTRAINT uq_dept_plant UNIQUE (department_id, plant_id);
+
+
+--
+-- Name: user_account_userprofile user_account_userprofile_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.user_account_userprofile
+    ADD CONSTRAINT user_account_userprofile_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: user_account_userprofile user_account_userprofile_user_id_key; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.user_account_userprofile
+    ADD CONSTRAINT user_account_userprofile_user_id_key UNIQUE (user_id);
+
+
+--
+-- Name: auth_group_name_a6ea08ec_like; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX auth_group_name_a6ea08ec_like ON public.auth_group USING btree (name varchar_pattern_ops);
+
+
+--
+-- Name: auth_group_permissions_group_id_b120cbf9; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX auth_group_permissions_group_id_b120cbf9 ON public.auth_group_permissions USING btree (group_id);
+
+
+--
+-- Name: auth_group_permissions_permission_id_84c5c92e; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX auth_group_permissions_permission_id_84c5c92e ON public.auth_group_permissions USING btree (permission_id);
+
+
+--
+-- Name: auth_permission_content_type_id_2f476e4b; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX auth_permission_content_type_id_2f476e4b ON public.auth_permission USING btree (content_type_id);
+
+
+--
+-- Name: auth_user_groups_group_id_97559544; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX auth_user_groups_group_id_97559544 ON public.auth_user_groups USING btree (group_id);
+
+
+--
+-- Name: auth_user_groups_user_id_6a12ed8b; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX auth_user_groups_user_id_6a12ed8b ON public.auth_user_groups USING btree (user_id);
+
+
+--
+-- Name: auth_user_user_permissions_permission_id_1fbb5f2c; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX auth_user_user_permissions_permission_id_1fbb5f2c ON public.auth_user_user_permissions USING btree (permission_id);
+
+
+--
+-- Name: auth_user_user_permissions_user_id_a95ead1b; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX auth_user_user_permissions_user_id_a95ead1b ON public.auth_user_user_permissions USING btree (user_id);
+
+
+--
+-- Name: auth_user_username_6821ab7c_like; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX auth_user_username_6821ab7c_like ON public.auth_user USING btree (username varchar_pattern_ops);
+
+
+--
+-- Name: custom_permissions_column_permissions_column_id_67832ff9; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX custom_permissions_column_permissions_column_id_67832ff9 ON public.custom_permissions_column_permissions USING btree (column_id);
+
+
+--
+-- Name: custom_permissions_column_permissions_role_id_4db64eb2; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX custom_permissions_column_permissions_role_id_4db64eb2 ON public.custom_permissions_column_permissions USING btree (role_id);
+
+
+--
+-- Name: custom_permissions_screen_columns_code_8b03ab5e; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX custom_permissions_screen_columns_code_8b03ab5e ON public.custom_permissions_screen_columns USING btree (code);
+
+
+--
+-- Name: custom_permissions_screen_columns_code_8b03ab5e_like; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX custom_permissions_screen_columns_code_8b03ab5e_like ON public.custom_permissions_screen_columns USING btree (code varchar_pattern_ops);
+
+
+--
+-- Name: custom_permissions_screen_columns_screen_id_ede08876; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX custom_permissions_screen_columns_screen_id_ede08876 ON public.custom_permissions_screen_columns USING btree (screen_id);
+
+
+--
+-- Name: custom_permissions_screens_code_11e5fb51_like; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX custom_permissions_screens_code_11e5fb51_like ON public.custom_permissions_screens USING btree (code varchar_pattern_ops);
+
+
+--
+-- Name: django_admin_log_content_type_id_c4bce8eb; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX django_admin_log_content_type_id_c4bce8eb ON public.django_admin_log USING btree (content_type_id);
+
+
+--
+-- Name: django_admin_log_user_id_c564eba6; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX django_admin_log_user_id_c564eba6 ON public.django_admin_log USING btree (user_id);
+
+
+--
+-- Name: django_session_expire_date_a5c62663; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX django_session_expire_date_a5c62663 ON public.django_session USING btree (expire_date);
+
+
+--
+-- Name: django_session_session_key_c0390e0f_like; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX django_session_session_key_c0390e0f_like ON public.django_session USING btree (session_key varchar_pattern_ops);
+
+
+--
+-- Name: factory_conformity_rules_plant_id_00f881c8; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX factory_conformity_rules_plant_id_00f881c8 ON public.factory_conformity_rules USING btree (plant_id);
+
+
+--
+-- Name: factory_conformity_rules_quality_grade_id_dbd5450b; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX factory_conformity_rules_quality_grade_id_dbd5450b ON public.factory_conformity_rules USING btree (quality_grade_id);
+
+
+--
+-- Name: factory_conformity_rules_test_id_fc347f9b; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX factory_conformity_rules_test_id_fc347f9b ON public.factory_conformity_rules USING btree (test_id);
+
+
+--
+-- Name: factory_field_definitions_key_94bd1b37_like; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX factory_field_definitions_key_94bd1b37_like ON public.factory_field_definitions USING btree (key varchar_pattern_ops);
+
+
+--
+-- Name: factory_floor_stock_balances_grade_id_339d5e97; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX factory_floor_stock_balances_grade_id_339d5e97 ON public.factory_floor_stock_balances USING btree (grade_id);
+
+
+--
+-- Name: factory_floor_stock_balances_plant_id_b04d7b5e; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX factory_floor_stock_balances_plant_id_b04d7b5e ON public.factory_floor_stock_balances USING btree (plant_id);
+
+
+--
+-- Name: factory_floor_stock_movements_grade_id_c491f13a; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX factory_floor_stock_movements_grade_id_c491f13a ON public.factory_floor_stock_movements USING btree (grade_id);
+
+
+--
+-- Name: factory_floor_stock_movements_plant_id_53b94edb; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX factory_floor_stock_movements_plant_id_53b94edb ON public.factory_floor_stock_movements USING btree (plant_id);
+
+
+--
+-- Name: factory_floor_stock_movements_ton_id_5d744768; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX factory_floor_stock_movements_ton_id_5d744768 ON public.factory_floor_stock_movements USING btree (ton_id);
+
+
+--
+-- Name: factory_grade_reasons_plant_id_222f8a15; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX factory_grade_reasons_plant_id_222f8a15 ON public.factory_grade_reasons USING btree (plant_id);
+
+
+--
+-- Name: factory_grades_plant_id_f86bc970; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX factory_grades_plant_id_f86bc970 ON public.factory_grades USING btree (plant_id);
+
+
+--
+-- Name: factory_output_analysis_results_reading_id_2b060276; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX factory_output_analysis_results_reading_id_2b060276 ON public.factory_output_analysis_results USING btree (reading_id);
+
+
+--
+-- Name: factory_output_analysis_results_test_id_ef1a9ca8; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX factory_output_analysis_results_test_id_ef1a9ca8 ON public.factory_output_analysis_results USING btree (test_id);
+
+
+--
+-- Name: factory_output_point_tests_output_point_id_f4fa5026; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX factory_output_point_tests_output_point_id_f4fa5026 ON public.factory_output_point_tests USING btree (output_point_id);
+
+
+--
+-- Name: factory_output_point_tests_test_id_4ded4bd5; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX factory_output_point_tests_test_id_4ded4bd5 ON public.factory_output_point_tests USING btree (test_id);
+
+
+--
+-- Name: factory_output_points_plant_id_5869dea6; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX factory_output_points_plant_id_5869dea6 ON public.factory_output_points USING btree (plant_id);
+
+
+--
+-- Name: factory_output_readings_analyzed_by_id_6bcbf1f7; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX factory_output_readings_analyzed_by_id_6bcbf1f7 ON public.factory_output_readings USING btree (analyzed_by_id);
+
+
+--
+-- Name: factory_output_readings_lab_shift_head_id_9fa94a1c; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX factory_output_readings_lab_shift_head_id_9fa94a1c ON public.factory_output_readings USING btree (lab_shift_head_id);
+
+
+--
+-- Name: factory_output_readings_output_point_id_b7abf3fd; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX factory_output_readings_output_point_id_b7abf3fd ON public.factory_output_readings USING btree (output_point_id);
+
+
+--
+-- Name: factory_output_readings_packing_location_id_06761095; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX factory_output_readings_packing_location_id_06761095 ON public.factory_output_readings USING btree (packing_location_id);
+
+
+--
+-- Name: factory_output_readings_packing_type_id_e6d25037; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX factory_output_readings_packing_type_id_e6d25037 ON public.factory_output_readings USING btree (packing_type_id);
+
+
+--
+-- Name: factory_output_readings_plant_id_7375da2d; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX factory_output_readings_plant_id_7375da2d ON public.factory_output_readings USING btree (plant_id);
+
+
+--
+-- Name: factory_output_readings_reviewed_by_id_06e0d214; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX factory_output_readings_reviewed_by_id_06e0d214 ON public.factory_output_readings USING btree (reviewed_by_id);
+
+
+--
+-- Name: factory_output_readings_sampled_by_id_9b2a1925; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX factory_output_readings_sampled_by_id_9b2a1925 ON public.factory_output_readings USING btree (sampled_by_id);
+
+
+--
+-- Name: factory_output_readings_shift_id_633010bf; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX factory_output_readings_shift_id_633010bf ON public.factory_output_readings USING btree (shift_id);
+
+
+--
+-- Name: factory_packaging_stock_factory_id_9092b841; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX factory_packaging_stock_factory_id_9092b841 ON public.factory_packaging_stock USING btree (factory_id);
+
+
+--
+-- Name: factory_packaging_stock_material_id_a6f4e667; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX factory_packaging_stock_material_id_a6f4e667 ON public.factory_packaging_stock USING btree (material_id);
+
+
+--
+-- Name: factory_packing_conversions_plant_id_1d8bdbc1; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX factory_packing_conversions_plant_id_1d8bdbc1 ON public.factory_packing_conversions USING btree (plant_id);
+
+
+--
+-- Name: factory_packing_conversions_source_event_id_459c3aa0; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX factory_packing_conversions_source_event_id_459c3aa0 ON public.factory_packing_conversions USING btree (source_event_id);
+
+
+--
+-- Name: factory_packing_conversions_target_packing_type_id_85dc76bc; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX factory_packing_conversions_target_packing_type_id_85dc76bc ON public.factory_packing_conversions USING btree (target_packing_type_id);
+
+
+--
+-- Name: factory_packing_events_output_reading_id_09059567; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX factory_packing_events_output_reading_id_09059567 ON public.factory_packing_events USING btree (output_reading_id);
+
+
+--
+-- Name: factory_packing_events_packing_type_id_e8f14989; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX factory_packing_events_packing_type_id_e8f14989 ON public.factory_packing_events USING btree (packing_type_id);
+
+
+--
+-- Name: factory_packing_events_plant_id_ee0a9cd4; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX factory_packing_events_plant_id_ee0a9cd4 ON public.factory_packing_events USING btree (plant_id);
+
+
+--
+-- Name: factory_packing_locations_plant_id_87010d25; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX factory_packing_locations_plant_id_87010d25 ON public.factory_packing_locations USING btree (plant_id);
+
+
+--
+-- Name: factory_packing_type_fields_field_id_ae7b3186; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX factory_packing_type_fields_field_id_ae7b3186 ON public.factory_packing_type_fields USING btree (field_id);
+
+
+--
+-- Name: factory_packing_type_fields_packing_type_id_519dac18; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX factory_packing_type_fields_packing_type_id_519dac18 ON public.factory_packing_type_fields USING btree (packing_type_id);
+
+
+--
+-- Name: factory_packing_types_plant_id_398bbac0; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX factory_packing_types_plant_id_398bbac0 ON public.factory_packing_types USING btree (plant_id);
+
+
+--
+-- Name: factory_process_analysis_results_reading_id_7ca76fd1; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX factory_process_analysis_results_reading_id_7ca76fd1 ON public.factory_process_analysis_results USING btree (reading_id);
+
+
+--
+-- Name: factory_process_analysis_results_test_id_997a72af; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX factory_process_analysis_results_test_id_997a72af ON public.factory_process_analysis_results USING btree (test_id);
+
+
+--
+-- Name: factory_process_readings_plant_id_282b54c8; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX factory_process_readings_plant_id_282b54c8 ON public.factory_process_readings USING btree (plant_id);
+
+
+--
+-- Name: factory_process_readings_shift_id_3beb83b4; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX factory_process_readings_shift_id_3beb83b4 ON public.factory_process_readings USING btree (shift_id);
+
+
+--
+-- Name: factory_process_readings_stage_id_d9c5c972; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX factory_process_readings_stage_id_d9c5c972 ON public.factory_process_readings USING btree (stage_id);
+
+
+--
+-- Name: factory_process_stage_tests_stage_id_bea31c2a; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX factory_process_stage_tests_stage_id_bea31c2a ON public.factory_process_stage_tests USING btree (stage_id);
+
+
+--
+-- Name: factory_process_stage_tests_test_id_58c6d111; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX factory_process_stage_tests_test_id_58c6d111 ON public.factory_process_stage_tests USING btree (test_id);
+
+
+--
+-- Name: factory_process_stages_plant_id_7273fa4d; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX factory_process_stages_plant_id_7273fa4d ON public.factory_process_stages USING btree (plant_id);
+
+
+--
+-- Name: factory_quality_conformity_results_conformity_rule_id_7e8ce9a8; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX factory_quality_conformity_results_conformity_rule_id_7e8ce9a8 ON public.factory_quality_conformity_results USING btree (conformity_rule_id);
+
+
+--
+-- Name: factory_quality_conformity_results_grade_id_0bf0e404; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX factory_quality_conformity_results_grade_id_0bf0e404 ON public.factory_quality_conformity_results USING btree (grade_id);
+
+
+--
+-- Name: factory_quality_conformity_results_quality_grade_id_afee10a6; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX factory_quality_conformity_results_quality_grade_id_afee10a6 ON public.factory_quality_conformity_results USING btree (quality_grade_id);
+
+
+--
+-- Name: factory_quality_conformity_results_reading_id_4141c4a3; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX factory_quality_conformity_results_reading_id_4141c4a3 ON public.factory_quality_conformity_results USING btree (reading_id);
+
+
+--
+-- Name: factory_representative_group_sizes_packing_type_id_8e57a74d; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX factory_representative_group_sizes_packing_type_id_8e57a74d ON public.factory_representative_group_sizes USING btree (packing_type_id);
+
+
+--
+-- Name: factory_representative_group_sizes_plant_id_1382f521; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX factory_representative_group_sizes_plant_id_1382f521 ON public.factory_representative_group_sizes USING btree (plant_id);
+
+
+--
+-- Name: factory_representative_sam_representativesample_id_f5fcbb6e; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX factory_representative_sam_representativesample_id_f5fcbb6e ON public.factory_representative_samples_tons USING btree (representativesample_id);
+
+
+--
+-- Name: factory_representative_samples_plant_id_cf02c7ee; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX factory_representative_samples_plant_id_cf02c7ee ON public.factory_representative_samples USING btree (plant_id);
+
+
+--
+-- Name: factory_representative_samples_tons_ton_id_454fea77; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX factory_representative_samples_tons_ton_id_454fea77 ON public.factory_representative_samples_tons USING btree (ton_id);
+
+
+--
+-- Name: factory_sample_chemical_re_representative_sample_id_51609ea0; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX factory_sample_chemical_re_representative_sample_id_51609ea0 ON public.factory_sample_chemical_results USING btree (representative_sample_id);
+
+
+--
+-- Name: factory_sample_chemical_results_test_id_423ad324; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX factory_sample_chemical_results_test_id_423ad324 ON public.factory_sample_chemical_results USING btree (test_id);
+
+
+--
+-- Name: factory_sample_chemical_results_ton_id_f57af000; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX factory_sample_chemical_results_ton_id_f57af000 ON public.factory_sample_chemical_results USING btree (ton_id);
+
+
+--
+-- Name: factory_test_definitions_plant_id_61ee6b1b; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX factory_test_definitions_plant_id_61ee6b1b ON public.factory_test_definitions USING btree (plant_id);
+
+
+--
+-- Name: factory_ton_grade_assignments_assigned_by_id_7c52cef6; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX factory_ton_grade_assignments_assigned_by_id_7c52cef6 ON public.factory_ton_grade_assignments USING btree (assigned_by_id);
+
+
+--
+-- Name: factory_ton_grade_assignments_primary_grade_id_71f03197; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX factory_ton_grade_assignments_primary_grade_id_71f03197 ON public.factory_ton_grade_assignments USING btree (primary_grade_id);
+
+
+--
+-- Name: factory_ton_grade_assignments_reason_id_cb726c80; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX factory_ton_grade_assignments_reason_id_cb726c80 ON public.factory_ton_grade_assignments USING btree (reason_id);
+
+
+--
+-- Name: factory_ton_grade_assignments_secondary_grade_id_0a31400b; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX factory_ton_grade_assignments_secondary_grade_id_0a31400b ON public.factory_ton_grade_assignments USING btree (secondary_grade_id);
+
+
+--
+-- Name: factory_ton_physical_results_test_id_4eebc4a8; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX factory_ton_physical_results_test_id_4eebc4a8 ON public.factory_ton_physical_results USING btree (test_id);
+
+
+--
+-- Name: factory_ton_physical_results_ton_id_6e243e33; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX factory_ton_physical_results_ton_id_6e243e33 ON public.factory_ton_physical_results USING btree (ton_id);
+
+
+--
+-- Name: factory_tons_output_reading_id_f4c8c0c6; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX factory_tons_output_reading_id_f4c8c0c6 ON public.factory_tons USING btree (output_reading_id);
+
+
+--
+-- Name: factory_tons_plant_id_c3a66710; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX factory_tons_plant_id_c3a66710 ON public.factory_tons USING btree (plant_id);
+
+
+--
+-- Name: factory_tons_production_shift_id_899bd81b; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX factory_tons_production_shift_id_899bd81b ON public.factory_tons USING btree (production_shift_id);
+
+
+--
+-- Name: finished_products_products_packing_types_product_id_54b98ff6; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX finished_products_products_packing_types_product_id_54b98ff6 ON public.finished_products_products_packing_types USING btree (product_id);
+
+
+--
+-- Name: finished_products_products_packingtype_id_eba564d1; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX finished_products_products_packingtype_id_eba564d1 ON public.finished_products_products_packing_types USING btree (packingtype_id);
+
+
+--
+-- Name: finished_products_products_plants_plant_id_0529760e; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX finished_products_products_plants_plant_id_0529760e ON public.finished_products_products_plants USING btree (plant_id);
+
+
+--
+-- Name: finished_products_products_plants_product_id_d75e7240; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX finished_products_products_plants_product_id_d75e7240 ON public.finished_products_products_plants USING btree (product_id);
+
+
+--
+-- Name: finished_products_products_product_code_348231a7_like; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX finished_products_products_product_code_348231a7_like ON public.finished_products_products USING btree (product_code varchar_pattern_ops);
+
+
+--
+-- Name: finished_products_stock_balances_packaging_type_id_462b2506; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX finished_products_stock_balances_packaging_type_id_462b2506 ON public.finished_products_stock_balances USING btree (packaging_type_id);
+
+
+--
+-- Name: finished_products_stock_balances_plant_id_701ba7bb; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX finished_products_stock_balances_plant_id_701ba7bb ON public.finished_products_stock_balances USING btree (plant_id);
+
+
+--
+-- Name: finished_products_stock_balances_product_id_195c98a5; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX finished_products_stock_balances_product_id_195c98a5 ON public.finished_products_stock_balances USING btree (product_id);
+
+
+--
+-- Name: finished_products_stock_ledger_packaging_type_id_ef238fac; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX finished_products_stock_ledger_packaging_type_id_ef238fac ON public.finished_products_stock_ledger USING btree (packaging_type_id);
+
+
+--
+-- Name: finished_products_stock_ledger_plant_id_3046b5b6; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX finished_products_stock_ledger_plant_id_3046b5b6 ON public.finished_products_stock_ledger USING btree (plant_id);
+
+
+--
+-- Name: finished_products_stock_ledger_product_id_8d50ec06; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX finished_products_stock_ledger_product_id_8d50ec06 ON public.finished_products_stock_ledger USING btree (product_id);
+
+
+--
+-- Name: finished_products_stock_ledger_user_id_85d61623; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX finished_products_stock_ledger_user_id_85d61623 ON public.finished_products_stock_ledger USING btree (user_id);
+
+
+--
+-- Name: idx_assignments_employee; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_assignments_employee ON public.employee_assignments USING btree (employee_id);
+
+
+--
+-- Name: idx_assignments_position; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_assignments_position ON public.employee_assignments USING btree (position_id);
+
+
+--
+-- Name: idx_positions_department; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_positions_department ON public.org_positions USING btree (department_id);
+
+
+--
+-- Name: idx_positions_plant; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_positions_plant ON public.org_positions USING btree (plant_id);
+
+
+--
+-- Name: inventory_transactions_material_id_7fee0597; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX inventory_transactions_material_id_7fee0597 ON public.inventory_transactions USING btree (material_id);
+
+
+--
+-- Name: inventory_transactions_plant_id_6893c345; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX inventory_transactions_plant_id_6893c345 ON public.inventory_transactions USING btree (plant_id);
+
+
+--
+-- Name: inventory_transactions_reference_delivery_id_55239032; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX inventory_transactions_reference_delivery_id_55239032 ON public.inventory_transactions USING btree (reference_delivery_id);
+
+
+--
+-- Name: inventory_transactions_storage_id_8ed71714; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX inventory_transactions_storage_id_8ed71714 ON public.inventory_transactions USING btree (storage_id);
+
+
+--
+-- Name: lab_sample_groups_group_code_567de31c_like; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX lab_sample_groups_group_code_567de31c_like ON public.lab_sample_groups USING btree (group_code varchar_pattern_ops);
+
+
+--
+-- Name: lab_sample_groups_plant_id_1f5fdf80; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX lab_sample_groups_plant_id_1f5fdf80 ON public.lab_sample_groups USING btree (plant_id);
+
+
+--
+-- Name: lab_sample_required_tests_sample_id_3831e663; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX lab_sample_required_tests_sample_id_3831e663 ON public.lab_sample_required_tests USING btree (sample_id);
+
+
+--
+-- Name: lab_sample_required_tests_test_content_type_id_b7e452f9; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX lab_sample_required_tests_test_content_type_id_b7e452f9 ON public.lab_sample_required_tests USING btree (test_content_type_id);
+
+
+--
+-- Name: lab_sample_test_results_entered_by_id_937e7658; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX lab_sample_test_results_entered_by_id_937e7658 ON public.lab_sample_test_results USING btree (entered_by_id);
+
+
+--
+-- Name: lab_sample_test_results_sample_id_39f0046d; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX lab_sample_test_results_sample_id_39f0046d ON public.lab_sample_test_results USING btree (sample_id);
+
+
+--
+-- Name: lab_sample_test_results_test_content_type_id_6a22bcf2; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX lab_sample_test_results_test_content_type_id_6a22bcf2 ON public.lab_sample_test_results USING btree (test_content_type_id);
+
+
+--
+-- Name: lab_samples_collected_by_id_6c2d7060; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX lab_samples_collected_by_id_6c2d7060 ON public.lab_samples USING btree (collected_by_id);
+
+
+--
+-- Name: lab_samples_content_type_id_f5601d0c; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX lab_samples_content_type_id_f5601d0c ON public.lab_samples USING btree (content_type_id);
+
+
+--
+-- Name: lab_samples_group_id_dbe4d13a; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX lab_samples_group_id_dbe4d13a ON public.lab_samples USING btree (group_id);
+
+
+--
+-- Name: lab_samples_lab_department_id_51497dcc; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX lab_samples_lab_department_id_51497dcc ON public.lab_samples USING btree (lab_department_id);
+
+
+--
+-- Name: lab_samples_plant_id_a1e5d061; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX lab_samples_plant_id_a1e5d061 ON public.lab_samples USING btree (plant_id);
+
+
+--
+-- Name: lab_samples_sample_code_47027302_like; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX lab_samples_sample_code_47027302_like ON public.lab_samples USING btree (sample_code varchar_pattern_ops);
+
+
+--
+-- Name: material_specifications_material_id_718a66e5; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX material_specifications_material_id_718a66e5 ON public.material_specifications USING btree (material_id);
+
+
+--
+-- Name: material_specifications_test_id_e5c1cf33; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX material_specifications_test_id_e5c1cf33 ON public.material_specifications USING btree (test_id);
+
+
+--
+-- Name: material_storages_material_id_4e4ed7cf; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX material_storages_material_id_4e4ed7cf ON public.material_storages USING btree (material_id);
+
+
+--
+-- Name: material_storages_plant_id_8b211aba; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX material_storages_plant_id_8b211aba ON public.material_storages USING btree (plant_id);
+
+
+--
+-- Name: material_storages_storage_code_05c1b087_like; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX material_storages_storage_code_05c1b087_like ON public.material_storages USING btree (storage_code varchar_pattern_ops);
+
+
+--
+-- Name: material_tests_material_id_ad8f13c8; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX material_tests_material_id_ad8f13c8 ON public.material_tests USING btree (material_id);
+
+
+--
+-- Name: material_tests_test_code_5d648266_like; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX material_tests_test_code_5d648266_like ON public.material_tests USING btree (test_code varchar_pattern_ops);
+
+
+--
+-- Name: materials_material_code_3ed844ba_like; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX materials_material_code_3ed844ba_like ON public.materials USING btree (material_code varchar_pattern_ops);
+
+
+--
+-- Name: order_movements_grade_id_c006265e; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX order_movements_grade_id_c006265e ON public.order_movements USING btree (grade_id);
+
+
+--
+-- Name: order_movements_order_id_4358870d; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX order_movements_order_id_4358870d ON public.order_movements USING btree (order_id);
+
+
+--
+-- Name: order_movements_source_plant_id_028649fd; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX order_movements_source_plant_id_028649fd ON public.order_movements USING btree (source_plant_id);
+
+
+--
+-- Name: order_plant_allocation_change_log_changed_by_id_7ef07420; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX order_plant_allocation_change_log_changed_by_id_7ef07420 ON public.order_plant_allocation_change_log USING btree (changed_by_id);
+
+
+--
+-- Name: order_plant_allocation_change_log_from_plant_id_c00f37a1; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX order_plant_allocation_change_log_from_plant_id_c00f37a1 ON public.order_plant_allocation_change_log USING btree (from_plant_id);
+
+
+--
+-- Name: order_plant_allocation_change_log_order_id_4c5deab0; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX order_plant_allocation_change_log_order_id_4c5deab0 ON public.order_plant_allocation_change_log USING btree (order_id);
+
+
+--
+-- Name: order_plant_allocation_change_log_to_plant_id_cc8f6d9e; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX order_plant_allocation_change_log_to_plant_id_cc8f6d9e ON public.order_plant_allocation_change_log USING btree (to_plant_id);
+
+
+--
+-- Name: order_plant_allocations_order_id_7dbc2a6e; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX order_plant_allocations_order_id_7dbc2a6e ON public.order_plant_allocations USING btree (order_id);
+
+
+--
+-- Name: order_plant_allocations_plant_id_9f07e85c; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX order_plant_allocations_plant_id_9f07e85c ON public.order_plant_allocations USING btree (plant_id);
+
+
+--
+-- Name: orders_customers_customer_code_b19b7f4e_like; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX orders_customers_customer_code_b19b7f4e_like ON public.orders_customers USING btree (customer_code varchar_pattern_ops);
+
+
+--
+-- Name: orders_price_lists_packaging_type_id_255b0dfe; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX orders_price_lists_packaging_type_id_255b0dfe ON public.orders_price_lists USING btree (packaging_type_id);
+
+
+--
+-- Name: orders_price_lists_product_id_fed10f05; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX orders_price_lists_product_id_fed10f05 ON public.orders_price_lists USING btree (product_id);
+
+
+--
+-- Name: orders_quotation_lines_packaging_type_id_60ab8f55; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX orders_quotation_lines_packaging_type_id_60ab8f55 ON public.orders_quotation_lines USING btree (packaging_type_id);
+
+
+--
+-- Name: orders_quotation_lines_product_id_178a5c76; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX orders_quotation_lines_product_id_178a5c76 ON public.orders_quotation_lines USING btree (product_id);
+
+
+--
+-- Name: orders_quotation_lines_quotation_id_9c3087c3; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX orders_quotation_lines_quotation_id_9c3087c3 ON public.orders_quotation_lines USING btree (quotation_id);
+
+
+--
+-- Name: orders_quotations_customer_id_f3cdfd71; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX orders_quotations_customer_id_f3cdfd71 ON public.orders_quotations USING btree (customer_id);
+
+
+--
+-- Name: orders_quotations_quotation_number_88ac860b_like; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX orders_quotations_quotation_number_88ac860b_like ON public.orders_quotations USING btree (quotation_number varchar_pattern_ops);
+
+
+--
+-- Name: orders_sales_order_lines_order_id_69079741; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX orders_sales_order_lines_order_id_69079741 ON public.orders_sales_order_lines USING btree (order_id);
+
+
+--
+-- Name: orders_sales_order_lines_packaging_type_id_b99b5e76; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX orders_sales_order_lines_packaging_type_id_b99b5e76 ON public.orders_sales_order_lines USING btree (packaging_type_id);
+
+
+--
+-- Name: orders_sales_order_lines_plant_id_346ff0d5; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX orders_sales_order_lines_plant_id_346ff0d5 ON public.orders_sales_order_lines USING btree (plant_id);
+
+
+--
+-- Name: orders_sales_order_lines_product_id_964558b6; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX orders_sales_order_lines_product_id_964558b6 ON public.orders_sales_order_lines USING btree (product_id);
+
+
+--
+-- Name: packaging_materials_material_code_bd4b2c0e_like; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX packaging_materials_material_code_bd4b2c0e_like ON public.packaging_materials USING btree (material_code varchar_pattern_ops);
+
+
+--
+-- Name: packaging_materials_products_packagingmaterial_id_190502b8; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX packaging_materials_products_packagingmaterial_id_190502b8 ON public.packaging_materials_products USING btree (packagingmaterial_id);
+
+
+--
+-- Name: packaging_materials_products_product_id_5fba7bd7; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX packaging_materials_products_product_id_5fba7bd7 ON public.packaging_materials_products USING btree (product_id);
+
+
+--
+-- Name: packaging_receiving_lab_sample_id_e908987c; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX packaging_receiving_lab_sample_id_e908987c ON public.packaging_receiving USING btree (lab_sample_id);
+
+
+--
+-- Name: packaging_receiving_material_id_532469bb; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX packaging_receiving_material_id_532469bb ON public.packaging_receiving USING btree (material_id);
+
+
+--
+-- Name: packaging_receiving_product_id_2c7fef03; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX packaging_receiving_product_id_2c7fef03 ON public.packaging_receiving USING btree (product_id);
+
+
+--
+-- Name: packaging_receiving_receiving_number_e412392e_like; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX packaging_receiving_receiving_number_e412392e_like ON public.packaging_receiving USING btree (receiving_number varchar_pattern_ops);
+
+
+--
+-- Name: packaging_receiving_supplier_id_4bacc6ef; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX packaging_receiving_supplier_id_4bacc6ef ON public.packaging_receiving USING btree (supplier_id);
+
+
+--
+-- Name: packaging_reconciliation_material_id_88ab77d8; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX packaging_reconciliation_material_id_88ab77d8 ON public.packaging_reconciliation USING btree (material_id);
+
+
+--
+-- Name: packaging_stock_balances_material_id_0f8181d6; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX packaging_stock_balances_material_id_0f8181d6 ON public.packaging_stock_balances USING btree (material_id);
+
+
+--
+-- Name: packaging_stock_ledger_material_id_1b236497; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX packaging_stock_ledger_material_id_1b236497 ON public.packaging_stock_ledger USING btree (material_id);
+
+
+--
+-- Name: packaging_stock_ledger_user_id_5ce6678d; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX packaging_stock_ledger_user_id_5ce6678d ON public.packaging_stock_ledger USING btree (user_id);
+
+
+--
+-- Name: packaging_supplier_evaluations_supplier_id_12511d83; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX packaging_supplier_evaluations_supplier_id_12511d83 ON public.packaging_supplier_evaluations USING btree (supplier_id);
+
+
+--
+-- Name: packaging_suppliers_materi_packagingmaterial_id_73d1140d; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX packaging_suppliers_materi_packagingmaterial_id_73d1140d ON public.packaging_suppliers_materials_supplied USING btree (packagingmaterial_id);
+
+
+--
+-- Name: packaging_suppliers_materi_packagingsupplier_id_d57b8410; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX packaging_suppliers_materi_packagingsupplier_id_d57b8410 ON public.packaging_suppliers_materials_supplied USING btree (packagingsupplier_id);
+
+
+--
+-- Name: packaging_suppliers_supplier_code_81b2347d_like; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX packaging_suppliers_supplier_code_81b2347d_like ON public.packaging_suppliers USING btree (supplier_code varchar_pattern_ops);
+
+
+--
+-- Name: packing_operations_factory_id_8411914e; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX packing_operations_factory_id_8411914e ON public.packing_operations USING btree (factory_id);
+
+
+--
+-- Name: packing_operations_material_id_8645fc4f; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX packing_operations_material_id_8645fc4f ON public.packing_operations USING btree (material_id);
+
+
+--
+-- Name: packing_operations_product_id_27c5e9a7; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX packing_operations_product_id_27c5e9a7 ON public.packing_operations USING btree (product_id);
+
+
+--
+-- Name: packing_operations_user_id_21f59281; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX packing_operations_user_id_21f59281 ON public.packing_operations USING btree (user_id);
+
+
+--
+-- Name: quality_control_decisions_decided_by_id_7115bca8; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX quality_control_decisions_decided_by_id_7115bca8 ON public.quality_control_decisions USING btree (decided_by_id);
+
+
+--
+-- Name: quality_control_decisions_suggested_by_rule_id_bf2425f9; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX quality_control_decisions_suggested_by_rule_id_bf2425f9 ON public.quality_control_decisions USING btree (suggested_by_rule_id);
+
+
+--
+-- Name: quality_grades_code_20fe1060_like; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX quality_grades_code_20fe1060_like ON public.quality_grades USING btree (code varchar_pattern_ops);
+
+
+--
+-- Name: raw_material_analysis_sample_id_d6d4577d; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX raw_material_analysis_sample_id_d6d4577d ON public.raw_material_analysis USING btree (sample_id);
+
+
+--
+-- Name: raw_material_analysis_test_id_d32032e2; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX raw_material_analysis_test_id_d32032e2 ON public.raw_material_analysis USING btree (test_id);
+
+
+--
+-- Name: raw_material_deliveries_material_id_194fa9dc; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX raw_material_deliveries_material_id_194fa9dc ON public.raw_material_deliveries USING btree (material_id);
+
+
+--
+-- Name: raw_material_deliveries_plant_id_21318252; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX raw_material_deliveries_plant_id_21318252 ON public.raw_material_deliveries USING btree (plant_id);
+
+
+--
+-- Name: raw_material_deliveries_storage_id_b8815aaa; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX raw_material_deliveries_storage_id_b8815aaa ON public.raw_material_deliveries USING btree (storage_id);
+
+
+--
+-- Name: raw_material_deliveries_supplier_id_09ecd6ea; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX raw_material_deliveries_supplier_id_09ecd6ea ON public.raw_material_deliveries USING btree (supplier_id);
+
+
+--
+-- Name: raw_material_lots_delivery_id_06bbe603; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX raw_material_lots_delivery_id_06bbe603 ON public.raw_material_lots USING btree (delivery_id);
+
+
+--
+-- Name: raw_material_lots_lot_number_d30c238e_like; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX raw_material_lots_lot_number_d30c238e_like ON public.raw_material_lots USING btree (lot_number varchar_pattern_ops);
+
+
+--
+-- Name: raw_material_samples_delivery_id_14334741; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX raw_material_samples_delivery_id_14334741 ON public.raw_material_samples USING btree (delivery_id);
+
+
+--
+-- Name: raw_material_samples_material_id_83ef3ed7; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX raw_material_samples_material_id_83ef3ed7 ON public.raw_material_samples USING btree (material_id);
+
+
+--
+-- Name: raw_material_samples_plant_id_5f9c25a8; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX raw_material_samples_plant_id_5f9c25a8 ON public.raw_material_samples USING btree (plant_id);
+
+
+--
+-- Name: sales_orders_customer_id_05ddd68a; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX sales_orders_customer_id_05ddd68a ON public.sales_orders USING btree (customer_id);
+
+
+--
+-- Name: sales_orders_fixed_grade_id_4995fdf1; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX sales_orders_fixed_grade_id_4995fdf1 ON public.sales_orders USING btree (fixed_grade_id);
+
+
+--
+-- Name: sales_orders_order_number_a8bf154b_like; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX sales_orders_order_number_a8bf154b_like ON public.sales_orders USING btree (order_number varchar_pattern_ops);
+
+
+--
+-- Name: sales_orders_product_classification_id_77cbef56; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX sales_orders_product_classification_id_77cbef56 ON public.sales_orders USING btree (product_classification_id);
+
+
+--
+-- Name: spare_part_issue_vouchers_item_id_6ba5a5c2; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX spare_part_issue_vouchers_item_id_6ba5a5c2 ON public.spare_part_issue_vouchers USING btree (item_id);
+
+
+--
+-- Name: spare_part_issue_vouchers_voucher_number_9e77c189_like; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX spare_part_issue_vouchers_voucher_number_9e77c189_like ON public.spare_part_issue_vouchers USING btree (voucher_number varchar_pattern_ops);
+
+
+--
+-- Name: spare_part_items_item_code_04b78fbe_like; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX spare_part_items_item_code_04b78fbe_like ON public.spare_part_items USING btree (item_code varchar_pattern_ops);
+
+
+--
+-- Name: spare_part_items_plant_id_681d5479; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX spare_part_items_plant_id_681d5479 ON public.spare_part_items USING btree (plant_id);
+
+
+--
+-- Name: spare_part_receiving_vouchers_item_id_d11ce077; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX spare_part_receiving_vouchers_item_id_d11ce077 ON public.spare_part_receiving_vouchers USING btree (item_id);
+
+
+--
+-- Name: spare_part_receiving_vouchers_voucher_number_8a91576c_like; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX spare_part_receiving_vouchers_voucher_number_8a91576c_like ON public.spare_part_receiving_vouchers USING btree (voucher_number varchar_pattern_ops);
+
+
+--
+-- Name: spare_part_stock_counts_item_id_6bc63624; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX spare_part_stock_counts_item_id_6bc63624 ON public.spare_part_stock_counts USING btree (item_id);
+
+
+--
+-- Name: spare_part_stock_transactions_item_id_c18b5af6; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX spare_part_stock_transactions_item_id_c18b5af6 ON public.spare_part_stock_transactions USING btree (item_id);
+
+
+--
+-- Name: spare_part_stock_transactions_user_id_4abc0f01; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX spare_part_stock_transactions_user_id_4abc0f01 ON public.spare_part_stock_transactions USING btree (user_id);
+
+
+--
+-- Name: suppliers_supplier_code_94839cb7_like; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX suppliers_supplier_code_94839cb7_like ON public.suppliers USING btree (supplier_code varchar_pattern_ops);
+
+
+--
+-- Name: uniq_floorstock_plant_grade_graded; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE UNIQUE INDEX uniq_floorstock_plant_grade_graded ON public.factory_floor_stock_balances USING btree (plant_id, grade_id, status) WHERE ((status)::text = 'graded'::text);
+
+
+--
+-- Name: uniq_floorstock_plant_waiting_status; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE UNIQUE INDEX uniq_floorstock_plant_waiting_status ON public.factory_floor_stock_balances USING btree (plant_id, status) WHERE ((status)::text = ANY ((ARRAY['waiting_not_sampled'::character varying, 'waiting_sampled'::character varying])::text[]));
+
+
+--
+-- Name: user_account_userprofile_org_position_id_f60888dc; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX user_account_userprofile_org_position_id_f60888dc ON public.user_account_userprofile USING btree (org_position_id);
+
+
+--
+-- Name: auth_group_permissions auth_group_permissio_permission_id_84c5c92e_fk_auth_perm; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.auth_group_permissions
+    ADD CONSTRAINT auth_group_permissio_permission_id_84c5c92e_fk_auth_perm FOREIGN KEY (permission_id) REFERENCES public.auth_permission(id) DEFERRABLE INITIALLY DEFERRED;
+
+
+--
+-- Name: auth_group_permissions auth_group_permissions_group_id_b120cbf9_fk_auth_group_id; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.auth_group_permissions
+    ADD CONSTRAINT auth_group_permissions_group_id_b120cbf9_fk_auth_group_id FOREIGN KEY (group_id) REFERENCES public.auth_group(id) DEFERRABLE INITIALLY DEFERRED;
+
+
+--
+-- Name: auth_permission auth_permission_content_type_id_2f476e4b_fk_django_co; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.auth_permission
+    ADD CONSTRAINT auth_permission_content_type_id_2f476e4b_fk_django_co FOREIGN KEY (content_type_id) REFERENCES public.django_content_type(id) DEFERRABLE INITIALLY DEFERRED;
+
+
+--
+-- Name: auth_user_groups auth_user_groups_group_id_97559544_fk_auth_group_id; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.auth_user_groups
+    ADD CONSTRAINT auth_user_groups_group_id_97559544_fk_auth_group_id FOREIGN KEY (group_id) REFERENCES public.auth_group(id) DEFERRABLE INITIALLY DEFERRED;
+
+
+--
+-- Name: auth_user_groups auth_user_groups_user_id_6a12ed8b_fk_auth_user_id; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.auth_user_groups
+    ADD CONSTRAINT auth_user_groups_user_id_6a12ed8b_fk_auth_user_id FOREIGN KEY (user_id) REFERENCES public.auth_user(id) DEFERRABLE INITIALLY DEFERRED;
+
+
+--
+-- Name: auth_user_user_permissions auth_user_user_permi_permission_id_1fbb5f2c_fk_auth_perm; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.auth_user_user_permissions
+    ADD CONSTRAINT auth_user_user_permi_permission_id_1fbb5f2c_fk_auth_perm FOREIGN KEY (permission_id) REFERENCES public.auth_permission(id) DEFERRABLE INITIALLY DEFERRED;
+
+
+--
+-- Name: auth_user_user_permissions auth_user_user_permissions_user_id_a95ead1b_fk_auth_user_id; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.auth_user_user_permissions
+    ADD CONSTRAINT auth_user_user_permissions_user_id_a95ead1b_fk_auth_user_id FOREIGN KEY (user_id) REFERENCES public.auth_user(id) DEFERRABLE INITIALLY DEFERRED;
+
+
+--
+-- Name: custom_permissions_column_permissions custom_permissions_c_column_id_67832ff9_fk_custom_pe; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.custom_permissions_column_permissions
+    ADD CONSTRAINT custom_permissions_c_column_id_67832ff9_fk_custom_pe FOREIGN KEY (column_id) REFERENCES public.custom_permissions_screen_columns(id) DEFERRABLE INITIALLY DEFERRED;
+
+
+--
+-- Name: custom_permissions_column_permissions custom_permissions_c_role_id_4db64eb2_fk_roles_rol; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.custom_permissions_column_permissions
+    ADD CONSTRAINT custom_permissions_c_role_id_4db64eb2_fk_roles_rol FOREIGN KEY (role_id) REFERENCES public.roles(role_id) DEFERRABLE INITIALLY DEFERRED;
+
+
+--
+-- Name: custom_permissions_screen_columns custom_permissions_s_screen_id_ede08876_fk_custom_pe; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.custom_permissions_screen_columns
+    ADD CONSTRAINT custom_permissions_s_screen_id_ede08876_fk_custom_pe FOREIGN KEY (screen_id) REFERENCES public.custom_permissions_screens(id) DEFERRABLE INITIALLY DEFERRED;
+
+
+--
+-- Name: department_plant_scope department_plant_scope_department_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.department_plant_scope
+    ADD CONSTRAINT department_plant_scope_department_id_fkey FOREIGN KEY (department_id) REFERENCES public.departments(department_id) ON DELETE CASCADE;
+
+
+--
+-- Name: department_plant_scope department_plant_scope_plant_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.department_plant_scope
+    ADD CONSTRAINT department_plant_scope_plant_id_fkey FOREIGN KEY (plant_id) REFERENCES public.plants(plant_id) ON DELETE CASCADE;
+
+
+--
+-- Name: departments departments_parent_department_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.departments
+    ADD CONSTRAINT departments_parent_department_id_fkey FOREIGN KEY (parent_department_id) REFERENCES public.departments(department_id) ON DELETE SET NULL;
+
+
+--
+-- Name: django_admin_log django_admin_log_content_type_id_c4bce8eb_fk_django_co; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.django_admin_log
+    ADD CONSTRAINT django_admin_log_content_type_id_c4bce8eb_fk_django_co FOREIGN KEY (content_type_id) REFERENCES public.django_content_type(id) DEFERRABLE INITIALLY DEFERRED;
+
+
+--
+-- Name: django_admin_log django_admin_log_user_id_c564eba6_fk_auth_user_id; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.django_admin_log
+    ADD CONSTRAINT django_admin_log_user_id_c564eba6_fk_auth_user_id FOREIGN KEY (user_id) REFERENCES public.auth_user(id) DEFERRABLE INITIALLY DEFERRED;
+
+
+--
+-- Name: employee_assignments employee_assignments_employee_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.employee_assignments
+    ADD CONSTRAINT employee_assignments_employee_id_fkey FOREIGN KEY (employee_id) REFERENCES public.employees(employee_id) ON DELETE CASCADE;
+
+
+--
+-- Name: employee_assignments employee_assignments_fixed_shift_type_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.employee_assignments
+    ADD CONSTRAINT employee_assignments_fixed_shift_type_id_fkey FOREIGN KEY (fixed_shift_type_id) REFERENCES public.shift_types(shift_type_id);
+
+
+--
+-- Name: employee_assignments employee_assignments_group_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.employee_assignments
+    ADD CONSTRAINT employee_assignments_group_id_fkey FOREIGN KEY (group_id) REFERENCES public.shift_groups(group_id);
+
+
+--
+-- Name: employee_assignments employee_assignments_position_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.employee_assignments
+    ADD CONSTRAINT employee_assignments_position_id_fkey FOREIGN KEY (position_id) REFERENCES public.org_positions(position_id) ON DELETE CASCADE;
+
+
+--
+-- Name: factory_conformity_rules factory_conformity_r_quality_grade_id_dbd5450b_fk_quality_g; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.factory_conformity_rules
+    ADD CONSTRAINT factory_conformity_r_quality_grade_id_dbd5450b_fk_quality_g FOREIGN KEY (quality_grade_id) REFERENCES public.quality_grades(id) DEFERRABLE INITIALLY DEFERRED;
+
+
+--
+-- Name: factory_conformity_rules factory_conformity_r_test_id_fc347f9b_fk_factory_t; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.factory_conformity_rules
+    ADD CONSTRAINT factory_conformity_r_test_id_fc347f9b_fk_factory_t FOREIGN KEY (test_id) REFERENCES public.factory_test_definitions(id) DEFERRABLE INITIALLY DEFERRED;
+
+
+--
+-- Name: factory_conformity_rules factory_conformity_rules_plant_id_00f881c8_fk_plants_plant_id; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.factory_conformity_rules
+    ADD CONSTRAINT factory_conformity_rules_plant_id_00f881c8_fk_plants_plant_id FOREIGN KEY (plant_id) REFERENCES public.plants(plant_id) DEFERRABLE INITIALLY DEFERRED;
+
+
+--
+-- Name: factory_floor_stock_balances factory_floor_stock__grade_id_339d5e97_fk_factory_g; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.factory_floor_stock_balances
+    ADD CONSTRAINT factory_floor_stock__grade_id_339d5e97_fk_factory_g FOREIGN KEY (grade_id) REFERENCES public.factory_grades(id) DEFERRABLE INITIALLY DEFERRED;
+
+
+--
+-- Name: factory_floor_stock_movements factory_floor_stock__grade_id_c491f13a_fk_factory_g; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.factory_floor_stock_movements
+    ADD CONSTRAINT factory_floor_stock__grade_id_c491f13a_fk_factory_g FOREIGN KEY (grade_id) REFERENCES public.factory_grades(id) DEFERRABLE INITIALLY DEFERRED;
+
+
+--
+-- Name: factory_floor_stock_movements factory_floor_stock__plant_id_53b94edb_fk_plants_pl; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.factory_floor_stock_movements
+    ADD CONSTRAINT factory_floor_stock__plant_id_53b94edb_fk_plants_pl FOREIGN KEY (plant_id) REFERENCES public.plants(plant_id) DEFERRABLE INITIALLY DEFERRED;
+
+
+--
+-- Name: factory_floor_stock_balances factory_floor_stock__plant_id_b04d7b5e_fk_plants_pl; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.factory_floor_stock_balances
+    ADD CONSTRAINT factory_floor_stock__plant_id_b04d7b5e_fk_plants_pl FOREIGN KEY (plant_id) REFERENCES public.plants(plant_id) DEFERRABLE INITIALLY DEFERRED;
+
+
+--
+-- Name: factory_floor_stock_movements factory_floor_stock__ton_id_5d744768_fk_factory_t; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.factory_floor_stock_movements
+    ADD CONSTRAINT factory_floor_stock__ton_id_5d744768_fk_factory_t FOREIGN KEY (ton_id) REFERENCES public.factory_tons(id) DEFERRABLE INITIALLY DEFERRED;
+
+
+--
+-- Name: factory_grade_reasons factory_grade_reasons_plant_id_222f8a15_fk_plants_plant_id; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.factory_grade_reasons
+    ADD CONSTRAINT factory_grade_reasons_plant_id_222f8a15_fk_plants_plant_id FOREIGN KEY (plant_id) REFERENCES public.plants(plant_id) DEFERRABLE INITIALLY DEFERRED;
+
+
+--
+-- Name: factory_grades factory_grades_plant_id_f86bc970_fk_plants_plant_id; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.factory_grades
+    ADD CONSTRAINT factory_grades_plant_id_f86bc970_fk_plants_plant_id FOREIGN KEY (plant_id) REFERENCES public.plants(plant_id) DEFERRABLE INITIALLY DEFERRED;
+
+
+--
+-- Name: factory_output_analysis_results factory_output_analy_reading_id_2b060276_fk_factory_o; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.factory_output_analysis_results
+    ADD CONSTRAINT factory_output_analy_reading_id_2b060276_fk_factory_o FOREIGN KEY (reading_id) REFERENCES public.factory_output_readings(id) DEFERRABLE INITIALLY DEFERRED;
+
+
+--
+-- Name: factory_output_analysis_results factory_output_analy_test_id_ef1a9ca8_fk_factory_t; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.factory_output_analysis_results
+    ADD CONSTRAINT factory_output_analy_test_id_ef1a9ca8_fk_factory_t FOREIGN KEY (test_id) REFERENCES public.factory_test_definitions(id) DEFERRABLE INITIALLY DEFERRED;
+
+
+--
+-- Name: factory_output_point_tests factory_output_point_output_point_id_f4fa5026_fk_factory_o; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.factory_output_point_tests
+    ADD CONSTRAINT factory_output_point_output_point_id_f4fa5026_fk_factory_o FOREIGN KEY (output_point_id) REFERENCES public.factory_output_points(id) DEFERRABLE INITIALLY DEFERRED;
+
+
+--
+-- Name: factory_output_point_tests factory_output_point_test_id_4ded4bd5_fk_factory_t; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.factory_output_point_tests
+    ADD CONSTRAINT factory_output_point_test_id_4ded4bd5_fk_factory_t FOREIGN KEY (test_id) REFERENCES public.factory_test_definitions(id) DEFERRABLE INITIALLY DEFERRED;
+
+
+--
+-- Name: factory_output_points factory_output_points_plant_id_5869dea6_fk_plants_plant_id; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.factory_output_points
+    ADD CONSTRAINT factory_output_points_plant_id_5869dea6_fk_plants_plant_id FOREIGN KEY (plant_id) REFERENCES public.plants(plant_id) DEFERRABLE INITIALLY DEFERRED;
+
+
+--
+-- Name: factory_output_readings factory_output_readi_lab_shift_head_id_9fa94a1c_fk_auth_user; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.factory_output_readings
+    ADD CONSTRAINT factory_output_readi_lab_shift_head_id_9fa94a1c_fk_auth_user FOREIGN KEY (lab_shift_head_id) REFERENCES public.auth_user(id) DEFERRABLE INITIALLY DEFERRED;
+
+
+--
+-- Name: factory_output_readings factory_output_readi_output_point_id_b7abf3fd_fk_factory_o; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.factory_output_readings
+    ADD CONSTRAINT factory_output_readi_output_point_id_b7abf3fd_fk_factory_o FOREIGN KEY (output_point_id) REFERENCES public.factory_output_points(id) DEFERRABLE INITIALLY DEFERRED;
+
+
+--
+-- Name: factory_output_readings factory_output_readi_packing_location_id_06761095_fk_factory_p; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.factory_output_readings
+    ADD CONSTRAINT factory_output_readi_packing_location_id_06761095_fk_factory_p FOREIGN KEY (packing_location_id) REFERENCES public.factory_packing_locations(id) DEFERRABLE INITIALLY DEFERRED;
+
+
+--
+-- Name: factory_output_readings factory_output_readi_packing_type_id_e6d25037_fk_factory_p; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.factory_output_readings
+    ADD CONSTRAINT factory_output_readi_packing_type_id_e6d25037_fk_factory_p FOREIGN KEY (packing_type_id) REFERENCES public.factory_packing_types(id) DEFERRABLE INITIALLY DEFERRED;
+
+
+--
+-- Name: factory_output_readings factory_output_readi_shift_id_633010bf_fk_shift_typ; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.factory_output_readings
+    ADD CONSTRAINT factory_output_readi_shift_id_633010bf_fk_shift_typ FOREIGN KEY (shift_id) REFERENCES public.shift_types(shift_type_id) DEFERRABLE INITIALLY DEFERRED;
+
+
+--
+-- Name: factory_output_readings factory_output_readings_analyzed_by_id_6bcbf1f7_fk_auth_user_id; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.factory_output_readings
+    ADD CONSTRAINT factory_output_readings_analyzed_by_id_6bcbf1f7_fk_auth_user_id FOREIGN KEY (analyzed_by_id) REFERENCES public.auth_user(id) DEFERRABLE INITIALLY DEFERRED;
+
+
+--
+-- Name: factory_output_readings factory_output_readings_plant_id_7375da2d_fk_plants_plant_id; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.factory_output_readings
+    ADD CONSTRAINT factory_output_readings_plant_id_7375da2d_fk_plants_plant_id FOREIGN KEY (plant_id) REFERENCES public.plants(plant_id) DEFERRABLE INITIALLY DEFERRED;
+
+
+--
+-- Name: factory_output_readings factory_output_readings_reviewed_by_id_06e0d214_fk_auth_user_id; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.factory_output_readings
+    ADD CONSTRAINT factory_output_readings_reviewed_by_id_06e0d214_fk_auth_user_id FOREIGN KEY (reviewed_by_id) REFERENCES public.auth_user(id) DEFERRABLE INITIALLY DEFERRED;
+
+
+--
+-- Name: factory_output_readings factory_output_readings_sampled_by_id_9b2a1925_fk_auth_user_id; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.factory_output_readings
+    ADD CONSTRAINT factory_output_readings_sampled_by_id_9b2a1925_fk_auth_user_id FOREIGN KEY (sampled_by_id) REFERENCES public.auth_user(id) DEFERRABLE INITIALLY DEFERRED;
+
+
+--
+-- Name: factory_packaging_stock factory_packaging_st_material_id_a6f4e667_fk_packaging; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.factory_packaging_stock
+    ADD CONSTRAINT factory_packaging_st_material_id_a6f4e667_fk_packaging FOREIGN KEY (material_id) REFERENCES public.packaging_materials(id) DEFERRABLE INITIALLY DEFERRED;
+
+
+--
+-- Name: factory_packaging_stock factory_packaging_stock_factory_id_9092b841_fk_plants_plant_id; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.factory_packaging_stock
+    ADD CONSTRAINT factory_packaging_stock_factory_id_9092b841_fk_plants_plant_id FOREIGN KEY (factory_id) REFERENCES public.plants(plant_id) DEFERRABLE INITIALLY DEFERRED;
+
+
+--
+-- Name: factory_packing_conversions factory_packing_conv_plant_id_1d8bdbc1_fk_plants_pl; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.factory_packing_conversions
+    ADD CONSTRAINT factory_packing_conv_plant_id_1d8bdbc1_fk_plants_pl FOREIGN KEY (plant_id) REFERENCES public.plants(plant_id) DEFERRABLE INITIALLY DEFERRED;
+
+
+--
+-- Name: factory_packing_conversions factory_packing_conv_source_event_id_459c3aa0_fk_factory_p; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.factory_packing_conversions
+    ADD CONSTRAINT factory_packing_conv_source_event_id_459c3aa0_fk_factory_p FOREIGN KEY (source_event_id) REFERENCES public.factory_packing_events(id) DEFERRABLE INITIALLY DEFERRED;
+
+
+--
+-- Name: factory_packing_conversions factory_packing_conv_target_packing_type__85dc76bc_fk_factory_p; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.factory_packing_conversions
+    ADD CONSTRAINT factory_packing_conv_target_packing_type__85dc76bc_fk_factory_p FOREIGN KEY (target_packing_type_id) REFERENCES public.factory_packing_types(id) DEFERRABLE INITIALLY DEFERRED;
+
+
+--
+-- Name: factory_packing_events factory_packing_even_output_reading_id_09059567_fk_factory_o; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.factory_packing_events
+    ADD CONSTRAINT factory_packing_even_output_reading_id_09059567_fk_factory_o FOREIGN KEY (output_reading_id) REFERENCES public.factory_output_readings(id) DEFERRABLE INITIALLY DEFERRED;
+
+
+--
+-- Name: factory_packing_events factory_packing_even_packing_type_id_e8f14989_fk_factory_p; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.factory_packing_events
+    ADD CONSTRAINT factory_packing_even_packing_type_id_e8f14989_fk_factory_p FOREIGN KEY (packing_type_id) REFERENCES public.factory_packing_types(id) DEFERRABLE INITIALLY DEFERRED;
+
+
+--
+-- Name: factory_packing_events factory_packing_events_plant_id_ee0a9cd4_fk_plants_plant_id; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.factory_packing_events
+    ADD CONSTRAINT factory_packing_events_plant_id_ee0a9cd4_fk_plants_plant_id FOREIGN KEY (plant_id) REFERENCES public.plants(plant_id) DEFERRABLE INITIALLY DEFERRED;
+
+
+--
+-- Name: factory_packing_locations factory_packing_locations_plant_id_87010d25_fk_plants_plant_id; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.factory_packing_locations
+    ADD CONSTRAINT factory_packing_locations_plant_id_87010d25_fk_plants_plant_id FOREIGN KEY (plant_id) REFERENCES public.plants(plant_id) DEFERRABLE INITIALLY DEFERRED;
+
+
+--
+-- Name: factory_packing_type_fields factory_packing_type_field_id_ae7b3186_fk_factory_f; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.factory_packing_type_fields
+    ADD CONSTRAINT factory_packing_type_field_id_ae7b3186_fk_factory_f FOREIGN KEY (field_id) REFERENCES public.factory_field_definitions(id) DEFERRABLE INITIALLY DEFERRED;
+
+
+--
+-- Name: factory_packing_type_fields factory_packing_type_packing_type_id_519dac18_fk_factory_p; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.factory_packing_type_fields
+    ADD CONSTRAINT factory_packing_type_packing_type_id_519dac18_fk_factory_p FOREIGN KEY (packing_type_id) REFERENCES public.factory_packing_types(id) DEFERRABLE INITIALLY DEFERRED;
+
+
+--
+-- Name: factory_packing_types factory_packing_types_plant_id_398bbac0_fk_plants_plant_id; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.factory_packing_types
+    ADD CONSTRAINT factory_packing_types_plant_id_398bbac0_fk_plants_plant_id FOREIGN KEY (plant_id) REFERENCES public.plants(plant_id) DEFERRABLE INITIALLY DEFERRED;
+
+
+--
+-- Name: factory_plant_lot_settings factory_plant_lot_settings_plant_id_43ef1ae9_fk_plants_plant_id; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.factory_plant_lot_settings
+    ADD CONSTRAINT factory_plant_lot_settings_plant_id_43ef1ae9_fk_plants_plant_id FOREIGN KEY (plant_id) REFERENCES public.plants(plant_id) DEFERRABLE INITIALLY DEFERRED;
+
+
+--
+-- Name: factory_process_analysis_results factory_process_anal_reading_id_7ca76fd1_fk_factory_p; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.factory_process_analysis_results
+    ADD CONSTRAINT factory_process_anal_reading_id_7ca76fd1_fk_factory_p FOREIGN KEY (reading_id) REFERENCES public.factory_process_readings(id) DEFERRABLE INITIALLY DEFERRED;
+
+
+--
+-- Name: factory_process_analysis_results factory_process_anal_test_id_997a72af_fk_factory_t; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.factory_process_analysis_results
+    ADD CONSTRAINT factory_process_anal_test_id_997a72af_fk_factory_t FOREIGN KEY (test_id) REFERENCES public.factory_test_definitions(id) DEFERRABLE INITIALLY DEFERRED;
+
+
+--
+-- Name: factory_process_readings factory_process_read_shift_id_3beb83b4_fk_shift_typ; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.factory_process_readings
+    ADD CONSTRAINT factory_process_read_shift_id_3beb83b4_fk_shift_typ FOREIGN KEY (shift_id) REFERENCES public.shift_types(shift_type_id) DEFERRABLE INITIALLY DEFERRED;
+
+
+--
+-- Name: factory_process_readings factory_process_read_stage_id_d9c5c972_fk_factory_p; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.factory_process_readings
+    ADD CONSTRAINT factory_process_read_stage_id_d9c5c972_fk_factory_p FOREIGN KEY (stage_id) REFERENCES public.factory_process_stages(id) DEFERRABLE INITIALLY DEFERRED;
+
+
+--
+-- Name: factory_process_readings factory_process_readings_plant_id_282b54c8_fk_plants_plant_id; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.factory_process_readings
+    ADD CONSTRAINT factory_process_readings_plant_id_282b54c8_fk_plants_plant_id FOREIGN KEY (plant_id) REFERENCES public.plants(plant_id) DEFERRABLE INITIALLY DEFERRED;
+
+
+--
+-- Name: factory_process_stage_tests factory_process_stag_stage_id_bea31c2a_fk_factory_p; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.factory_process_stage_tests
+    ADD CONSTRAINT factory_process_stag_stage_id_bea31c2a_fk_factory_p FOREIGN KEY (stage_id) REFERENCES public.factory_process_stages(id) DEFERRABLE INITIALLY DEFERRED;
+
+
+--
+-- Name: factory_process_stage_tests factory_process_stag_test_id_58c6d111_fk_factory_t; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.factory_process_stage_tests
+    ADD CONSTRAINT factory_process_stag_test_id_58c6d111_fk_factory_t FOREIGN KEY (test_id) REFERENCES public.factory_test_definitions(id) DEFERRABLE INITIALLY DEFERRED;
+
+
+--
+-- Name: factory_process_stages factory_process_stages_plant_id_7273fa4d_fk_plants_plant_id; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.factory_process_stages
+    ADD CONSTRAINT factory_process_stages_plant_id_7273fa4d_fk_plants_plant_id FOREIGN KEY (plant_id) REFERENCES public.plants(plant_id) DEFERRABLE INITIALLY DEFERRED;
+
+
+--
+-- Name: factory_quality_conformity_results factory_quality_conf_conformity_rule_id_7e8ce9a8_fk_factory_c; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.factory_quality_conformity_results
+    ADD CONSTRAINT factory_quality_conf_conformity_rule_id_7e8ce9a8_fk_factory_c FOREIGN KEY (conformity_rule_id) REFERENCES public.factory_conformity_rules(id) DEFERRABLE INITIALLY DEFERRED;
+
+
+--
+-- Name: factory_quality_conformity_results factory_quality_conf_grade_id_0bf0e404_fk_factory_g; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.factory_quality_conformity_results
+    ADD CONSTRAINT factory_quality_conf_grade_id_0bf0e404_fk_factory_g FOREIGN KEY (grade_id) REFERENCES public.factory_grades(id) DEFERRABLE INITIALLY DEFERRED;
+
+
+--
+-- Name: factory_quality_conformity_results factory_quality_conf_quality_grade_id_afee10a6_fk_quality_g; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.factory_quality_conformity_results
+    ADD CONSTRAINT factory_quality_conf_quality_grade_id_afee10a6_fk_quality_g FOREIGN KEY (quality_grade_id) REFERENCES public.quality_grades(id) DEFERRABLE INITIALLY DEFERRED;
+
+
+--
+-- Name: factory_quality_conformity_results factory_quality_conf_reading_id_4141c4a3_fk_factory_o; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.factory_quality_conformity_results
+    ADD CONSTRAINT factory_quality_conf_reading_id_4141c4a3_fk_factory_o FOREIGN KEY (reading_id) REFERENCES public.factory_output_readings(id) DEFERRABLE INITIALLY DEFERRED;
+
+
+--
+-- Name: factory_representative_group_sizes factory_representati_packing_type_id_8e57a74d_fk_factory_p; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.factory_representative_group_sizes
+    ADD CONSTRAINT factory_representati_packing_type_id_8e57a74d_fk_factory_p FOREIGN KEY (packing_type_id) REFERENCES public.factory_packing_types(id) DEFERRABLE INITIALLY DEFERRED;
+
+
+--
+-- Name: factory_representative_group_sizes factory_representati_plant_id_1382f521_fk_plants_pl; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.factory_representative_group_sizes
+    ADD CONSTRAINT factory_representati_plant_id_1382f521_fk_plants_pl FOREIGN KEY (plant_id) REFERENCES public.plants(plant_id) DEFERRABLE INITIALLY DEFERRED;
+
+
+--
+-- Name: factory_representative_samples factory_representati_plant_id_cf02c7ee_fk_plants_pl; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.factory_representative_samples
+    ADD CONSTRAINT factory_representati_plant_id_cf02c7ee_fk_plants_pl FOREIGN KEY (plant_id) REFERENCES public.plants(plant_id) DEFERRABLE INITIALLY DEFERRED;
+
+
+--
+-- Name: factory_representative_samples_tons factory_representati_representativesample_f5fcbb6e_fk_factory_r; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.factory_representative_samples_tons
+    ADD CONSTRAINT factory_representati_representativesample_f5fcbb6e_fk_factory_r FOREIGN KEY (representativesample_id) REFERENCES public.factory_representative_samples(id) DEFERRABLE INITIALLY DEFERRED;
+
+
+--
+-- Name: factory_representative_samples_tons factory_representati_ton_id_454fea77_fk_factory_t; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.factory_representative_samples_tons
+    ADD CONSTRAINT factory_representati_ton_id_454fea77_fk_factory_t FOREIGN KEY (ton_id) REFERENCES public.factory_tons(id) DEFERRABLE INITIALLY DEFERRED;
+
+
+--
+-- Name: factory_sample_chemical_results factory_sample_chemi_representative_sampl_51609ea0_fk_factory_r; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.factory_sample_chemical_results
+    ADD CONSTRAINT factory_sample_chemi_representative_sampl_51609ea0_fk_factory_r FOREIGN KEY (representative_sample_id) REFERENCES public.factory_representative_samples(id) DEFERRABLE INITIALLY DEFERRED;
+
+
+--
+-- Name: factory_sample_chemical_results factory_sample_chemi_test_id_423ad324_fk_factory_t; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.factory_sample_chemical_results
+    ADD CONSTRAINT factory_sample_chemi_test_id_423ad324_fk_factory_t FOREIGN KEY (test_id) REFERENCES public.factory_test_definitions(id) DEFERRABLE INITIALLY DEFERRED;
+
+
+--
+-- Name: factory_sample_chemical_results factory_sample_chemi_ton_id_f57af000_fk_factory_t; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.factory_sample_chemical_results
+    ADD CONSTRAINT factory_sample_chemi_ton_id_f57af000_fk_factory_t FOREIGN KEY (ton_id) REFERENCES public.factory_tons(id) DEFERRABLE INITIALLY DEFERRED;
+
+
+--
+-- Name: factory_test_definitions factory_test_definitions_plant_id_61ee6b1b_fk_plants_plant_id; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.factory_test_definitions
+    ADD CONSTRAINT factory_test_definitions_plant_id_61ee6b1b_fk_plants_plant_id FOREIGN KEY (plant_id) REFERENCES public.plants(plant_id) DEFERRABLE INITIALLY DEFERRED;
+
+
+--
+-- Name: factory_ton_grade_assignments factory_ton_grade_as_assigned_by_id_7c52cef6_fk_auth_user; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.factory_ton_grade_assignments
+    ADD CONSTRAINT factory_ton_grade_as_assigned_by_id_7c52cef6_fk_auth_user FOREIGN KEY (assigned_by_id) REFERENCES public.auth_user(id) DEFERRABLE INITIALLY DEFERRED;
+
+
+--
+-- Name: factory_ton_grade_assignments factory_ton_grade_as_primary_grade_id_71f03197_fk_factory_g; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.factory_ton_grade_assignments
+    ADD CONSTRAINT factory_ton_grade_as_primary_grade_id_71f03197_fk_factory_g FOREIGN KEY (primary_grade_id) REFERENCES public.factory_grades(id) DEFERRABLE INITIALLY DEFERRED;
+
+
+--
+-- Name: factory_ton_grade_assignments factory_ton_grade_as_reason_id_cb726c80_fk_factory_g; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.factory_ton_grade_assignments
+    ADD CONSTRAINT factory_ton_grade_as_reason_id_cb726c80_fk_factory_g FOREIGN KEY (reason_id) REFERENCES public.factory_grade_reasons(id) DEFERRABLE INITIALLY DEFERRED;
+
+
+--
+-- Name: factory_ton_grade_assignments factory_ton_grade_as_secondary_grade_id_0a31400b_fk_factory_g; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.factory_ton_grade_assignments
+    ADD CONSTRAINT factory_ton_grade_as_secondary_grade_id_0a31400b_fk_factory_g FOREIGN KEY (secondary_grade_id) REFERENCES public.factory_grades(id) DEFERRABLE INITIALLY DEFERRED;
+
+
+--
+-- Name: factory_ton_grade_assignments factory_ton_grade_as_ton_id_51aa4882_fk_factory_t; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.factory_ton_grade_assignments
+    ADD CONSTRAINT factory_ton_grade_as_ton_id_51aa4882_fk_factory_t FOREIGN KEY (ton_id) REFERENCES public.factory_tons(id) DEFERRABLE INITIALLY DEFERRED;
+
+
+--
+-- Name: factory_ton_physical_results factory_ton_physical_results_ton_id_6e243e33_fk_factory_tons_id; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.factory_ton_physical_results
+    ADD CONSTRAINT factory_ton_physical_results_ton_id_6e243e33_fk_factory_tons_id FOREIGN KEY (ton_id) REFERENCES public.factory_tons(id) DEFERRABLE INITIALLY DEFERRED;
+
+
+--
+-- Name: factory_ton_physical_results factory_ton_physical_test_id_4eebc4a8_fk_factory_t; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.factory_ton_physical_results
+    ADD CONSTRAINT factory_ton_physical_test_id_4eebc4a8_fk_factory_t FOREIGN KEY (test_id) REFERENCES public.factory_test_definitions(id) DEFERRABLE INITIALLY DEFERRED;
+
+
+--
+-- Name: factory_tons factory_tons_lab_sample_id_05ac1e4a_fk_lab_samples_id; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.factory_tons
+    ADD CONSTRAINT factory_tons_lab_sample_id_05ac1e4a_fk_lab_samples_id FOREIGN KEY (lab_sample_id) REFERENCES public.lab_samples(id) DEFERRABLE INITIALLY DEFERRED;
+
+
+--
+-- Name: factory_tons factory_tons_output_reading_id_f4c8c0c6_fk_factory_o; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.factory_tons
+    ADD CONSTRAINT factory_tons_output_reading_id_f4c8c0c6_fk_factory_o FOREIGN KEY (output_reading_id) REFERENCES public.factory_output_readings(id) DEFERRABLE INITIALLY DEFERRED;
+
+
+--
+-- Name: factory_tons factory_tons_plant_id_c3a66710_fk_plants_plant_id; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.factory_tons
+    ADD CONSTRAINT factory_tons_plant_id_c3a66710_fk_plants_plant_id FOREIGN KEY (plant_id) REFERENCES public.plants(plant_id) DEFERRABLE INITIALLY DEFERRED;
+
+
+--
+-- Name: factory_tons factory_tons_production_shift_id_899bd81b_fk_shift_typ; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.factory_tons
+    ADD CONSTRAINT factory_tons_production_shift_id_899bd81b_fk_shift_typ FOREIGN KEY (production_shift_id) REFERENCES public.shift_types(shift_type_id) DEFERRABLE INITIALLY DEFERRED;
+
+
+--
+-- Name: finished_products_products_packing_types finished_products_pr_packingtype_id_eba564d1_fk_factory_p; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.finished_products_products_packing_types
+    ADD CONSTRAINT finished_products_pr_packingtype_id_eba564d1_fk_factory_p FOREIGN KEY (packingtype_id) REFERENCES public.factory_packing_types(id) DEFERRABLE INITIALLY DEFERRED;
+
+
+--
+-- Name: finished_products_products_plants finished_products_pr_plant_id_0529760e_fk_plants_pl; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.finished_products_products_plants
+    ADD CONSTRAINT finished_products_pr_plant_id_0529760e_fk_plants_pl FOREIGN KEY (plant_id) REFERENCES public.plants(plant_id) DEFERRABLE INITIALLY DEFERRED;
+
+
+--
+-- Name: finished_products_products_packing_types finished_products_pr_product_id_54b98ff6_fk_finished_; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.finished_products_products_packing_types
+    ADD CONSTRAINT finished_products_pr_product_id_54b98ff6_fk_finished_ FOREIGN KEY (product_id) REFERENCES public.finished_products_products(id) DEFERRABLE INITIALLY DEFERRED;
+
+
+--
+-- Name: finished_products_products_plants finished_products_pr_product_id_d75e7240_fk_finished_; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.finished_products_products_plants
+    ADD CONSTRAINT finished_products_pr_product_id_d75e7240_fk_finished_ FOREIGN KEY (product_id) REFERENCES public.finished_products_products(id) DEFERRABLE INITIALLY DEFERRED;
+
+
+--
+-- Name: finished_products_stock_balances finished_products_st_packaging_type_id_462b2506_fk_factory_p; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.finished_products_stock_balances
+    ADD CONSTRAINT finished_products_st_packaging_type_id_462b2506_fk_factory_p FOREIGN KEY (packaging_type_id) REFERENCES public.factory_packing_types(id) DEFERRABLE INITIALLY DEFERRED;
+
+
+--
+-- Name: finished_products_stock_ledger finished_products_st_packaging_type_id_ef238fac_fk_factory_p; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.finished_products_stock_ledger
+    ADD CONSTRAINT finished_products_st_packaging_type_id_ef238fac_fk_factory_p FOREIGN KEY (packaging_type_id) REFERENCES public.factory_packing_types(id) DEFERRABLE INITIALLY DEFERRED;
+
+
+--
+-- Name: finished_products_stock_ledger finished_products_st_plant_id_3046b5b6_fk_plants_pl; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.finished_products_stock_ledger
+    ADD CONSTRAINT finished_products_st_plant_id_3046b5b6_fk_plants_pl FOREIGN KEY (plant_id) REFERENCES public.plants(plant_id) DEFERRABLE INITIALLY DEFERRED;
+
+
+--
+-- Name: finished_products_stock_balances finished_products_st_plant_id_701ba7bb_fk_plants_pl; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.finished_products_stock_balances
+    ADD CONSTRAINT finished_products_st_plant_id_701ba7bb_fk_plants_pl FOREIGN KEY (plant_id) REFERENCES public.plants(plant_id) DEFERRABLE INITIALLY DEFERRED;
+
+
+--
+-- Name: finished_products_stock_balances finished_products_st_product_id_195c98a5_fk_finished_; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.finished_products_stock_balances
+    ADD CONSTRAINT finished_products_st_product_id_195c98a5_fk_finished_ FOREIGN KEY (product_id) REFERENCES public.finished_products_products(id) DEFERRABLE INITIALLY DEFERRED;
+
+
+--
+-- Name: finished_products_stock_ledger finished_products_st_product_id_8d50ec06_fk_finished_; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.finished_products_stock_ledger
+    ADD CONSTRAINT finished_products_st_product_id_8d50ec06_fk_finished_ FOREIGN KEY (product_id) REFERENCES public.finished_products_products(id) DEFERRABLE INITIALLY DEFERRED;
+
+
+--
+-- Name: finished_products_stock_ledger finished_products_stock_ledger_user_id_85d61623_fk_auth_user_id; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.finished_products_stock_ledger
+    ADD CONSTRAINT finished_products_stock_ledger_user_id_85d61623_fk_auth_user_id FOREIGN KEY (user_id) REFERENCES public.auth_user(id) DEFERRABLE INITIALLY DEFERRED;
+
+
+--
+-- Name: inventory_transactions inventory_transactio_reference_delivery_i_55239032_fk_raw_mater; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.inventory_transactions
+    ADD CONSTRAINT inventory_transactio_reference_delivery_i_55239032_fk_raw_mater FOREIGN KEY (reference_delivery_id) REFERENCES public.raw_material_deliveries(id) DEFERRABLE INITIALLY DEFERRED;
+
+
+--
+-- Name: inventory_transactions inventory_transactio_storage_id_8ed71714_fk_material_; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.inventory_transactions
+    ADD CONSTRAINT inventory_transactio_storage_id_8ed71714_fk_material_ FOREIGN KEY (storage_id) REFERENCES public.material_storages(id) DEFERRABLE INITIALLY DEFERRED;
+
+
+--
+-- Name: inventory_transactions inventory_transactions_material_id_7fee0597_fk_materials_id; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.inventory_transactions
+    ADD CONSTRAINT inventory_transactions_material_id_7fee0597_fk_materials_id FOREIGN KEY (material_id) REFERENCES public.materials(id) DEFERRABLE INITIALLY DEFERRED;
+
+
+--
+-- Name: inventory_transactions inventory_transactions_plant_id_6893c345_fk_plants_plant_id; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.inventory_transactions
+    ADD CONSTRAINT inventory_transactions_plant_id_6893c345_fk_plants_plant_id FOREIGN KEY (plant_id) REFERENCES public.plants(plant_id) DEFERRABLE INITIALLY DEFERRED;
+
+
+--
+-- Name: lab_sample_groups lab_sample_groups_plant_id_1f5fdf80_fk_plants_plant_id; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.lab_sample_groups
+    ADD CONSTRAINT lab_sample_groups_plant_id_1f5fdf80_fk_plants_plant_id FOREIGN KEY (plant_id) REFERENCES public.plants(plant_id) DEFERRABLE INITIALLY DEFERRED;
+
+
+--
+-- Name: lab_sample_required_tests lab_sample_required__test_content_type_id_b7e452f9_fk_django_co; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.lab_sample_required_tests
+    ADD CONSTRAINT lab_sample_required__test_content_type_id_b7e452f9_fk_django_co FOREIGN KEY (test_content_type_id) REFERENCES public.django_content_type(id) DEFERRABLE INITIALLY DEFERRED;
+
+
+--
+-- Name: lab_sample_required_tests lab_sample_required_tests_sample_id_3831e663_fk_lab_samples_id; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.lab_sample_required_tests
+    ADD CONSTRAINT lab_sample_required_tests_sample_id_3831e663_fk_lab_samples_id FOREIGN KEY (sample_id) REFERENCES public.lab_samples(id) DEFERRABLE INITIALLY DEFERRED;
+
+
+--
+-- Name: lab_sample_test_results lab_sample_test_resu_test_content_type_id_6a22bcf2_fk_django_co; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.lab_sample_test_results
+    ADD CONSTRAINT lab_sample_test_resu_test_content_type_id_6a22bcf2_fk_django_co FOREIGN KEY (test_content_type_id) REFERENCES public.django_content_type(id) DEFERRABLE INITIALLY DEFERRED;
+
+
+--
+-- Name: lab_sample_test_results lab_sample_test_results_entered_by_id_937e7658_fk_auth_user_id; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.lab_sample_test_results
+    ADD CONSTRAINT lab_sample_test_results_entered_by_id_937e7658_fk_auth_user_id FOREIGN KEY (entered_by_id) REFERENCES public.auth_user(id) DEFERRABLE INITIALLY DEFERRED;
+
+
+--
+-- Name: lab_sample_test_results lab_sample_test_results_sample_id_39f0046d_fk_lab_samples_id; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.lab_sample_test_results
+    ADD CONSTRAINT lab_sample_test_results_sample_id_39f0046d_fk_lab_samples_id FOREIGN KEY (sample_id) REFERENCES public.lab_samples(id) DEFERRABLE INITIALLY DEFERRED;
+
+
+--
+-- Name: lab_samples lab_samples_collected_by_id_6c2d7060_fk_auth_user_id; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.lab_samples
+    ADD CONSTRAINT lab_samples_collected_by_id_6c2d7060_fk_auth_user_id FOREIGN KEY (collected_by_id) REFERENCES public.auth_user(id) DEFERRABLE INITIALLY DEFERRED;
+
+
+--
+-- Name: lab_samples lab_samples_content_type_id_f5601d0c_fk_django_content_type_id; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.lab_samples
+    ADD CONSTRAINT lab_samples_content_type_id_f5601d0c_fk_django_content_type_id FOREIGN KEY (content_type_id) REFERENCES public.django_content_type(id) DEFERRABLE INITIALLY DEFERRED;
+
+
+--
+-- Name: lab_samples lab_samples_group_id_dbe4d13a_fk_lab_sample_groups_id; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.lab_samples
+    ADD CONSTRAINT lab_samples_group_id_dbe4d13a_fk_lab_sample_groups_id FOREIGN KEY (group_id) REFERENCES public.lab_sample_groups(id) DEFERRABLE INITIALLY DEFERRED;
+
+
+--
+-- Name: lab_samples lab_samples_lab_department_id_51497dcc_fk_departmen; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.lab_samples
+    ADD CONSTRAINT lab_samples_lab_department_id_51497dcc_fk_departmen FOREIGN KEY (lab_department_id) REFERENCES public.departments(department_id) DEFERRABLE INITIALLY DEFERRED;
+
+
+--
+-- Name: lab_samples lab_samples_plant_id_a1e5d061_fk_plants_plant_id; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.lab_samples
+    ADD CONSTRAINT lab_samples_plant_id_a1e5d061_fk_plants_plant_id FOREIGN KEY (plant_id) REFERENCES public.plants(plant_id) DEFERRABLE INITIALLY DEFERRED;
+
+
+--
+-- Name: material_specifications material_specifications_material_id_718a66e5_fk_materials_id; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.material_specifications
+    ADD CONSTRAINT material_specifications_material_id_718a66e5_fk_materials_id FOREIGN KEY (material_id) REFERENCES public.materials(id) DEFERRABLE INITIALLY DEFERRED;
+
+
+--
+-- Name: material_specifications material_specifications_test_id_e5c1cf33_fk_material_tests_id; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.material_specifications
+    ADD CONSTRAINT material_specifications_test_id_e5c1cf33_fk_material_tests_id FOREIGN KEY (test_id) REFERENCES public.material_tests(id) DEFERRABLE INITIALLY DEFERRED;
+
+
+--
+-- Name: material_storages material_storages_material_id_4e4ed7cf_fk_materials_id; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.material_storages
+    ADD CONSTRAINT material_storages_material_id_4e4ed7cf_fk_materials_id FOREIGN KEY (material_id) REFERENCES public.materials(id) DEFERRABLE INITIALLY DEFERRED;
+
+
+--
+-- Name: material_storages material_storages_plant_id_8b211aba_fk_plants_plant_id; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.material_storages
+    ADD CONSTRAINT material_storages_plant_id_8b211aba_fk_plants_plant_id FOREIGN KEY (plant_id) REFERENCES public.plants(plant_id) DEFERRABLE INITIALLY DEFERRED;
+
+
+--
+-- Name: material_tests material_tests_material_id_ad8f13c8_fk_materials_id; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.material_tests
+    ADD CONSTRAINT material_tests_material_id_ad8f13c8_fk_materials_id FOREIGN KEY (material_id) REFERENCES public.materials(id) DEFERRABLE INITIALLY DEFERRED;
+
+
+--
+-- Name: order_movements order_movements_grade_id_c006265e_fk_factory_grades_id; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.order_movements
+    ADD CONSTRAINT order_movements_grade_id_c006265e_fk_factory_grades_id FOREIGN KEY (grade_id) REFERENCES public.factory_grades(id) DEFERRABLE INITIALLY DEFERRED;
+
+
+--
+-- Name: order_movements order_movements_order_id_4358870d_fk_sales_orders_id; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.order_movements
+    ADD CONSTRAINT order_movements_order_id_4358870d_fk_sales_orders_id FOREIGN KEY (order_id) REFERENCES public.sales_orders(id) DEFERRABLE INITIALLY DEFERRED;
+
+
+--
+-- Name: order_movements order_movements_source_plant_id_028649fd_fk_plants_plant_id; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.order_movements
+    ADD CONSTRAINT order_movements_source_plant_id_028649fd_fk_plants_plant_id FOREIGN KEY (source_plant_id) REFERENCES public.plants(plant_id) DEFERRABLE INITIALLY DEFERRED;
+
+
+--
+-- Name: order_plant_allocation_change_log order_plant_allocati_changed_by_id_7ef07420_fk_auth_user; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.order_plant_allocation_change_log
+    ADD CONSTRAINT order_plant_allocati_changed_by_id_7ef07420_fk_auth_user FOREIGN KEY (changed_by_id) REFERENCES public.auth_user(id) DEFERRABLE INITIALLY DEFERRED;
+
+
+--
+-- Name: order_plant_allocation_change_log order_plant_allocati_from_plant_id_c00f37a1_fk_plants_pl; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.order_plant_allocation_change_log
+    ADD CONSTRAINT order_plant_allocati_from_plant_id_c00f37a1_fk_plants_pl FOREIGN KEY (from_plant_id) REFERENCES public.plants(plant_id) DEFERRABLE INITIALLY DEFERRED;
+
+
+--
+-- Name: order_plant_allocation_change_log order_plant_allocati_order_id_4c5deab0_fk_sales_ord; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.order_plant_allocation_change_log
+    ADD CONSTRAINT order_plant_allocati_order_id_4c5deab0_fk_sales_ord FOREIGN KEY (order_id) REFERENCES public.sales_orders(id) DEFERRABLE INITIALLY DEFERRED;
+
+
+--
+-- Name: order_plant_allocation_change_log order_plant_allocati_to_plant_id_cc8f6d9e_fk_plants_pl; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.order_plant_allocation_change_log
+    ADD CONSTRAINT order_plant_allocati_to_plant_id_cc8f6d9e_fk_plants_pl FOREIGN KEY (to_plant_id) REFERENCES public.plants(plant_id) DEFERRABLE INITIALLY DEFERRED;
+
+
+--
+-- Name: order_plant_allocations order_plant_allocations_order_id_7dbc2a6e_fk_sales_orders_id; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.order_plant_allocations
+    ADD CONSTRAINT order_plant_allocations_order_id_7dbc2a6e_fk_sales_orders_id FOREIGN KEY (order_id) REFERENCES public.sales_orders(id) DEFERRABLE INITIALLY DEFERRED;
+
+
+--
+-- Name: order_plant_allocations order_plant_allocations_plant_id_9f07e85c_fk_plants_plant_id; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.order_plant_allocations
+    ADD CONSTRAINT order_plant_allocations_plant_id_9f07e85c_fk_plants_plant_id FOREIGN KEY (plant_id) REFERENCES public.plants(plant_id) DEFERRABLE INITIALLY DEFERRED;
+
+
+--
+-- Name: orders_price_lists orders_price_lists_packaging_type_id_255b0dfe_fk_factory_p; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.orders_price_lists
+    ADD CONSTRAINT orders_price_lists_packaging_type_id_255b0dfe_fk_factory_p FOREIGN KEY (packaging_type_id) REFERENCES public.factory_packing_types(id) DEFERRABLE INITIALLY DEFERRED;
+
+
+--
+-- Name: orders_price_lists orders_price_lists_product_id_fed10f05_fk_finished_; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.orders_price_lists
+    ADD CONSTRAINT orders_price_lists_product_id_fed10f05_fk_finished_ FOREIGN KEY (product_id) REFERENCES public.finished_products_products(id) DEFERRABLE INITIALLY DEFERRED;
+
+
+--
+-- Name: orders_quotation_lines orders_quotation_lin_packaging_type_id_60ab8f55_fk_factory_p; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.orders_quotation_lines
+    ADD CONSTRAINT orders_quotation_lin_packaging_type_id_60ab8f55_fk_factory_p FOREIGN KEY (packaging_type_id) REFERENCES public.factory_packing_types(id) DEFERRABLE INITIALLY DEFERRED;
+
+
+--
+-- Name: orders_quotation_lines orders_quotation_lin_product_id_178a5c76_fk_finished_; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.orders_quotation_lines
+    ADD CONSTRAINT orders_quotation_lin_product_id_178a5c76_fk_finished_ FOREIGN KEY (product_id) REFERENCES public.finished_products_products(id) DEFERRABLE INITIALLY DEFERRED;
+
+
+--
+-- Name: orders_quotation_lines orders_quotation_lin_quotation_id_9c3087c3_fk_orders_qu; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.orders_quotation_lines
+    ADD CONSTRAINT orders_quotation_lin_quotation_id_9c3087c3_fk_orders_qu FOREIGN KEY (quotation_id) REFERENCES public.orders_quotations(id) DEFERRABLE INITIALLY DEFERRED;
+
+
+--
+-- Name: orders_quotations orders_quotations_customer_id_f3cdfd71_fk_orders_customers_id; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.orders_quotations
+    ADD CONSTRAINT orders_quotations_customer_id_f3cdfd71_fk_orders_customers_id FOREIGN KEY (customer_id) REFERENCES public.orders_customers(id) DEFERRABLE INITIALLY DEFERRED;
+
+
+--
+-- Name: orders_sales_order_lines orders_sales_order_l_packaging_type_id_b99b5e76_fk_factory_p; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.orders_sales_order_lines
+    ADD CONSTRAINT orders_sales_order_l_packaging_type_id_b99b5e76_fk_factory_p FOREIGN KEY (packaging_type_id) REFERENCES public.factory_packing_types(id) DEFERRABLE INITIALLY DEFERRED;
+
+
+--
+-- Name: orders_sales_order_lines orders_sales_order_l_product_id_964558b6_fk_finished_; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.orders_sales_order_lines
+    ADD CONSTRAINT orders_sales_order_l_product_id_964558b6_fk_finished_ FOREIGN KEY (product_id) REFERENCES public.finished_products_products(id) DEFERRABLE INITIALLY DEFERRED;
+
+
+--
+-- Name: orders_sales_order_lines orders_sales_order_lines_order_id_69079741_fk_sales_orders_id; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.orders_sales_order_lines
+    ADD CONSTRAINT orders_sales_order_lines_order_id_69079741_fk_sales_orders_id FOREIGN KEY (order_id) REFERENCES public.sales_orders(id) DEFERRABLE INITIALLY DEFERRED;
+
+
+--
+-- Name: orders_sales_order_lines orders_sales_order_lines_plant_id_346ff0d5_fk_plants_plant_id; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.orders_sales_order_lines
+    ADD CONSTRAINT orders_sales_order_lines_plant_id_346ff0d5_fk_plants_plant_id FOREIGN KEY (plant_id) REFERENCES public.plants(plant_id) DEFERRABLE INITIALLY DEFERRED;
+
+
+--
+-- Name: org_position_department_scope org_position_department_scope_department_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.org_position_department_scope
+    ADD CONSTRAINT org_position_department_scope_department_id_fkey FOREIGN KEY (department_id) REFERENCES public.departments(department_id) ON DELETE CASCADE;
+
+
+--
+-- Name: org_position_department_scope org_position_department_scope_position_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.org_position_department_scope
+    ADD CONSTRAINT org_position_department_scope_position_id_fkey FOREIGN KEY (position_id) REFERENCES public.org_positions(position_id) ON DELETE CASCADE;
+
+
+--
+-- Name: org_positions org_positions_department_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.org_positions
+    ADD CONSTRAINT org_positions_department_id_fkey FOREIGN KEY (department_id) REFERENCES public.departments(department_id) ON DELETE CASCADE;
+
+
+--
+-- Name: org_positions org_positions_plant_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.org_positions
+    ADD CONSTRAINT org_positions_plant_id_fkey FOREIGN KEY (plant_id) REFERENCES public.plants(plant_id) ON DELETE CASCADE;
+
+
+--
+-- Name: org_positions org_positions_role_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.org_positions
+    ADD CONSTRAINT org_positions_role_id_fkey FOREIGN KEY (role_id) REFERENCES public.roles(role_id);
+
+
+--
+-- Name: packaging_materials_products packaging_materials__packagingmaterial_id_190502b8_fk_packaging; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.packaging_materials_products
+    ADD CONSTRAINT packaging_materials__packagingmaterial_id_190502b8_fk_packaging FOREIGN KEY (packagingmaterial_id) REFERENCES public.packaging_materials(id) DEFERRABLE INITIALLY DEFERRED;
+
+
+--
+-- Name: packaging_materials_products packaging_materials__product_id_5fba7bd7_fk_finished_; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.packaging_materials_products
+    ADD CONSTRAINT packaging_materials__product_id_5fba7bd7_fk_finished_ FOREIGN KEY (product_id) REFERENCES public.finished_products_products(id) DEFERRABLE INITIALLY DEFERRED;
+
+
+--
+-- Name: packaging_receiving packaging_receiving_lab_sample_id_e908987c_fk_lab_samples_id; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.packaging_receiving
+    ADD CONSTRAINT packaging_receiving_lab_sample_id_e908987c_fk_lab_samples_id FOREIGN KEY (lab_sample_id) REFERENCES public.lab_samples(id) DEFERRABLE INITIALLY DEFERRED;
+
+
+--
+-- Name: packaging_receiving packaging_receiving_material_id_532469bb_fk_packaging; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.packaging_receiving
+    ADD CONSTRAINT packaging_receiving_material_id_532469bb_fk_packaging FOREIGN KEY (material_id) REFERENCES public.packaging_materials(id) DEFERRABLE INITIALLY DEFERRED;
+
+
+--
+-- Name: packaging_receiving packaging_receiving_product_id_2c7fef03_fk_finished_; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.packaging_receiving
+    ADD CONSTRAINT packaging_receiving_product_id_2c7fef03_fk_finished_ FOREIGN KEY (product_id) REFERENCES public.finished_products_products(id) DEFERRABLE INITIALLY DEFERRED;
+
+
+--
+-- Name: packaging_receiving packaging_receiving_supplier_id_4bacc6ef_fk_packaging; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.packaging_receiving
+    ADD CONSTRAINT packaging_receiving_supplier_id_4bacc6ef_fk_packaging FOREIGN KEY (supplier_id) REFERENCES public.packaging_suppliers(id) DEFERRABLE INITIALLY DEFERRED;
+
+
+--
+-- Name: packaging_reconciliation packaging_reconcilia_material_id_88ab77d8_fk_packaging; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.packaging_reconciliation
+    ADD CONSTRAINT packaging_reconcilia_material_id_88ab77d8_fk_packaging FOREIGN KEY (material_id) REFERENCES public.packaging_materials(id) DEFERRABLE INITIALLY DEFERRED;
+
+
+--
+-- Name: packaging_stock_balances packaging_stock_bala_material_id_0f8181d6_fk_packaging; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.packaging_stock_balances
+    ADD CONSTRAINT packaging_stock_bala_material_id_0f8181d6_fk_packaging FOREIGN KEY (material_id) REFERENCES public.packaging_materials(id) DEFERRABLE INITIALLY DEFERRED;
+
+
+--
+-- Name: packaging_stock_ledger packaging_stock_ledg_material_id_1b236497_fk_packaging; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.packaging_stock_ledger
+    ADD CONSTRAINT packaging_stock_ledg_material_id_1b236497_fk_packaging FOREIGN KEY (material_id) REFERENCES public.packaging_materials(id) DEFERRABLE INITIALLY DEFERRED;
+
+
+--
+-- Name: packaging_stock_ledger packaging_stock_ledger_user_id_5ce6678d_fk_auth_user_id; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.packaging_stock_ledger
+    ADD CONSTRAINT packaging_stock_ledger_user_id_5ce6678d_fk_auth_user_id FOREIGN KEY (user_id) REFERENCES public.auth_user(id) DEFERRABLE INITIALLY DEFERRED;
+
+
+--
+-- Name: packaging_supplier_evaluations packaging_supplier_e_supplier_id_12511d83_fk_packaging; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.packaging_supplier_evaluations
+    ADD CONSTRAINT packaging_supplier_e_supplier_id_12511d83_fk_packaging FOREIGN KEY (supplier_id) REFERENCES public.packaging_suppliers(id) DEFERRABLE INITIALLY DEFERRED;
+
+
+--
+-- Name: packaging_suppliers_materials_supplied packaging_suppliers__packagingmaterial_id_73d1140d_fk_packaging; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.packaging_suppliers_materials_supplied
+    ADD CONSTRAINT packaging_suppliers__packagingmaterial_id_73d1140d_fk_packaging FOREIGN KEY (packagingmaterial_id) REFERENCES public.packaging_materials(id) DEFERRABLE INITIALLY DEFERRED;
+
+
+--
+-- Name: packaging_suppliers_materials_supplied packaging_suppliers__packagingsupplier_id_d57b8410_fk_packaging; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.packaging_suppliers_materials_supplied
+    ADD CONSTRAINT packaging_suppliers__packagingsupplier_id_d57b8410_fk_packaging FOREIGN KEY (packagingsupplier_id) REFERENCES public.packaging_suppliers(id) DEFERRABLE INITIALLY DEFERRED;
+
+
+--
+-- Name: packing_operations packing_operations_factory_id_8411914e_fk_plants_plant_id; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.packing_operations
+    ADD CONSTRAINT packing_operations_factory_id_8411914e_fk_plants_plant_id FOREIGN KEY (factory_id) REFERENCES public.plants(plant_id) DEFERRABLE INITIALLY DEFERRED;
+
+
+--
+-- Name: packing_operations packing_operations_material_id_8645fc4f_fk_packaging; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.packing_operations
+    ADD CONSTRAINT packing_operations_material_id_8645fc4f_fk_packaging FOREIGN KEY (material_id) REFERENCES public.packaging_materials(id) DEFERRABLE INITIALLY DEFERRED;
+
+
+--
+-- Name: packing_operations packing_operations_product_id_27c5e9a7_fk_finished_; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.packing_operations
+    ADD CONSTRAINT packing_operations_product_id_27c5e9a7_fk_finished_ FOREIGN KEY (product_id) REFERENCES public.finished_products_products(id) DEFERRABLE INITIALLY DEFERRED;
+
+
+--
+-- Name: packing_operations packing_operations_user_id_21f59281_fk_auth_user_id; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.packing_operations
+    ADD CONSTRAINT packing_operations_user_id_21f59281_fk_auth_user_id FOREIGN KEY (user_id) REFERENCES public.auth_user(id) DEFERRABLE INITIALLY DEFERRED;
+
+
+--
+-- Name: quality_control_decisions quality_control_deci_decided_by_id_7115bca8_fk_auth_user; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.quality_control_decisions
+    ADD CONSTRAINT quality_control_deci_decided_by_id_7115bca8_fk_auth_user FOREIGN KEY (decided_by_id) REFERENCES public.auth_user(id) DEFERRABLE INITIALLY DEFERRED;
+
+
+--
+-- Name: quality_control_decisions quality_control_deci_suggested_by_rule_id_bf2425f9_fk_factory_c; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.quality_control_decisions
+    ADD CONSTRAINT quality_control_deci_suggested_by_rule_id_bf2425f9_fk_factory_c FOREIGN KEY (suggested_by_rule_id) REFERENCES public.factory_conformity_rules(id) DEFERRABLE INITIALLY DEFERRED;
+
+
+--
+-- Name: quality_control_decisions quality_control_decisions_sample_id_7d45c9bf_fk_lab_samples_id; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.quality_control_decisions
+    ADD CONSTRAINT quality_control_decisions_sample_id_7d45c9bf_fk_lab_samples_id FOREIGN KEY (sample_id) REFERENCES public.lab_samples(id) DEFERRABLE INITIALLY DEFERRED;
+
+
+--
+-- Name: raw_material_analysis raw_material_analysi_sample_id_d6d4577d_fk_raw_mater; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.raw_material_analysis
+    ADD CONSTRAINT raw_material_analysi_sample_id_d6d4577d_fk_raw_mater FOREIGN KEY (sample_id) REFERENCES public.raw_material_samples(id) DEFERRABLE INITIALLY DEFERRED;
+
+
+--
+-- Name: raw_material_analysis raw_material_analysis_test_id_d32032e2_fk_material_tests_id; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.raw_material_analysis
+    ADD CONSTRAINT raw_material_analysis_test_id_d32032e2_fk_material_tests_id FOREIGN KEY (test_id) REFERENCES public.material_tests(id) DEFERRABLE INITIALLY DEFERRED;
+
+
+--
+-- Name: raw_material_deliveries raw_material_deliver_storage_id_b8815aaa_fk_material_; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.raw_material_deliveries
+    ADD CONSTRAINT raw_material_deliver_storage_id_b8815aaa_fk_material_ FOREIGN KEY (storage_id) REFERENCES public.material_storages(id) DEFERRABLE INITIALLY DEFERRED;
+
+
+--
+-- Name: raw_material_deliveries raw_material_deliveries_material_id_194fa9dc_fk_materials_id; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.raw_material_deliveries
+    ADD CONSTRAINT raw_material_deliveries_material_id_194fa9dc_fk_materials_id FOREIGN KEY (material_id) REFERENCES public.materials(id) DEFERRABLE INITIALLY DEFERRED;
+
+
+--
+-- Name: raw_material_deliveries raw_material_deliveries_plant_id_21318252_fk_plants_plant_id; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.raw_material_deliveries
+    ADD CONSTRAINT raw_material_deliveries_plant_id_21318252_fk_plants_plant_id FOREIGN KEY (plant_id) REFERENCES public.plants(plant_id) DEFERRABLE INITIALLY DEFERRED;
+
+
+--
+-- Name: raw_material_deliveries raw_material_deliveries_supplier_id_09ecd6ea_fk_suppliers_id; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.raw_material_deliveries
+    ADD CONSTRAINT raw_material_deliveries_supplier_id_09ecd6ea_fk_suppliers_id FOREIGN KEY (supplier_id) REFERENCES public.suppliers(id) DEFERRABLE INITIALLY DEFERRED;
+
+
+--
+-- Name: raw_material_lots raw_material_lots_delivery_id_06bbe603_fk_raw_mater; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.raw_material_lots
+    ADD CONSTRAINT raw_material_lots_delivery_id_06bbe603_fk_raw_mater FOREIGN KEY (delivery_id) REFERENCES public.raw_material_deliveries(id) DEFERRABLE INITIALLY DEFERRED;
+
+
+--
+-- Name: raw_material_samples raw_material_samples_delivery_id_14334741_fk_raw_mater; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.raw_material_samples
+    ADD CONSTRAINT raw_material_samples_delivery_id_14334741_fk_raw_mater FOREIGN KEY (delivery_id) REFERENCES public.raw_material_deliveries(id) DEFERRABLE INITIALLY DEFERRED;
+
+
+--
+-- Name: raw_material_samples raw_material_samples_lab_sample_id_99549b04_fk_lab_samples_id; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.raw_material_samples
+    ADD CONSTRAINT raw_material_samples_lab_sample_id_99549b04_fk_lab_samples_id FOREIGN KEY (lab_sample_id) REFERENCES public.lab_samples(id) DEFERRABLE INITIALLY DEFERRED;
+
+
+--
+-- Name: raw_material_samples raw_material_samples_material_id_83ef3ed7_fk_materials_id; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.raw_material_samples
+    ADD CONSTRAINT raw_material_samples_material_id_83ef3ed7_fk_materials_id FOREIGN KEY (material_id) REFERENCES public.materials(id) DEFERRABLE INITIALLY DEFERRED;
+
+
+--
+-- Name: raw_material_samples raw_material_samples_plant_id_5f9c25a8_fk_plants_plant_id; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.raw_material_samples
+    ADD CONSTRAINT raw_material_samples_plant_id_5f9c25a8_fk_plants_plant_id FOREIGN KEY (plant_id) REFERENCES public.plants(plant_id) DEFERRABLE INITIALLY DEFERRED;
+
+
+--
+-- Name: sales_orders sales_orders_customer_id_05ddd68a_fk_orders_customers_id; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.sales_orders
+    ADD CONSTRAINT sales_orders_customer_id_05ddd68a_fk_orders_customers_id FOREIGN KEY (customer_id) REFERENCES public.orders_customers(id) DEFERRABLE INITIALLY DEFERRED;
+
+
+--
+-- Name: sales_orders sales_orders_fixed_grade_id_4995fdf1_fk_factory_grades_id; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.sales_orders
+    ADD CONSTRAINT sales_orders_fixed_grade_id_4995fdf1_fk_factory_grades_id FOREIGN KEY (fixed_grade_id) REFERENCES public.factory_grades(id) DEFERRABLE INITIALLY DEFERRED;
+
+
+--
+-- Name: sales_orders sales_orders_product_classificati_77cbef56_fk_quality_g; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.sales_orders
+    ADD CONSTRAINT sales_orders_product_classificati_77cbef56_fk_quality_g FOREIGN KEY (product_classification_id) REFERENCES public.quality_grades(id) DEFERRABLE INITIALLY DEFERRED;
+
+
+--
+-- Name: shift_rotation_pattern shift_rotation_pattern_group_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.shift_rotation_pattern
+    ADD CONSTRAINT shift_rotation_pattern_group_id_fkey FOREIGN KEY (group_id) REFERENCES public.shift_groups(group_id) ON DELETE CASCADE;
+
+
+--
+-- Name: shift_rotation_pattern shift_rotation_pattern_shift_type_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.shift_rotation_pattern
+    ADD CONSTRAINT shift_rotation_pattern_shift_type_id_fkey FOREIGN KEY (shift_type_id) REFERENCES public.shift_types(shift_type_id);
+
+
+--
+-- Name: spare_part_issue_vouchers spare_part_issue_vou_item_id_6ba5a5c2_fk_spare_par; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.spare_part_issue_vouchers
+    ADD CONSTRAINT spare_part_issue_vou_item_id_6ba5a5c2_fk_spare_par FOREIGN KEY (item_id) REFERENCES public.spare_part_items(id) DEFERRABLE INITIALLY DEFERRED;
+
+
+--
+-- Name: spare_part_items spare_part_items_plant_id_681d5479_fk_plants_plant_id; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.spare_part_items
+    ADD CONSTRAINT spare_part_items_plant_id_681d5479_fk_plants_plant_id FOREIGN KEY (plant_id) REFERENCES public.plants(plant_id) DEFERRABLE INITIALLY DEFERRED;
+
+
+--
+-- Name: spare_part_receiving_vouchers spare_part_receiving_item_id_d11ce077_fk_spare_par; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.spare_part_receiving_vouchers
+    ADD CONSTRAINT spare_part_receiving_item_id_d11ce077_fk_spare_par FOREIGN KEY (item_id) REFERENCES public.spare_part_items(id) DEFERRABLE INITIALLY DEFERRED;
+
+
+--
+-- Name: spare_part_stock_balances spare_part_stock_bal_item_id_753c2a6d_fk_spare_par; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.spare_part_stock_balances
+    ADD CONSTRAINT spare_part_stock_bal_item_id_753c2a6d_fk_spare_par FOREIGN KEY (item_id) REFERENCES public.spare_part_items(id) DEFERRABLE INITIALLY DEFERRED;
+
+
+--
+-- Name: spare_part_stock_counts spare_part_stock_counts_item_id_6bc63624_fk_spare_part_items_id; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.spare_part_stock_counts
+    ADD CONSTRAINT spare_part_stock_counts_item_id_6bc63624_fk_spare_part_items_id FOREIGN KEY (item_id) REFERENCES public.spare_part_items(id) DEFERRABLE INITIALLY DEFERRED;
+
+
+--
+-- Name: spare_part_stock_transactions spare_part_stock_tra_item_id_c18b5af6_fk_spare_par; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.spare_part_stock_transactions
+    ADD CONSTRAINT spare_part_stock_tra_item_id_c18b5af6_fk_spare_par FOREIGN KEY (item_id) REFERENCES public.spare_part_items(id) DEFERRABLE INITIALLY DEFERRED;
+
+
+--
+-- Name: spare_part_stock_transactions spare_part_stock_transactions_user_id_4abc0f01_fk_auth_user_id; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.spare_part_stock_transactions
+    ADD CONSTRAINT spare_part_stock_transactions_user_id_4abc0f01_fk_auth_user_id FOREIGN KEY (user_id) REFERENCES public.auth_user(id) DEFERRABLE INITIALLY DEFERRED;
+
+
+--
+-- Name: user_account_userprofile user_account_userpro_org_position_id_f60888dc_fk_org_posit; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.user_account_userprofile
+    ADD CONSTRAINT user_account_userpro_org_position_id_f60888dc_fk_org_posit FOREIGN KEY (org_position_id) REFERENCES public.org_positions(position_id) DEFERRABLE INITIALLY DEFERRED;
+
+
+--
+-- Name: user_account_userprofile user_account_userprofile_user_id_4b1d5ffb_fk_auth_user_id; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.user_account_userprofile
+    ADD CONSTRAINT user_account_userprofile_user_id_4b1d5ffb_fk_auth_user_id FOREIGN KEY (user_id) REFERENCES public.auth_user(id) DEFERRABLE INITIALLY DEFERRED;
+
+
+--
+-- PostgreSQL database dump complete
+--
+
+\unrestrict db7T6xyta90ZVfaQGd7P7zFqTtaAgQ5ZQovbo0Ja8OkhDZp4spg9TuLQeaIcRZX
+
