@@ -19,11 +19,11 @@ class SampleAdmin(admin.ModelAdmin):
 
 @admin.register(SampleRequiredTest)
 class SampleRequiredTestAdmin(admin.ModelAdmin):
-    list_display = ("sample", "test", "is_completed")
+    list_display = ("sample", "test_name", "is_completed")
     list_filter = ("is_completed", "sample__source_type")
 
 
 @admin.register(SampleTestResult)
 class SampleTestResultAdmin(admin.ModelAdmin):
-    list_display = ("sample", "test", "result", "entered_by", "entered_at")
+    list_display = ("sample", "test_name", "result", "entered_by", "entered_at")
     list_filter = ("sample__status",)
