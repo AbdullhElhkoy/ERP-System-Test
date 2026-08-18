@@ -22,9 +22,8 @@ class SampleGroup(models.Model):
     group_code = models.CharField(max_length=30, unique=True)
     plant = models.ForeignKey("plants.Plant", on_delete=models.PROTECT)
     location_label = models.CharField(max_length=100)
-    packing_type = models.ForeignKey(
-        "factory.PackingType", on_delete=models.SET_NULL, null=True, blank=True
-    )
+    packing_type_name = models.CharField(max_length=50, blank=True, default="")
+    packing_type_ref = models.PositiveIntegerField(null=True, blank=True, help_text="Reference to factory.PackingType PK")
     period_start = models.DateTimeField()
     period_end = models.DateTimeField(null=True, blank=True)
     is_open = models.BooleanField(default=True)
