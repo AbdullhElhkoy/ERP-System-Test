@@ -1,0 +1,181 @@
+{% extends "admin/base_site.html" %}
+{% block content %}
+{% load i18n %}
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+<style>
+    .analytics-nav { display: flex; gap: 10px; margin-bottom: 24px; flex-wrap: wrap; }
+    .analytics-nav a { padding: 10px 18px; background: #1e40af; color: #fff; border-radius: 8px; text-decoration: none; font-size: 14px; font-weight: 600; }
+    .analytics-nav a:hover { background: #1e3a8a; }
+    .analytics-nav a.active { background: #0f172a; }
+    .chart-container { background: #fff; border: 1px solid #e2e8f0; border-radius: 10px; padding: 20px; margin-bottom: 24px; }
+    .chart-container h3 { margin: 0 0 16px 0; font-size: 15px; color: #1e293b; }
+    .filter-bar { margin-bottom: 18px; display: flex; gap: 12px; align-items: center; flex-wrap: wrap; }
+    .filter-bar select { padding: 6px 10px; border: 1px solid #cbd5e1; border-radius: 6px; font-size: 13px; }
+    .data-table { border-collapse: collapse; width: 100%; font-size: 13px; margin-top: 12px; }
+    .data-table th { background: #f1f5f9; padding: 8px 12px; text-align: left; border: 1px solid #e2e8f0; }
+    .data-table td { padding: 8px 12px; border: 1px solid #e2e8f0; }
+    .summary-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: 12px; margin-bottom: 24px; }
+    .summary-card { background: #fff; border: 1px solid #e2e8f0; border-radius: 10px; padding: 16px; text-align: center; }
+    .summary-card .number { font-size: 24px; font-weight: 700; }
+    .summary-card .label { font-size: 11px; color: #64748b; margin-top: 2px; }
+</style>
+
+<div style="display:flex; align-items:center; gap:12px; margin-bottom:18px;">
+    <h2 style="margin:0;">📦 Stock Analytics</h2>
+    {% include "warehousing/includes/lang_toggle.html" %}
+</div>
+
+<div class="analytics-nav">
+    <a href="{% url 'analytics:dashboard' %}">Overview</a>
+    <a href="{% url 'analytics:production' %}">Production</a>
+    <a href="{% url 'analytics:stock' %}" class="active">Stock</a>
+    <a href="{% url 'analytics:spc' %}">SPC</a>
+    <a href="{% url 'analytics:quality' %}">Quality</a>
+</div>
+
+<div class="filter-bar">
+    <form method="get" style="display:flex; gap:10px; align-items:center;">
+        <label><strong>Plant:</strong></label>
+        <select name="plant" onchange="this.form.submit()">
+            <option value="">All Plants</option>
+            {% for p in plants %}
+            <option value="{{ p.plant_id }}" {% if selected_plant == p.plant_id %}selected{% endif %}>{{ p.plant_name }}</option>
+            {% endfor %}
+        </select>
+    </form>
+</div>
+
+<!-- Summary Cards -->
+<div class="summary-grid">
+    <div class="summary-card">
+        <div class="number" style="color:#1e40af;">{{ snapshot.summary.floor_stock|floatformat:0 }}</div>
+        <div class="label">Floor Stock</div>
+    </div>
+    <div class="summary-card">
+        <div class="number" style="color:#166534;">{{ snapshot.summary.finished_products.total_stock|floatformat:0 }}</div>
+        <div class="label">Finished Products</div>
+    </div>
+    <div class="summary-card">
+        <div class="number" style="color:#854d0e;">{{ snapshot.summary.raw_materials|floatformat:0 }}</div>
+        <div class="label">Raw Materials</div>
+    </div>
+    <div class="summary-card">
+        <div class="number" style="color:#7c3aed;">{{ snapshot.summary.packaging_warehouse|floatformat:0 }}</div>
+        <div class="label">Packaging (WH)</div>
+    </div>
+    <div class="summary-card">
+        <div class="number" style="color:#0891b2;">{{ snapshot.summary.packaging_factory|floatformat:0 }}</div>
+        <div class="label">Packaging (Factory)</div>
+    </div>
+    <div class="summary-card">
+        <div class="number" style="color:#991b1b;">{{ snapshot.summary.spare_parts.total_stock|floatformat:0 }}</div>
+        <div class="label">Spare Parts</div>
+    </div>
+</div>
+
+<div style="display: grid; grid-template-columns: 1fr 1fr; gap: 16px;">
+    <div class="chart-container">
+        <h3>Stock by Source</h3>
+        <canvas id="stockSourceChart" height="250"></canvas>
+    </div>
+    <div class="chart-container">
+        <h3>Finished Products Breakdown</h3>
+        <canvas id="fpBreakdownChart" height="250"></canvas>
+    </div>
+</div>
+
+<!-- Per-Plant Tables -->
+{% for plant_name, pdata in snapshot.plants.items %}
+<div class="chart-container">
+    <h3>{{ plant_name }}</h3>
+
+    {% if pdata.floor_stock %}
+    <h4 style="font-size:13px; margin:12px 0 6px;">Floor Stock</h4>
+    <table class="data-table">
+        <tr><th>Grade</th><th>Status</th><th>Quantity</th></tr>
+        {% for item in pdata.floor_stock %}
+        <tr><td>{{ item.grade }}</td><td>{{ item.status }}</td><td>{{ item.quantity }}</td></tr>
+        {% endfor %}
+    </table>
+    {% endif %}
+
+    {% if pdata.finished_products %}
+    <h4 style="font-size:13px; margin:12px 0 6px;">Finished Products</h4>
+    <table class="data-table">
+        <tr><th>Product</th><th>Packaging</th><th>Total</th><th>Available</th><th>Reserved</th><th>QC Hold</th></tr>
+        {% for item in pdata.finished_products %}
+        <tr>
+            <td>{{ item.product }}</td><td>{{ item.packaging_type }}</td>
+            <td>{{ item.total_stock }}</td><td>{{ item.available }}</td>
+            <td>{{ item.reserved }}</td><td>{{ item.qc_hold }}</td>
+        </tr>
+        {% endfor %}
+    </table>
+    {% endif %}
+
+    {% if pdata.raw_materials %}
+    <h4 style="font-size:13px; margin:12px 0 6px;">Raw Materials</h4>
+    <table class="data-table">
+        <tr><th>Material</th><th>Balance</th></tr>
+        {% for item in pdata.raw_materials %}
+        <tr><td>{{ item.material }}</td><td>{{ item.balance }}</td></tr>
+        {% endfor %}
+    </table>
+    {% endif %}
+
+    {% if pdata.spare_parts %}
+    <h4 style="font-size:13px; margin:12px 0 6px;">Spare Parts</h4>
+    <table class="data-table">
+        <tr><th>Item</th><th>Total</th><th>Available</th><th>On Loan</th><th>In Maintenance</th></tr>
+        {% for item in pdata.spare_parts %}
+        <tr>
+            <td>{{ item.item }}</td><td>{{ item.total_stock }}</td>
+            <td>{{ item.available }}</td><td>{{ item.on_loan }}</td><td>{{ item.in_maintenance }}</td>
+        </tr>
+        {% endfor %}
+    </table>
+    {% endif %}
+</div>
+{% endfor %}
+
+<script>
+    // Stock by Source
+    new Chart(document.getElementById('stockSourceChart'), {
+        type: 'bar',
+        data: {
+            labels: ['Floor Stock', 'Finished Products', 'Raw Materials', 'Packaging (WH)', 'Packaging (Factory)', 'Spare Parts'],
+            datasets: [{
+                label: 'Quantity',
+                data: [
+                    {{ snapshot.summary.floor_stock|default:0 }},
+                    {{ snapshot.summary.finished_products.total_stock|default:0 }},
+                    {{ snapshot.summary.raw_materials|default:0 }},
+                    {{ snapshot.summary.packaging_warehouse|default:0 }},
+                    {{ snapshot.summary.packaging_factory|default:0 }},
+                    {{ snapshot.summary.spare_parts.total_stock|default:0 }}
+                ],
+                backgroundColor: ['#1e40af','#166534','#854d0e','#7c3aed','#0891b2','#991b1b'],
+            }]
+        },
+        options: { responsive: true, plugins: { legend: { display: false } } }
+    });
+
+    // FP Breakdown
+    new Chart(document.getElementById('fpBreakdownChart'), {
+        type: 'doughnut',
+        data: {
+            labels: ['Available', 'Reserved', 'Under Prep', 'QC Hold'],
+            datasets: [{
+                data: [
+                    {{ snapshot.summary.finished_products.available|default:0 }},
+                    {{ snapshot.summary.finished_products.reserved|default:0 }},
+                    {{ snapshot.summary.finished_products.under_preparation|default:0 }},
+                    {{ snapshot.summary.finished_products.qc_hold|default:0 }}
+                ],
+                backgroundColor: ['#166534','#1e40af','#854d0e','#991b1b'],
+            }]
+        },
+        options: { responsive: true }
+    });
+</script>
+{% endblock %}

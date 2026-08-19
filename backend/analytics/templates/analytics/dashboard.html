@@ -1,0 +1,103 @@
+{% extends "admin/base_site.html" %}
+{% block content %}
+{% load i18n %}
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+<style>
+    .analytics-nav { display: flex; gap: 10px; margin-bottom: 24px; flex-wrap: wrap; }
+    .analytics-nav a { padding: 10px 18px; background: #1e40af; color: #fff; border-radius: 8px; text-decoration: none; font-size: 14px; font-weight: 600; }
+    .analytics-nav a:hover { background: #1e3a8a; }
+    .analytics-nav a.active { background: #0f172a; }
+    .stat-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 16px; margin-bottom: 24px; }
+    .stat-card { background: #fff; border: 1px solid #e2e8f0; border-radius: 10px; padding: 20px; text-align: center; }
+    .stat-card .number { font-size: 28px; font-weight: 700; color: #1e40af; }
+    .stat-card .label { font-size: 12px; color: #64748b; margin-top: 4px; }
+    .chart-container { background: #fff; border: 1px solid #e2e8f0; border-radius: 10px; padding: 20px; margin-bottom: 24px; }
+    .chart-container h3 { margin: 0 0 16px 0; font-size: 15px; color: #1e293b; }
+    .filter-bar { margin-bottom: 18px; display: flex; gap: 12px; align-items: center; flex-wrap: wrap; }
+    .filter-bar select, .filter-bar input { padding: 6px 10px; border: 1px solid #cbd5e1; border-radius: 6px; font-size: 13px; }
+    .data-table { border-collapse: collapse; width: 100%; font-size: 13px; margin-top: 12px; }
+    .data-table th { background: #f1f5f9; padding: 8px 12px; text-align: left; border: 1px solid #e2e8f0; }
+    .data-table td { padding: 8px 12px; border: 1px solid #e2e8f0; }
+    .badge { display: inline-block; padding: 2px 8px; border-radius: 12px; font-size: 11px; font-weight: 600; }
+    .badge-green { background: #dcfce7; color: #166534; }
+    .badge-red { background: #fecaca; color: #991b1b; }
+    .badge-yellow { background: #fef9c3; color: #854d0e; }
+    .badge-blue { background: #dbeafe; color: #1e40af; }
+</style>
+
+<div style="display:flex; align-items:center; gap:12px; margin-bottom:18px;">
+    <h2 style="margin:0;">📊 Analytics Dashboard</h2>
+    {% include "warehousing/includes/lang_toggle.html" %}
+</div>
+
+<div class="analytics-nav">
+    <a href="{% url 'analytics:dashboard' %}" class="active">Overview</a>
+    <a href="{% url 'analytics:production' %}">Production</a>
+    <a href="{% url 'analytics:stock' %}">Stock</a>
+    <a href="{% url 'analytics:spc' %}">SPC</a>
+    <a href="{% url 'analytics:quality' %}">Quality</a>
+</div>
+
+<div class="filter-bar">
+    <form method="get" style="display:flex; gap:10px; align-items:center;">
+        <label><strong>Plant:</strong></label>
+        <select name="plant" onchange="this.form.submit()">
+            <option value="">All Plants</option>
+            {% for p in plants %}
+            <option value="{{ p.plant_id }}" {% if selected_plant == p.plant_id %}selected{% endif %}>{{ p.plant_name }}</option>
+            {% endfor %}
+        </select>
+    </form>
+</div>
+
+<h3>Quick Overview</h3>
+<p style="color:#64748b; font-size:13px;">Select a section above for detailed analytics.</p>
+
+<div style="display: grid; grid-template-columns: 1fr 1fr; gap: 16px;">
+    <div class="chart-container">
+        <h3>🏭 Production Overview</h3>
+        <canvas id="overviewChart" height="200"></canvas>
+    </div>
+    <div class="chart-container">
+        <h3>📦 Stock Summary</h3>
+        <canvas id="stockChart" height="200"></canvas>
+    </div>
+</div>
+
+<script>
+    fetch('{% url "analytics:api_production_chart" %}?plant={{ selected_plant|default:"" }}')
+        .then(r => r.json())
+        .then(data => {
+            new Chart(document.getElementById('overviewChart'), {
+                type: 'bar',
+                data: {
+                    labels: data.labels || [],
+                    datasets: [{
+                        label: data.series[0]?.name || 'Weight',
+                        data: data.series[0]?.data || [],
+                        backgroundColor: 'rgba(30, 64, 175, 0.7)',
+                    }]
+                },
+                options: { responsive: true, plugins: { legend: { display: false } } }
+            });
+        });
+
+    fetch('{% url "analytics:api_stock_snapshot" %}?plant={{ selected_plant|default:"" }}')
+        .then(r => r.json())
+        .then(data => {
+            const labels = Object.keys(data.plants || {});
+            const totals = labels.map(k => {
+                const p = data.plants[k];
+                return (p.finished_products || []).reduce((s, fp) => s + (fp.total_stock || 0), 0);
+            });
+            new Chart(document.getElementById('stockChart'), {
+                type: 'doughnut',
+                data: {
+                    labels: labels,
+                    datasets: [{ data: totals, backgroundColor: ['#1e40af','#166534','#854d0e','#991b1b','#7c3aed'] }]
+                },
+                options: { responsive: true }
+            });
+        });
+</script>
+{% endblock %}

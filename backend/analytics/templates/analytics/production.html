@@ -1,0 +1,149 @@
+{% extends "admin/base_site.html" %}
+{% block content %}
+{% load i18n %}
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+<style>
+    .analytics-nav { display: flex; gap: 10px; margin-bottom: 24px; flex-wrap: wrap; }
+    .analytics-nav a { padding: 10px 18px; background: #1e40af; color: #fff; border-radius: 8px; text-decoration: none; font-size: 14px; font-weight: 600; }
+    .analytics-nav a:hover { background: #1e3a8a; }
+    .analytics-nav a.active { background: #0f172a; }
+    .chart-container { background: #fff; border: 1px solid #e2e8f0; border-radius: 10px; padding: 20px; margin-bottom: 24px; }
+    .chart-container h3 { margin: 0 0 16px 0; font-size: 15px; color: #1e293b; }
+    .filter-bar { margin-bottom: 18px; display: flex; gap: 12px; align-items: center; flex-wrap: wrap; }
+    .filter-bar select, .filter-bar input { padding: 6px 10px; border: 1px solid #cbd5e1; border-radius: 6px; font-size: 13px; }
+    .data-table { border-collapse: collapse; width: 100%; font-size: 13px; margin-top: 12px; }
+    .data-table th { background: #f1f5f9; padding: 8px 12px; text-align: left; border: 1px solid #e2e8f0; }
+    .data-table td { padding: 8px 12px; border: 1px solid #e2e8f0; }
+</style>
+
+<div style="display:flex; align-items:center; gap:12px; margin-bottom:18px;">
+    <h2 style="margin:0;">🏭 Production Analytics</h2>
+    {% include "warehousing/includes/lang_toggle.html" %}
+</div>
+
+<div class="analytics-nav">
+    <a href="{% url 'analytics:dashboard' %}">Overview</a>
+    <a href="{% url 'analytics:production' %}" class="active">Production</a>
+    <a href="{% url 'analytics:stock' %}">Stock</a>
+    <a href="{% url 'analytics:spc' %}">SPC</a>
+    <a href="{% url 'analytics:quality' %}">Quality</a>
+</div>
+
+<div class="filter-bar">
+    <form method="get" style="display:flex; gap:10px; align-items:center;">
+        <label><strong>Plant:</strong></label>
+        <select name="plant" onchange="this.form.submit()">
+            <option value="">All Plants</option>
+            {% for p in plants %}
+            <option value="{{ p.plant_id }}" {% if selected_plant == p.plant_id %}selected{% endif %}>{{ p.plant_name }}</option>
+            {% endfor %}
+        </select>
+        <label><strong>Period:</strong></label>
+        <select name="days" onchange="this.form.submit()">
+            <option value="7" {% if days == 7 %}selected{% endif %}>7 days</option>
+            <option value="30" {% if days == 30 %}selected{% endif %}>30 days</option>
+            <option value="90" {% if days == 90 %}selected{% endif %}>90 days</option>
+            <option value="365" {% if days == 365 %}selected{% endif %}>1 year</option>
+        </select>
+    </form>
+</div>
+
+<div style="display: grid; grid-template-columns: 1fr 1fr; gap: 16px;">
+    <div class="chart-container">
+        <h3>Production Weight by Plant</h3>
+        <canvas id="tonWeightChart" height="250"></canvas>
+    </div>
+    <div class="chart-container">
+        <h3>Ton Count by Plant</h3>
+        <canvas id="tonCountChart" height="250"></canvas>
+    </div>
+</div>
+
+<div style="display: grid; grid-template-columns: 1fr 1fr; gap: 16px;">
+    <div class="chart-container">
+        <h3>Grade Distribution</h3>
+        <canvas id="gradeChart" height="250"></canvas>
+    </div>
+    <div class="chart-container">
+        <h3>Packing by Type</h3>
+        <canvas id="packingChart" height="250"></canvas>
+    </div>
+</div>
+
+<div class="chart-container">
+    <h3>Raw Data — Production Weight</h3>
+    <table class="data-table">
+        <tr><th>Plant</th><th>Total Weight</th></tr>
+        {% for label in ton_data.labels %}
+        <tr><td>{{ label }}</td><td>{{ ton_data.series.0.data|default_if_none:"0" }}</td></tr>
+        {% empty %}
+        <tr><td colspan="2" style="text-align:center; color:#94a3b8;">No data for selected period</td></tr>
+        {% endfor %}
+    </table>
+</div>
+
+<script>
+    // Ton Weight
+    fetch('{% url "analytics:api_production_chart" %}?plant={{ selected_plant|default:"" }}&days={{ days }}')
+        .then(r => r.json())
+        .then(data => {
+            new Chart(document.getElementById('tonWeightChart'), {
+                type: 'bar',
+                data: {
+                    labels: data.labels || [],
+                    datasets: [{
+                        label: 'Total Weight',
+                        data: data.series[0]?.data || [],
+                        backgroundColor: 'rgba(30, 64, 175, 0.7)',
+                    }]
+                },
+                options: { responsive: true, plugins: { legend: { display: false } } }
+            });
+        });
+
+    // Ton Count
+    fetch('{% url "analytics:api_production_chart" %}?plant={{ selected_plant|default:"" }}&days={{ days }}')
+        .then(r => r.json())
+        .then(data => {
+            new Chart(document.getElementById('tonCountChart'), {
+                type: 'bar',
+                data: {
+                    labels: {{ ton_count.labels|safe|default:"[]" }},
+                    datasets: [{
+                        label: 'Ton Count',
+                        data: {{ ton_count.series.0.data|safe|default:"[]" }},
+                        backgroundColor: 'rgba(22, 101, 52, 0.7)',
+                    }]
+                },
+                options: { responsive: true, plugins: { legend: { display: false } } }
+            });
+        });
+
+    // Grade Distribution
+    new Chart(document.getElementById('gradeChart'), {
+        type: 'pie',
+        data: {
+            labels: {{ grade_data.labels|safe|default:"[]" }},
+            datasets: [{
+                data: {{ grade_data.series.0.data|safe|default:"[]" }},
+                backgroundColor: ['#1e40af','#166534','#854d0e','#991b1b','#7c3aed','#0891b2'],
+            }]
+        },
+        options: { responsive: true }
+    });
+
+    // Packing
+    new Chart(document.getElementById('packingChart'), {
+        type: 'bar',
+        data: {
+            labels: {{ packing_data.labels|safe|default:"[]" }},
+            datasets: [{
+                label: 'Quantity',
+                data: {{ packing_data.series.0.data|safe|default:"[]" }},
+                backgroundColor: 'rgba(124, 58, 237, 0.7)',
+            }]
+        },
+        options: { responsive: true, indexAxis: 'y', plugins: { legend: { display: false } } }
+    });
+</script>
+{% endblock %}

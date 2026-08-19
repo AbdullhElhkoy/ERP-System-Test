@@ -1,0 +1,272 @@
+{% extends "admin/base_site.html" %}
+{% block content %}
+{% load i18n %}
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-annotation@3.0.1/dist/chartjs-plugin-annotation.min.js"></script>
+<style>
+    .analytics-nav { display: flex; gap: 10px; margin-bottom: 24px; flex-wrap: wrap; }
+    .analytics-nav a { padding: 10px 18px; background: #1e40af; color: #fff; border-radius: 8px; text-decoration: none; font-size: 14px; font-weight: 600; }
+    .analytics-nav a:hover { background: #1e3a8a; }
+    .analytics-nav a.active { background: #0f172a; }
+    .chart-container { background: #fff; border: 1px solid #e2e8f0; border-radius: 10px; padding: 20px; margin-bottom: 24px; }
+    .chart-container h3 { margin: 0 0 16px 0; font-size: 15px; color: #1e293b; }
+    .filter-bar { margin-bottom: 18px; display: flex; gap: 12px; align-items: center; flex-wrap: wrap; }
+    .filter-bar select, .filter-bar input { padding: 6px 10px; border: 1px solid #cbd5e1; border-radius: 6px; font-size: 13px; }
+    .data-table { border-collapse: collapse; width: 100%; font-size: 13px; margin-top: 12px; }
+    .data-table th { background: #f1f5f9; padding: 8px 12px; text-align: left; border: 1px solid #e2e8f0; }
+    .data-table td { padding: 8px 12px; border: 1px solid #e2e8f0; }
+    .spc-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); gap: 12px; margin-bottom: 24px; }
+    .spc-card { background: #fff; border: 1px solid #e2e8f0; border-radius: 10px; padding: 14px; text-align: center; }
+    .spc-card .number { font-size: 22px; font-weight: 700; }
+    .spc-card .label { font-size: 11px; color: #64748b; margin-top: 2px; }
+    .violation { background: #fef2f2; border-left: 3px solid #dc2626; padding: 8px 12px; margin: 4px 0; font-size: 13px; border-radius: 0 6px 6px 0; }
+</style>
+
+<div style="display:flex; align-items:center; gap:12px; margin-bottom:18px;">
+    <h2 style="margin:0;">📈 SPC Analytics</h2>
+    {% include "warehousing/includes/lang_toggle.html" %}
+</div>
+
+<div class="analytics-nav">
+    <a href="{% url 'analytics:dashboard' %}">Overview</a>
+    <a href="{% url 'analytics:production' %}">Production</a>
+    <a href="{% url 'analytics:stock' %}">Stock</a>
+    <a href="{% url 'analytics:spc' %}" class="active">SPC</a>
+    <a href="{% url 'analytics:quality' %}">Quality</a>
+</div>
+
+<div class="filter-bar">
+    <form method="get" style="display:flex; gap:10px; align-items:center;">
+        <label><strong>Plant:</strong></label>
+        <select name="plant" onchange="this.form.submit()">
+            <option value="">-- Select --</option>
+            {% for p in plants %}
+            <option value="{{ p.plant_id }}" {% if selected_plant == p.plant_id %}selected{% endif %}>{{ p.plant_name }}</option>
+            {% endfor %}
+        </select>
+        {% if selected_plant %}
+        <label><strong>Test:</strong></label>
+        <select name="test_name" onchange="this.form.submit()">
+            <option value="">-- Select Test --</option>
+            {% for t in available_tests %}
+            <option value="{{ t.test_name }}" {% if selected_test == t.test_name %}selected{% endif %}>{{ t.test_name }} ({{ t.plant_name }})</option>
+            {% endfor %}
+        </select>
+        {% endif %}
+        <label><strong>Period:</strong></label>
+        <select name="days" onchange="this.form.submit()">
+            <option value="30" {% if days == 30 %}selected{% endif %}>30 days</option>
+            <option value="90" {% if days == 90 %}selected{% endif %}>90 days</option>
+            <option value="180" {% if days == 180 %}selected{% endif %}>6 months</option>
+            <option value="365" {% if days == 365 %}selected{% endif %}>1 year</option>
+        </select>
+        {% endif %}
+    </form>
+</div>
+
+{% if spc_data %}
+<!-- SPC Metrics -->
+<div class="spc-grid">
+    <div class="spc-card">
+        <div class="number" style="color:#1e40af;">{{ spc_data.n }}</div>
+        <div class="label">Samples (n)</div>
+    </div>
+    <div class="spc-card">
+        <div class="number" style="color:{% if spc_data.provisional %}#854d0e{% else %}#166534{% endif %};">
+            {{ spc_data.mu|floatformat:3 }}
+        </div>
+        <div class="label">Mean (μ)</div>
+    </div>
+    <div class="spc-card">
+        <div class="number" style="color:#1e40af;">{{ spc_data.sigma_within|floatformat:4 }}</div>
+        <div class="label">σ within</div>
+    </div>
+    <div class="spc-card">
+        <div class="number" style="color:#7c3aed;">{{ spc_data.sigma_overall|floatformat:4 }}</div>
+        <div class="label">σ overall</div>
+    </div>
+    <div class="spc-card">
+        <div class="number" style="color:{% if spc_data.cpk and spc_data.cpk >= 1.33 %}#166534{% elif spc_data.cpk and spc_data.cpk >= 1.0 %}#854d0e{% else %}#991b1b{% endif %};">
+            {{ spc_data.cpk|floatformat:3|default:"—" }}
+        </div>
+        <div class="label">Cpk</div>
+    </div>
+    <div class="spc-card">
+        <div class="number">{{ spc_data.cp|floatformat:3|default:"—" }}</div>
+        <div class="label">Cp</div>
+    </div>
+    <div class="spc-card">
+        <div class="number">{{ spc_data.ppk|floatformat:3|default:"—" }}</div>
+        <div class="label">Ppk</div>
+    </div>
+    <div class="spc-card">
+        <div class="number">{{ spc_data.pp|floatformat:3|default:"—" }}</div>
+        <div class="label">Pp</div>
+    </div>
+    <div class="spc-card">
+        <div class="number">{{ spc_data.cpm|floatformat:3|default:"—" }}</div>
+        <div class="label">Cpm</div>
+    </div>
+    <div class="spc-card">
+        <div class="number" style="color:{% if spc_data.sigma_level and spc_data.sigma_level >= 4 %}#166534{% elif spc_data.sigma_level and spc_data.sigma_level >= 3 %}#854d0e{% else %}#991b1b{% endif %};">
+            {{ spc_data.sigma_level|floatformat:1|default:"—" }}
+        </div>
+        <div class="label">Sigma Level</div>
+    </div>
+    <div class="spc-card">
+        <div class="number" style="color:{% if spc_data.dpmo < 1000 %}#166534{% elif spc_data.dpmo < 66800 %}#854d0e{% else %}#991b1b{% endif %};">
+            {{ spc_data.dpmo|floatformat:0 }}
+        </div>
+        <div class="label">DPMO</div>
+    </div>
+    <div class="spc-card">
+        <div class="number" style="color:{% if spc_data.provisional %}#854d0e{% else %}#166534{% endif %};">
+            {% if spc_data.provisional %}YES{% else %}NO{% endif %}
+        </div>
+        <div class="label">Provisional (n&lt;20)?</div>
+    </div>
+</div>
+
+<!-- Spec Limits -->
+<div class="chart-container">
+    <h3>Specification Limits</h3>
+    <table class="data-table">
+        <tr><th>LSL</th><th>Target</th><th>USL</th></tr>
+        <tr>
+            <td>{{ spc_data.spec.lsl|default:"—" }}</td>
+            <td>{{ spc_data.spec.target|default:"—" }}</td>
+            <td>{{ spc_data.spec.usl|default:"—" }}</td>
+        </tr>
+    </table>
+</div>
+
+<!-- Individuals Chart -->
+<div class="chart-container">
+    <h3>Individuals (I) Chart — {{ selected_test }}</h3>
+    <canvas id="individualsChart" height="300"></canvas>
+</div>
+
+<!-- Moving Range Chart -->
+<div class="chart-container">
+    <h3>Moving Range (MR) Chart</h3>
+    <canvas id="mrChart" height="200"></canvas>
+</div>
+
+<!-- Nelson Violations -->
+{% if spc_data.nelson_violations %}
+<div class="chart-container">
+    <h3>⚠️ Nelson Rule Violations ({{ spc_data.nelson_violations|length }})</h3>
+    {% for v in spc_data.nelson_violations %}
+    <div class="violation">
+        <strong>Rule {{ v.rule }}:</strong> {{ v.description }}
+        <span style="color:#64748b;"> — Points: {{ v.point_indices }}</span>
+    </div>
+    {% endfor %}
+</div>
+{% else %}
+<div class="chart-container">
+    <h3>✅ Nelson Rules — No Violations Detected</h3>
+</div>
+{% endif %}
+
+<!-- Measurements Table -->
+<div class="chart-container">
+    <h3>Measurements ({{ spc_data.n }} samples)</h3>
+    <table class="data-table">
+        <tr><th>#</th><th>Value</th><th>Timestamp</th><th>Sample Code</th></tr>
+        {% for m in spc_data.measurements %}
+        <tr>
+            <td>{{ forloop.counter }}</td>
+            <td>{{ m.value }}</td>
+            <td>{{ m.timestamp }}</td>
+            <td>{{ m.sample_code }}</td>
+        </tr>
+        {% endfor %}
+    </table>
+</div>
+
+<script>
+    const values = {{ spc_data.measurements|safe|default:"[]" }};
+    const labels = values.map((_, i) => i + 1);
+    const data = values.map(v => v.value);
+    const mu = {{ spc_data.mu }};
+    const sigma = {{ spc_data.sigma_overall }};
+    const usl = {{ spc_data.spec.usl|default:"null" }};
+    const lsl = {{ spc_data.spec.lsl|default:"null" }};
+
+    // Individuals Chart
+    new Chart(document.getElementById('individualsChart'), {
+        type: 'line',
+        data: {
+            labels: labels,
+            datasets: [{
+                label: 'Value',
+                data: data,
+                borderColor: '#1e40af',
+                backgroundColor: 'rgba(30,64,175,0.1)',
+                fill: false,
+                tension: 0.1,
+                pointRadius: 2,
+            }]
+        },
+        options: {
+            responsive: true,
+            plugins: {
+                annotation: {
+                    annotations: {
+                        mean: { type: 'line', yMin: mu, yMax: mu, borderColor: '#166534', borderWidth: 2, label: { content: 'μ=' + mu.toFixed(3), display: true } },
+                        ucl: { type: 'line', yMin: mu + 3*sigma, yMax: mu + 3*sigma, borderColor: '#991b1b', borderWidth: 1, borderDash: [5,5] },
+                        lcl: { type: 'line', yMin: mu - 3*sigma, yMax: mu - 3*sigma, borderColor: '#991b1b', borderWidth: 1, borderDash: [5,5] },
+                        upper1: { type: 'line', yMin: mu + sigma, yMax: mu + sigma, borderColor: '#e2e8f0', borderWidth: 1 },
+                        lower1: { type: 'line', yMin: mu - sigma, yMax: mu - sigma, borderColor: '#e2e8f0', borderWidth: 1 },
+                        upper2: { type: 'line', yMin: mu + 2*sigma, yMax: mu + 2*sigma, borderColor: '#f1f5f9', borderWidth: 1 },
+                        lower2: { type: 'line', yMin: mu - 2*sigma, yMax: mu - 2*sigma, borderColor: '#f1f5f9', borderWidth: 1 },
+                        ...(usl !== null ? { usl: { type: 'line', yMin: usl, yMax: usl, borderColor: '#dc2626', borderWidth: 2, borderDash: [10,5], label: { content: 'USL', display: true } } } : {}),
+                        ...(lsl !== null ? { lsl: { type: 'line', yMin: lsl, yMax: lsl, borderColor: '#dc2626', borderWidth: 2, borderDash: [10,5], label: { content: 'LSL', display: true } } } : {}),
+                    }
+                }
+            }
+        }
+    });
+
+    // Moving Range
+    const mr = data.slice(1).map((v, i) => Math.abs(v - data[i]));
+    new Chart(document.getElementById('mrChart'), {
+        type: 'line',
+        data: {
+            labels: labels.slice(1),
+            datasets: [{
+                label: 'Moving Range',
+                data: mr,
+                borderColor: '#7c3aed',
+                fill: false,
+                tension: 0.1,
+                pointRadius: 2,
+            }]
+        },
+        options: { responsive: true }
+    });
+</script>
+
+{% else %}
+<div class="chart-container">
+    <h3>Select a plant and test to view SPC analysis</h3>
+    <p style="color:#64748b;">Choose from the dropdowns above. Available tests: {{ available_tests|length }}</p>
+    {% if available_tests %}
+    <table class="data-table">
+        <tr><th>Plant</th><th>Test</th><th>Category</th><th>LSL</th><th>USL</th><th>Grade</th></tr>
+        {% for t in available_tests %}
+        <tr>
+            <td>{{ t.plant_name }}</td>
+            <td>{{ t.test_name }}</td>
+            <td>{{ t.test_category }}</td>
+            <td>{{ t.min_value|default:"—" }}</td>
+            <td>{{ t.max_value|default:"—" }}</td>
+            <td>{{ t.quality_grade }}</td>
+        </tr>
+        {% endfor %}
+    </table>
+    {% endif %}
+</div>
+{% endif %}
+{% endblock %}

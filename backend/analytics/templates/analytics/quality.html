@@ -1,0 +1,115 @@
+{% extends "admin/base_site.html" %}
+{% block content %}
+{% load i18n %}
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+<style>
+    .analytics-nav { display: flex; gap: 10px; margin-bottom: 24px; flex-wrap: wrap; }
+    .analytics-nav a { padding: 10px 18px; background: #1e40af; color: #fff; border-radius: 8px; text-decoration: none; font-size: 14px; font-weight: 600; }
+    .analytics-nav a:hover { background: #1e3a8a; }
+    .analytics-nav a.active { background: #0f172a; }
+    .chart-container { background: #fff; border: 1px solid #e2e8f0; border-radius: 10px; padding: 20px; margin-bottom: 24px; }
+    .chart-container h3 { margin: 0 0 16px 0; font-size: 15px; color: #1e293b; }
+    .filter-bar { margin-bottom: 18px; display: flex; gap: 12px; align-items: center; flex-wrap: wrap; }
+    .filter-bar select { padding: 6px 10px; border: 1px solid #cbd5e1; border-radius: 6px; font-size: 13px; }
+    .data-table { border-collapse: collapse; width: 100%; font-size: 13px; margin-top: 12px; }
+    .data-table th { background: #f1f5f9; padding: 8px 12px; text-align: left; border: 1px solid #e2e8f0; }
+    .data-table td { padding: 8px 12px; border: 1px solid #e2e8f0; }
+</style>
+
+<div style="display:flex; align-items:center; gap:12px; margin-bottom:18px;">
+    <h2 style="margin:0;">🔍 Quality Analytics</h2>
+    {% include "warehousing/includes/lang_toggle.html" %}
+</div>
+
+<div class="analytics-nav">
+    <a href="{% url 'analytics:dashboard' %}">Overview</a>
+    <a href="{% url 'analytics:production' %}">Production</a>
+    <a href="{% url 'analytics:stock' %}">Stock</a>
+    <a href="{% url 'analytics:spc' %}">SPC</a>
+    <a href="{% url 'analytics:quality' %}" class="active">Quality</a>
+</div>
+
+<div class="filter-bar">
+    <form method="get" style="display:flex; gap:10px; align-items:center;">
+        <label><strong>Plant:</strong></label>
+        <select name="plant" onchange="this.form.submit()">
+            <option value="">All Plants</option>
+            {% for p in plants %}
+            <option value="{{ p.plant_id }}" {% if selected_plant == p.plant_id %}selected{% endif %}>{{ p.plant_name }}</option>
+            {% endfor %}
+        </select>
+        <label><strong>Period:</strong></label>
+        <select name="days" onchange="this.form.submit()">
+            <option value="7" {% if days == 7 %}selected{% endif %}>7 days</option>
+            <option value="30" {% if days == 30 %}selected{% endif %}>30 days</option>
+            <option value="90" {% if days == 90 %}selected{% endif %}>90 days</option>
+            <option value="365" {% if days == 365 %}selected{% endif %}>1 year</option>
+        </select>
+    </form>
+</div>
+
+<div style="display: grid; grid-template-columns: 1fr 1fr; gap: 16px;">
+    <div class="chart-container">
+        <h3>QC Decisions by Plant</h3>
+        <canvas id="qcDecisionChart" height="250"></canvas>
+    </div>
+    <div class="chart-container">
+        <h3>Decision Breakdown</h3>
+        <canvas id="decisionPieChart" height="250"></canvas>
+    </div>
+</div>
+
+<div class="chart-container">
+    <h3>QC Decisions Data</h3>
+    <table class="data-table">
+        <tr><th>Plant</th><th>Decision</th><th>Count</th></tr>
+        {% for label in qc_data.labels %}
+        <tr>
+            <td>{{ label }}</td>
+            <td>{{ qc_data.series.0.data|default_if_none:"0" }}</td>
+        </tr>
+        {% empty %}
+        <tr><td colspan="3" style="text-align:center; color:#94a3b8;">No data for selected period</td></tr>
+        {% endfor %}
+    </table>
+</div>
+
+<div class="chart-container">
+    <h3>Lab Test Results — Average by Test</h3>
+    <table class="data-table">
+        <tr><th>Plant | Test</th><th>Average Result</th></tr>
+        {% for label in lab_data.labels %}
+        <tr><td>{{ label }}</td><td>{{ lab_data.series.0.data|default_if_none:"0" }}</td></tr>
+        {% empty %}
+        <tr><td colspan="2" style="text-align:center; color:#94a3b8;">No data for selected period</td></tr>
+        {% endfor %}
+    </table>
+</div>
+
+<script>
+    new Chart(document.getElementById('qcDecisionChart'), {
+        type: 'bar',
+        data: {
+            labels: {{ qc_data.labels|safe|default:"[]" }},
+            datasets: [{
+                label: 'Decisions',
+                data: {{ qc_data.series.0.data|safe|default:"[]" }},
+                backgroundColor: ['#166534','#991b1b','#854d0e','#1e40af'],
+            }]
+        },
+        options: { responsive: true, plugins: { legend: { display: false } } }
+    });
+
+    new Chart(document.getElementById('decisionPieChart'), {
+        type: 'pie',
+        data: {
+            labels: {{ qc_data.labels|safe|default:"[]" }},
+            datasets: [{
+                data: {{ qc_data.series.0.data|safe|default:"[]" }},
+                backgroundColor: ['#166534','#991b1b','#854d0e','#1e40af'],
+            }]
+        },
+        options: { responsive: true }
+    });
+</script>
+{% endblock %}
