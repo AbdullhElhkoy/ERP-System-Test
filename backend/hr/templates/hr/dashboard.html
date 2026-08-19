@@ -1,0 +1,138 @@
+{% extends "admin/base_site.html" %}
+{% block content %}
+{% load i18n %}
+<style>
+    .hr-stats { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 16px; margin-bottom: 24px; }
+    .hr-stat-card { background: #fff; border: 1px solid #e2e8f0; border-radius: 10px; padding: 20px; text-align: center; }
+    .hr-stat-card .number { font-size: 32px; font-weight: 700; color: #1e40af; }
+    .hr-stat-card .label { font-size: 13px; color: #64748b; margin-top: 4px; }
+    .hr-section { margin-bottom: 24px; }
+    .hr-section h3 { font-size: 16px; margin-bottom: 12px; color: #1e293b; }
+    .hr-table { border-collapse: collapse; width: 100%; font-size: 13px; }
+    .hr-table th { background: #f1f5f9; padding: 8px 12px; text-align: left; border: 1px solid #e2e8f0; }
+    .hr-table td { padding: 8px 12px; border: 1px solid #e2e8f0; }
+    .hr-filter { margin-bottom: 18px; }
+    .hr-filter select { padding: 6px 10px; border: 1px solid #cbd5e1; border-radius: 6px; font-size: 13px; }
+    .badge { display: inline-block; padding: 2px 8px; border-radius: 12px; font-size: 11px; font-weight: 600; }
+    .badge-active { background: #dcfce7; color: #166534; }
+    .badge-warning { background: #fef9c3; color: #854d0e; }
+    .badge-danger { background: #fecaca; color: #991b1b; }
+</style>
+
+<div style="display:flex; align-items:center; gap:12px; margin-bottom:18px;">
+    <h2 style="margin:0;">👥 HR Dashboard</h2>
+    <a class="button" href="{% url 'admin:hr_hremployeeprofile_changelist' %}">Employees</a>
+    <a class="button" href="{% url 'admin:hr_attendance_changelist' %}">Attendance</a>
+    <a class="button" href="{% url 'admin:hr_leave_changelist' %}">Leaves</a>
+    <a class="button" href="{% url 'admin:hr_contract_changelist' %}">Contracts</a>
+    <a class="button" href="{% url 'admin:hr_discipline_changelist' %}">Discipline</a>
+    <a class="button" href="{% url 'admin:hr_training_changelist' %}">Training</a>
+    {% include "warehousing/includes/lang_toggle.html" %}
+</div>
+
+<div class="hr-filter">
+    <form method="get">
+        <label><strong>Filter by Plant:</strong></label>
+        <select name="plant" onchange="this.form.submit()">
+            <option value="">All Plants</option>
+            {% for p in plants %}
+            <option value="{{ p.plant_id }}" {% if selected_plant == p.plant_id %}selected{% endif %}>{{ p.plant_name }}</option>
+            {% endfor %}
+        </select>
+    </form>
+</div>
+
+<div class="hr-stats">
+    <div class="hr-stat-card">
+        <div class="number">{{ total_employees }}</div>
+        <div class="label">Total Employees</div>
+    </div>
+    <div class="hr-stat-card">
+        <div class="number" style="color:#166534;">{{ active_employees }}</div>
+        <div class="label">Active</div>
+    </div>
+    <div class="hr-stat-card">
+        <div class="number" style="color:#854d0e;">{{ on_leave }}</div>
+        <div class="label">On Leave</div>
+    </div>
+    <div class="hr-stat-card">
+        <div class="number" style="color:#991b1b;">{{ terminated }}</div>
+        <div class="label">Terminated</div>
+    </div>
+</div>
+
+{% if by_plant %}
+<div class="hr-section">
+    <h3>Employees by Plant</h3>
+    <table class="hr-table">
+        <tr><th>Plant</th><th>Count</th></tr>
+        {% for row in by_plant %}
+        <tr><td>{{ row.plant__plant_name|default:"—" }}</td><td>{{ row.count }}</td></tr>
+        {% endfor %}
+    </table>
+</div>
+{% endif %}
+
+{% if by_department %}
+<div class="hr-section">
+    <h3>Employees by Department</h3>
+    <table class="hr-table">
+        <tr><th>Department</th><th>Count</th></tr>
+        {% for row in by_department %}
+        <tr><td>{{ row.department__department_name|default:"—" }}</td><td>{{ row.count }}</td></tr>
+        {% endfor %}
+    </table>
+</div>
+{% endif %}
+
+{% if upcoming_contracts %}
+<div class="hr-section">
+    <h3>⚠️ Contracts Expiring Soon (30 days)</h3>
+    <table class="hr-table">
+        <tr><th>Employee</th><th>Type</th><th>End Date</th></tr>
+        {% for c in upcoming_contracts %}
+        <tr>
+            <td>{{ c.employee.full_name }}</td>
+            <td>{{ c.get_contract_type_display }}</td>
+            <td>{{ c.end_date }}</td>
+        </tr>
+        {% endfor %}
+    </table>
+</div>
+{% endif %}
+
+{% if recent_disciplines %}
+<div class="hr-section">
+    <h3>Recent Disciplinary Actions</h3>
+    <table class="hr-table">
+        <tr><th>Employee</th><th>Action</th><th>Date</th><th>Violation</th></tr>
+        {% for d in recent_disciplines %}
+        <tr>
+            <td>{{ d.employee.full_name }}</td>
+            <td>{{ d.get_action_type_display }}</td>
+            <td>{{ d.date }}</td>
+            <td>{{ d.violation_type|default:"—" }}</td>
+        </tr>
+        {% endfor %}
+    </table>
+</div>
+{% endif %}
+
+{% if recent_trainings %}
+<div class="hr-section">
+    <h3>Recent Training</h3>
+    <table class="hr-table">
+        <tr><th>Employee</th><th>Training</th><th>Provider</th><th>Date</th><th>Certificate</th></tr>
+        {% for t in recent_trainings %}
+        <tr>
+            <td>{{ t.employee.full_name }}</td>
+            <td>{{ t.training_name }}</td>
+            <td>{{ t.provider|default:"—" }}</td>
+            <td>{{ t.start_date }}</td>
+            <td>{% if t.has_certificate %}✅ {{ t.certificate_number }}{% else %}—{% endif %}</td>
+        </tr>
+        {% endfor %}
+    </table>
+</div>
+{% endif %}
+{% endblock %}
