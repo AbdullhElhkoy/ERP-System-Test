@@ -3,19 +3,53 @@
 <style>
     .a-nav { display: flex; align-items: center; gap: 12px; margin-bottom: 18px; }
     .a-nav .title { font-size: 20px; font-weight: bold; }
-    .placeholder { border: 1px dashed #ccc; padding: 40px; text-align: center; color: #888; border-radius: 8px; }
+    .analytics-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 16px; margin-top: 20px; }
+    .analytics-card { background: #fff; border: 1px solid #e2e8f0; border-radius: 12px; padding: 24px; text-decoration: none; color: inherit; transition: box-shadow 0.2s; }
+    .analytics-card:hover { box-shadow: 0 4px 12px rgba(0,0,0,0.1); }
+    .analytics-card .icon { font-size: 32px; margin-bottom: 10px; }
+    .analytics-card .label { font-size: 16px; font-weight: 600; color: #1e293b; }
+    .analytics-card .desc { font-size: 12px; color: #64748b; margin-top: 6px; line-height: 1.5; }
 </style>
 
 <div class="a-nav">
-    <div class="title">📈 Data Analysis - {{ plant.plant_name }}</div>
+    <div class="title">📈 Data Analysis — {{ plant.plant_name }}</div>
     <a class="button" href="{{ dashboard_url }}">← Factory Dashboard</a>
     {% include "warehousing/includes/lang_toggle.html" %}
 </div>
 
-<div class="placeholder">
-    <div style="font-size: 30px; margin-bottom: 10px;">📈</div>
-    Data Analysis page is under construction — it will include:
-    <br><br>
-    Production Analysis · Quality Analysis · Trend Analysis · Grade Analysis · Packing Analysis · Loss Analysis
+<p style="color:#64748b; font-size:13px; margin-bottom:4px;">
+    Detailed analytics for <strong>{{ plant.plant_name }}</strong>. All data is live from the system.
+</p>
+
+<div class="analytics-grid">
+    <a class="analytics-card" href="/analytics/production/?plant={{ plant.plant_id }}">
+        <div class="icon">🏭</div>
+        <div class="label">Production Analytics</div>
+        <div class="desc">Ton output, weight trends, grade distribution, packing events per plant.</div>
+    </a>
+
+    <a class="analytics-card" href="/analytics/stock/?plant={{ plant.plant_id }}">
+        <div class="icon">📦</div>
+        <div class="label">Stock Analytics</div>
+        <div class="desc">Floor stock, finished products, raw materials, packaging, spare parts — live snapshot.</div>
+    </a>
+
+    <a class="analytics-card" href="/analytics/spc/?plant={{ plant.plant_id }}">
+        <div class="icon">📈</div>
+        <div class="label">SPC — Statistical Process Control</div>
+        <div class="desc">Cp, Cpk, Pp, Ppk, Sigma Level, DPMO, Individuals chart, Nelson Rules.</div>
+    </a>
+
+    <a class="analytics-card" href="/analytics/quality/?plant={{ plant.plant_id }}">
+        <div class="icon">🔍</div>
+        <div class="label">Quality Analytics</div>
+        <div class="desc">QC decisions, accept/reject rates, lab test results, quality trends.</div>
+    </a>
+
+    <a class="analytics-card" href="/analytics/">
+        <div class="icon">📊</div>
+        <div class="label">All Plants Overview</div>
+        <div class="desc">Cross-plant comparison, aggregate statistics, global dashboards.</div>
+    </a>
 </div>
 {% endblock %}
