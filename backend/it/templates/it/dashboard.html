@@ -1,0 +1,131 @@
+{% extends "admin/base_site.html" %}
+{% block content %}
+<style>
+    .it-stats { display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: 14px; margin-bottom: 24px; }
+    .it-stat-card { background: #fff; border: 1px solid #e2e8f0; border-radius: 10px; padding: 18px; text-align: center; }
+    .it-stat-card .number { font-size: 30px; font-weight: 700; color: #7c3aed; }
+    .it-stat-card .label { font-size: 12px; color: #64748b; margin-top: 4px; }
+    .it-section { margin-bottom: 24px; }
+    .it-section h3 { font-size: 16px; margin-bottom: 12px; color: #1e293b; }
+    .it-table { border-collapse: collapse; width: 100%; font-size: 13px; }
+    .it-table th { background: #f1f5f9; padding: 8px 12px; text-align: left; border: 1px solid #e2e8f0; }
+    .it-table td { padding: 8px 12px; border: 1px solid #e2e8f0; }
+</style>
+
+<div style="display:flex; align-items:center; gap:12px; margin-bottom:18px;">
+    <h2 style="margin:0;">🖥️ IT Dashboard</h2>
+    <a class="button" href="{% url 'admin:it_itasset_changelist' %}">Assets</a>
+    <a class="button" href="{% url 'admin:it_employeeaccount_changelist' %}">Accounts</a>
+    <a class="button" href="{% url 'admin:it_assethandover_changelist' %}">Handovers</a>
+    <a class="button" href="{% url 'admin:it_itclearance_changelist' %}">Clearance</a>
+    {% include "warehousing/includes/lang_toggle.html" %}
+</div>
+
+<div style="margin-bottom:18px;">
+    <form method="get">
+        <label><strong>Filter by Plant:</strong></label>
+        <select name="plant" onchange="this.form.submit()">
+            <option value="">All Plants</option>
+            {% for p in plants %}
+            <option value="{{ p.plant_id }}" {% if selected_plant == p.plant_id %}selected{% endif %}>{{ p.plant_name }}</option>
+            {% endfor %}
+        </select>
+    </form>
+</div>
+
+<div class="it-stats">
+    <div class="it-stat-card">
+        <div class="number">{{ total_assets }}</div>
+        <div class="label">Total Assets</div>
+    </div>
+    <div class="it-stat-card">
+        <div class="number" style="color:#166534;">{{ assigned_assets }}</div>
+        <div class="label">Assigned</div>
+    </div>
+    <div class="it-stat-card">
+        <div class="number" style="color:#1e40af;">{{ available_assets }}</div>
+        <div class="label">Available</div>
+    </div>
+    <div class="it-stat-card">
+        <div class="number" style="color:#854d0e;">{{ in_maintenance }}</div>
+        <div class="label">In Maintenance</div>
+    </div>
+    <div class="it-stat-card">
+        <div class="number">{{ total_accounts }}</div>
+        <div class="label">Total Accounts</div>
+    </div>
+    <div class="it-stat-card">
+        <div class="number" style="color:#166534;">{{ active_accounts }}</div>
+        <div class="label">Active Accounts</div>
+    </div>
+    <div class="it-stat-card">
+        <div class="number" style="color:#991b1b;">{{ disabled_accounts }}</div>
+        <div class="label">Disabled Accounts</div>
+    </div>
+    <div class="it-stat-card">
+        <div class="number" style="color:#854d0e;">{{ pending_accounts }}</div>
+        <div class="label">Pending Setup</div>
+    </div>
+</div>
+
+{% if by_category %}
+<div class="it-section">
+    <h3>Assets by Category</h3>
+    <table class="it-table">
+        <tr><th>Category</th><th>Count</th></tr>
+        {% for row in by_category %}
+        <tr><td>{{ row.category__name|default:"—" }}</td><td>{{ row.count }}</td></tr>
+        {% endfor %}
+    </table>
+</div>
+{% endif %}
+
+{% if pending_clearances %}
+<div class="it-section">
+    <h3>⚠️ Pending IT Clearances</h3>
+    <table class="it-table">
+        <tr><th>Employee</th><th>Accounts Disabled</th><th>Assets Returned</th></tr>
+        {% for c in pending_clearances %}
+        <tr>
+            <td>{{ c.employee.full_name }}</td>
+            <td>{% if c.accounts_disabled %}✅{% else %}❌{% endif %}</td>
+            <td>{% if c.assets_returned %}✅{% else %}❌{% endif %}</td>
+        </tr>
+        {% endfor %}
+    </table>
+</div>
+{% endif %}
+
+{% if recent_handovers %}
+<div class="it-section">
+    <h3>Recent Handovers</h3>
+    <table class="it-table">
+        <tr><th>Asset</th><th>Employee</th><th>Type</th><th>Date</th></tr>
+        {% for h in recent_handovers %}
+        <tr>
+            <td>{{ h.asset.asset_code }} — {{ h.asset.category }}</td>
+            <td>{{ h.employee.full_name }}</td>
+            <td>{{ h.get_handover_type_display }}</td>
+            <td>{{ h.handover_date }}</td>
+        </tr>
+        {% endfor %}
+    </table>
+</div>
+{% endif %}
+
+{% if upcoming_warranty %}
+<div class="it-section">
+    <h3>⚠️ Warranty Expiring Soon (90 days)</h3>
+    <table class="it-table">
+        <tr><th>Asset</th><th>Category</th><th>Warranty End</th></tr>
+        {% for a in upcoming_warranty %}
+        <tr>
+            <td>{{ a.asset_code }} — {{ a.brand }} {{ a.model_name }}</td>
+            <td>{{ a.category }}</td>
+            <td>{{ a.warranty_end }}</td>
+        </tr>
+        {% endfor %}
+    </table>
+</div>
+{% endif %}
+{% endblock %}

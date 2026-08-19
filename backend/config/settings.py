@@ -55,6 +55,7 @@ INSTALLED_APPS = [
     'quality_control',
     'finished_products',
     'hr',
+    'it',
 ]
 
 CSRF_TRUSTED_ORIGINS = [
