@@ -1,10 +1,8 @@
-from django.urls import path, include
-from rest_framework.routers import DefaultRouter
+from django.urls import path
 from analytics import views
 
 app_name = "analytics"
 
-# HTML views
 urlpatterns = [
     path("", views.analytics_dashboard, name="dashboard"),
     path("production/", views.production_analytics, name="production"),
