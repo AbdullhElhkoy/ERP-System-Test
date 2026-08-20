@@ -33,11 +33,19 @@ def _warehouse_section():
             "add_url": None,
             "view_only": True,
         },
+        {
+            "name": "Packaging Materials",
+            "object_name": "PackagingMaterials",
+            "perms": VIEW_PERMS,
+            "admin_url": reverse("warehousing:packaging_materials"),
+            "add_url": None,
+            "view_only": True,
+        },
     ]
     return {
         "name": "Warehousing",
         "app_label": "warehousing",
-        "app_url": reverse("warehousing:raw_materials_hub"),
+        "app_url": reverse("warehousing:warehousing_hub"),
         "models": entries,
     }
 

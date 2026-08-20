@@ -1,0 +1,51 @@
+{% extends "admin/base_site.html" %}
+{% block content %}
+<style>
+    .wh-header { display: flex; align-items: center; gap: 15px; margin-bottom: 20px; }
+    .wh-header .title { font-size: 22px; font-weight: bold; }
+    .back-btn { font-size: 13px; }
+    .section-grid { display: flex; flex-wrap: wrap; gap: 16px; margin-top: 20px; }
+    .section-card {
+        flex: 1 1 220px; max-width: 280px;
+        border: 1px solid #ccc; border-radius: 8px;
+        padding: 24px; text-align: center; background: #f9f9f9;
+        cursor: pointer; text-decoration: none; color: inherit; display: block;
+        transition: box-shadow .2s, background .2s;
+    }
+    .section-card:hover { box-shadow: 0 4px 12px rgba(0,0,0,.15); background: #fff; }
+    .section-card .icon { font-size: 40px; display: block; margin-bottom: 12px; }
+    .section-card .label { font-size: 18px; font-weight: bold; }
+    .section-card .desc { font-size: 13px; color: #666; margin-top: 8px; }
+</style>
+
+<div class="wh-header">
+    <div class="title">📦 {% trans "Warehousing" %}</div>
+    <a class="button back-btn" href="{% url 'admin:index' %}">← {% trans "Back to Admin" %}</a>
+    {% include "warehousing/includes/lang_toggle.html" %}
+</div>
+
+<p style="margin: 0 0 8px 0; color: #555;">{% trans "All warehouse sections in one place." %}</p>
+
+<div class="section-grid">
+    <a class="section-card" href="{{ raw_materials_url }}">
+        <span class="icon">🧪</span>
+        <span class="label">{% trans "Raw Materials" %}</span>
+        <div class="desc">{% trans "Materials, deliveries, inventory & analysis" %}</div>
+    </a>
+    <a class="section-card" href="{{ spare_parts_url }}">
+        <span class="icon">🔧</span>
+        <span class="label">{% trans "Spare Parts" %}</span>
+        <div class="desc">{% trans "Spare parts stock & transactions" %}</div>
+    </a>
+    <a class="section-card" href="{{ final_products_url }}">
+        <span class="icon">📦</span>
+        <span class="label">{% trans "Final Products" %}</span>
+        <div class="desc">{% trans "Finished product inventory" %}</div>
+    </a>
+    <a class="section-card" href="{{ packaging_url }}">
+        <span class="icon">🏷️</span>
+        <span class="label">{% trans "Packaging Materials" %}</span>
+        <div class="desc">{% trans "Packaging stock & supplies" %}</div>
+    </a>
+</div>
+{% endblock %}

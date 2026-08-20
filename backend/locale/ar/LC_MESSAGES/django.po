@@ -506,6 +506,24 @@ msgstr "صرف"
 msgid "Stock Count"
 msgstr "جرد"
 
+# ── Warehousing Hub page ─────────────────────────────────────
+msgid "Back to Admin"
+msgstr "العودة إلى الإدارة"
+msgid "All warehouse sections in one place."
+msgstr "جميع أقسام المخازن في مكان واحد."
+
+msgid "Materials, deliveries, inventory & analysis"
+msgstr "المواد، التوريدات، المخزون والتحليلات"
+
+msgid "Spare parts stock & transactions"
+msgstr "مخزون وعمليات قطع الغيار"
+
+msgid "Finished product inventory"
+msgstr "مخزون المنتج النهائي"
+
+msgid "Packaging stock & supplies"
+msgstr "مخزون ومواد التعبئة والتغليف"
+
 # ── Language Settings page ───────────────────────────────────
 msgid "Language Settings"
 msgstr "إعدادات اللغة"

@@ -1,6 +1,7 @@
 from django.urls import path
 
 from .views import (
+    warehousing_hub,
     raw_materials_hub,
     warehousing_settings,
     coming_soon,
@@ -15,6 +16,7 @@ from .views import (
 app_name = "warehousing"
 
 urlpatterns = [
+    path("", warehousing_hub, name="warehousing_hub"),
     path("raw-materials/", raw_materials_hub, name="raw_materials_hub"),
     path("raw-materials/settings/", warehousing_settings, name="warehousing_settings"),
     path("raw-materials/select-plant/<int:plant_id>/", select_plant, name="select_plant"),
@@ -34,5 +36,11 @@ urlpatterns = [
         coming_soon,
         {"section_name": "Final Products"},
         name="final_product",
+    ),
+    path(
+        "packaging-materials/",
+        coming_soon,
+        {"section_name": "Packaging Materials"},
+        name="packaging_materials",
     ),
 ]

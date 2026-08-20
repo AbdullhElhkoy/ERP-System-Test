@@ -6,6 +6,8 @@ from django.http import JsonResponse
 from django.shortcuts import render, redirect
 from django.urls import reverse
 
+from django.utils.translation import gettext_lazy as _
+
 from plants.models import Plant
 
 from warehousing.raw_materials.models import (
@@ -36,6 +38,20 @@ def _current_plant(request):
 
 def _set_current_plant(request, plant):
     request.session["raw_materials_current_plant_id"] = plant.pk
+
+
+@staff_member_required
+def warehousing_hub(request):
+    """Main Warehousing hub — 4 sections: Raw Materials, Spare Parts, Final Products, Packaging."""
+    context = _admin_context(
+        request,
+        title=_("Warehousing"),
+        raw_materials_url=reverse("warehousing:raw_materials_hub"),
+        spare_parts_url=reverse("warehousing:spare_parts"),
+        final_products_url=reverse("warehousing:final_product"),
+        packaging_url=reverse("warehousing:packaging_materials"),
+    )
+    return render(request, "warehousing/warehousing_hub.html", context)
 
 
 @staff_member_required
