@@ -1,22 +1,22 @@
 from django.shortcuts import render, redirect
-from django.utils.translation import LANGUAGE_SESSION_KEY, check_for_language, get_language
-from django.conf import settings
+from django.utils.translation import get_language
 
 
 def language_settings(request):
     if request.method == 'POST':
+        next_url = request.POST.get('next', '/')
+        response = redirect(next_url)
         lang_code = request.POST.get('language')
-        if lang_code and check_for_language(lang_code):
-            response = redirect(request.POST.get('next', '/'))
-            if hasattr(request, 'session'):
-                request.session[LANGUAGE_SESSION_KEY] = lang_code
+        if lang_code:
             response.set_cookie(
-                settings.LANGUAGE_COOKIE_NAME,
+                'django_language',
                 lang_code,
                 max_age=365 * 24 * 60 * 60,
                 samesite='Lax',
             )
-            return response
+            if hasattr(request, 'session') and request.session.session_key:
+                request.session['django_language'] = lang_code
+        return response
     current = get_language()
     return render(request, 'language_settings.html', {
         'current_language': current,
