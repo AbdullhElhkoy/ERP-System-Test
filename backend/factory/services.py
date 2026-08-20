@@ -1,9 +1,9 @@
 """
-طبقة الخدمات الموحّدة لتطبيق factory.
+Unified service layer for the factory app.
 
-كل منطق حفظ البيانات يُنفَّذ هنا في مكان واحد، بدلاً من تكراره في
-factory/views.py و factory/admin.py. أي شاشة أو API أو تطبيق خارجي
-يستدعي هذه الدوال للحفظ بنفس الطريقة تماماً.
+All data-saving logic is executed here in one place, instead of being
+duplicated in factory/views.py and factory/admin.py. Any screen, API,
+or external application calls these functions to save data consistently.
 """
 
 from datetime import datetime, time as dt_time
@@ -12,6 +12,7 @@ from decimal import Decimal, InvalidOperation
 from django.db import transaction
 from django.utils import timezone
 from django.utils.dateparse import parse_date, parse_time
+from django.utils.translation import gettext_lazy as _
 
 from .models import (
     ConformityRule,
@@ -64,7 +65,7 @@ def _get_or_create_output_point(plant, packing_location):
 
 def _get_or_create_default_output_point(plant):
     output_point, _ = OutputPoint.objects.get_or_create(
-        plant=plant, code="DEFAULT", defaults={"name": "نقطة سحب عامة"}
+        plant=plant, code="DEFAULT", defaults={"name": _("General Output Point")}
     )
     return output_point
 
@@ -204,7 +205,7 @@ def _create_packing_event(reading, packing_type, row):
     qty = _as_decimal(qty_raw)
     if qty is None or not packing_type:
         return
-    unit = row.get("pack_unit") or "بيج باج"
+    unit = row.get("pack_unit") or _("Big Bag")
     PackingEvent.objects.create(
         plant=reading.plant,
         output_reading=reading,

@@ -6,8 +6,8 @@ msgid ""
 msgstr ""
 "Project-Id-Version: ChemFlow ERP 1.0\n"
 "Report-Msgid-Bugs-To: \n"
-"POT-Creation-Date: 2026-08-18 02:00+0000\n"
-"PO-Revision-Date: 2026-08-18 02:00+0000\n"
+"POT-Creation-Date: 2026-08-20 00:00+0000\n"
+"PO-Revision-Date: 2026-08-20 00:00+0000\n"
 "Last-Translator: \n"
 "Language-Team: Arabic\n"
 "Language: ar\n"
@@ -16,132 +16,498 @@ msgstr ""
 "Content-Transfer-Encoding: 8bit\n"
 "Plural-Forms: nplurals=6; plural=(n==0 ? 0 : n==1 ? 1 : n==2 ? 2 : n%100>=3 && n%100<=10 ? 3 : n%100>=11 && n%100<=99 ? 4 : 5);\n"
 
+# ── models/shared.py ──────────────────────────────────────────
+msgid "Chemical"
+msgstr ""
+
+msgid "Physical"
+msgstr ""
+
+msgid "Reaction"
+msgstr ""
+
+msgid "Final Product"
+msgstr ""
+
+msgid "Scopes"
+msgstr ""
+
+msgid "Primary"
+msgstr ""
+
+msgid "Secondary"
+msgstr ""
+
+msgid "Grade Type"
+msgstr ""
+
+msgid "Primary = shows in primary grade column, Secondary = shows in secondary grade column"
+msgstr ""
+
+# ── models/reaction.py ────────────────────────────────────────
+msgid "Optional — preferred as an additional code only"
+msgstr ""
+
+msgid "Stage Name"
+msgstr ""
+
+msgid "Order"
+msgstr ""
+
+msgid "Active"
+msgstr ""
+
+msgid "Reaction Stage"
+msgstr ""
+
+msgid "Reaction Stages"
+msgstr ""
+
+# ── models/plant_proxy.py ─────────────────────────────────────
+msgid "Plant"
+msgstr ""
+
+msgid "Plants"
+msgstr ""
+
+# ── models/dynamic_fields.py ──────────────────────────────────
+msgid "Decimal"
+msgstr ""
+
+msgid "Integer"
+msgstr ""
+
+msgid "Text"
+msgstr ""
+
+msgid "Date"
+msgstr ""
+
+msgid "Select from list"
+msgstr ""
+
+msgid "Basic (Weight / Quantity)"
+msgstr ""
+
+msgid "Chemical Test"
+msgstr ""
+
+msgid "Physical Test"
+msgstr ""
+
+msgid "General Data"
+msgstr ""
+
+msgid "Unique English identifier without spaces, used internally (e.g. batch_number)"
+msgstr ""
+
+msgid "Name that will be shown to the user"
+msgstr ""
+
+msgid "For 'Select from list' type only — list of choices"
+msgstr ""
+
+# ── models/final_product.py ───────────────────────────────────
+msgid "Automatic based on cumulative weight"
+msgstr ""
+
+msgid "Manual"
+msgstr ""
+
+msgid "Sampled"
+msgstr ""
+
+msgid "Not sampled"
+msgstr ""
+
+msgid "Sampling status from the input screen"
+msgstr ""
+
+msgid "Result time"
+msgstr ""
+
+msgid "Active dynamic field values for the packing type"
+msgstr ""
+
+msgid "Under test (not yet sampled)"
+msgstr ""
+
+msgid "Sample taken"
+msgstr ""
+
+msgid "Graded"
+msgstr ""
+
+msgid "Ton status: under test until sample is taken and result appears"
+msgstr ""
+
+msgid "Local"
+msgstr ""
+
+msgid "Non-conforming"
+msgstr ""
+
+msgid "Primary grade (export / local / non-conforming)"
+msgstr ""
+
+msgid "Secondary grade under the primary (optional)"
+msgstr ""
+
+msgid "Big Bag"
+msgstr ""
+
+msgid "Sack"
+msgstr ""
+
+msgid "Waiting for grade (not sampled)"
+msgstr ""
+
+msgid "Waiting for grade (sampled)"
+msgstr ""
+
+msgid "Grade only for 'Graded' section, empty for waiting sections"
+msgstr ""
+
+msgid "In"
+msgstr ""
+
+msgid "Out"
+msgstr ""
+
+# ── admin.py ──────────────────────────────────────────────────
+msgid "Enter Factory"
+msgstr ""
+
+msgid "Factory not found"
+msgstr ""
+
+msgid "Reaction Stages"
+msgstr ""
+
+msgid "Packing Types"
+msgstr ""
+
+msgid "Packing Locations"
+msgstr ""
+
+msgid "Grades"
+msgstr ""
+
+msgid "Rejection Reasons (Local / Non-conforming)"
+msgstr ""
+
+msgid "Test Definitions"
+msgstr ""
+
+msgid "Conformity Rules"
+msgstr ""
+
+msgid "Output Points"
+msgstr ""
+
+msgid "Representative Sample Group Size"
+msgstr ""
+
+msgid "Plant Lot Settings"
+msgstr ""
+
+msgid "Packing Type Fields"
+msgstr ""
+
+msgid "Specification (disabled)"
+msgstr ""
+
+msgid "Output Readings"
+msgstr ""
+
+msgid "Tons"
+msgstr ""
+
+msgid "Representative Samples"
+msgstr ""
+
+msgid "Ton Grade Assignments"
+msgstr ""
+
+msgid "Packing Events"
+msgstr ""
+
+msgid "Packing Conversions"
+msgstr ""
+
+msgid "Conformity Results"
+msgstr ""
+
+msgid "Floor Stock Balances"
+msgstr ""
+
+msgid "Floor Stock Movements"
+msgstr ""
+
+msgid "Process Readings"
+msgstr ""
+
+msgid "Dynamic Fields Library (Company-wide)"
+msgstr ""
+
+msgid "You must enter a factory first"
+msgstr ""
+
+msgid "Packing type not found for this factory"
+msgstr ""
+
+msgid "Reading not found"
+msgstr ""
+
+msgid "Invalid data"
+msgstr ""
+
+msgid "Stage not found for this factory"
+msgstr ""
+
+msgid "Entered factory: %(name)s"
+msgstr ""
+
+msgid "An error occurred while saving: %(error)s"
+msgstr ""
+
+msgid "Scopes"
+msgstr ""
+
+msgid "Scopes (multiple selection)"
+msgstr ""
+
+msgid "Number of Tests"
+msgstr ""
+
+msgid "Factory"
+msgstr ""
+
+# ── services.py ───────────────────────────────────────────────
+msgid "General Output Point"
+msgstr ""
+
+# ── views.py ──────────────────────────────────────────────────
+msgid "Readings saved successfully"
+msgstr ""
+
+# ── data_grid.py ──────────────────────────────────────────────
+msgid "Ton not found: %(ton_id)s"
+msgstr ""
+
+# ── delete_all_plants.py ──────────────────────────────────────
+msgid "Delete all factories and all associated data, then create a new empty factory."
+msgstr ""
+
+msgid "Confirm without asking"
+msgstr ""
+
+msgid "Do not delete OrgPosition (left referencing deleted factory — not recommended)"
+msgstr ""
+
+msgid "No factories to delete."
+msgstr ""
+
+msgid "Existing factories:"
+msgstr ""
+
+msgid "Delete %(count)d factory and all its data? (type yes): "
+msgstr ""
+
+msgid "Cancelled."
+msgstr ""
+
+msgid "Skipping %(label)s (table not found?): %(error)s"
+msgstr ""
+
+msgid "Deleted %(label)s: %(count)s"
+msgstr ""
+
+msgid "Remaining protected records from old factories — check models: %(models)s"
+msgstr ""
+
+msgid "Deleted OrgPosition: %(count)s"
+msgstr ""
+
+msgid "Deleted factories: %(count)s"
+msgstr ""
+
+msgid "New Factory"
+msgstr ""
+
+msgid "All factories deleted. New factory: [%(pk)s] %(name)s"
+msgstr ""
+
+# ── Existing translations (warehousing, lab, etc.) ───────────
 # Dashboard
 msgid "Settings"
 msgstr "الإعدادات"
+
 msgid "Data Entry"
 msgstr "إدخال البيانات"
+
 msgid "Data"
 msgstr "البيانات"
+
 msgid "Reports"
 msgstr "التقارير"
+
 msgid "Data Analysis"
 msgstr "تحليل البيانات"
+
 msgid "Current Plant"
 msgstr "المصنع الحالي"
+
 msgid "No plant selected"
 msgstr "لم يتم اختيار مصنع"
 
 # Delivery Entry
 msgid "Delivery Entry"
 msgstr "إدخال الشحنات"
-msgid "Date"
-msgstr "التاريخ"
+
 msgid "Time"
 msgstr "الوقت"
+
 msgid "Material"
 msgstr "المادة"
+
 msgid "Supplier"
 msgstr "المورد"
+
 msgid "Vehicle No."
 msgstr "رقم العربية"
+
 msgid "Weight (Tons)"
 msgstr "الوزن (طن)"
+
 msgid "Decision"
 msgstr "القرار"
+
 msgid "Deduction %"
 msgstr "نسبة الخصم %"
+
 msgid "Storage"
 msgstr "المخزن"
+
 msgid "Notes"
 msgstr "ملاحظات"
+
 msgid "Delete"
 msgstr "حذف"
+
 msgid "Add Delivery"
 msgstr "إضافة شحنة"
+
 msgid "Save All"
 msgstr "حفظ الكل"
+
 msgid "Accepted"
 msgstr "مقبولة"
+
 msgid "Rejected"
 msgstr "مرفوضة"
+
 msgid "Accepted with Deduction"
 msgstr "مقبولة بخصم"
 
 # Data
 msgid "Deliveries Data"
 msgstr "بيانات الشحنات"
+
 msgid "Edit"
 msgstr "تعديل"
+
 msgid "No deliveries recorded for this plant yet."
 msgstr "لا توجد شحنات مسجلة لهذا المصنع حتى الآن."
 
 # Settings
 msgid "Warehousing Settings"
 msgstr "إعدادات المخازن"
+
 msgid "Materials"
 msgstr "المواد"
+
 msgid "Suppliers"
 msgstr "الموردين"
+
 msgid "Material Tests"
 msgstr "اختبارات المواد"
+
 msgid "Material Specifications"
 msgstr "مواصفات المواد"
+
 msgid "Material Storages"
 msgstr "مخازن المواد"
+
 msgid "Inventory Transactions"
 msgstr "حركات المخزون"
+
 msgid "Raw Material Lots"
 msgstr " LOT المواد الخام"
+
 msgid "Raw Material Samples"
 msgstr "عينات المواد الخام"
+
 msgid "Raw Material Analysis"
 msgstr "تحليلات المواد الخام"
 
 # Sidebar
 msgid "Warehousing"
 msgstr "المخازن"
+
 msgid "Raw Materials"
 msgstr "المواد الخام"
+
 msgid "Spare Parts"
 msgstr "قطع الغيار"
+
 msgid "Final Products"
 msgstr "المنتج النهائي"
-msgid "Factory"
-msgstr "المصنع"
 
 # Lab
 msgid "Sample"
 msgstr "عينة"
+
 msgid "Samples"
 msgstr "عينات"
+
 msgid "Sample Group"
 msgstr "مجموعة العينات"
+
 msgid "Under Analysis"
 msgstr "قيد التحليل"
+
 msgid "Ready for Decision"
 msgstr "جاهز للقرار"
 
 # Quality Control
 msgid "Quality Decision"
 msgstr "قرار الجودة"
+
 msgid "Conform"
 msgstr "مطابق"
+
 msgid "Conform with Deduction"
 msgstr "مطابق بخصم"
+
 msgid "Hold"
 msgstr "معلّق"
 
 # Spare Parts
 msgid "Item"
 msgstr "صنف"
+
 msgid "Items"
 msgstr "أصناف"
+
 msgid "Stock Balance"
 msgstr "رصيد المخزون"
+
 msgid "Receiving"
 msgstr "استلام"
+
 msgid "Issue"
 msgstr "صرف"
+
 msgid "Stock Count"
 msgstr "جرد"

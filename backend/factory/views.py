@@ -10,6 +10,7 @@ from django.utils import timezone
 from django.utils.text import slugify
 from django.utils.dateparse import parse_datetime
 from django.contrib.auth import get_user_model
+from django.utils.translation import gettext_lazy as _
 
 from plants.models import Plant
 from .models import (
@@ -37,7 +38,7 @@ def process_reading_grid(request):
     plant_id = request.session.get("factory_current_plant_id")
     plant = Plant.objects.filter(pk=plant_id).first() if plant_id else None
     if not plant:
-        messages.error(request, "لازم تدخل مصنع الأول")
+        messages.error(request, _("You must enter a factory first"))
         return redirect("admin:factory_factoryplant_changelist")
     stages = ProcessStage.objects.filter(plant=plant, is_active=True)
     tests = TestDefinition.objects.filter(plant=plant, scopes__contains=[TestDefinition.SCOPE_REACTION])
@@ -97,7 +98,7 @@ def process_reading_grid(request):
                             )
                         except InvalidOperation:
                             continue
-        messages.success(request, "تم حفظ القراءات بنجاح")
+        messages.success(request, _("Readings saved successfully"))
         return redirect(request.path)
 
     selected_stage_ids = [int(s) for s in request.GET.getlist("stages")]
@@ -142,7 +143,7 @@ def final_product_entry_grid(request, plant_id, packing_slug):
             data = json.loads(request.body)
             rows = data.get("rows", [])
         except json.JSONDecodeError:
-            return JsonResponse({"status": "error", "message": "بيانات غير صالحة"}, status=400)
+            return JsonResponse({"status": "error", "message": _("Invalid data")}, status=400)
 
         try:
             saved_count = save_final_product_rows(plant, packing_type, rows, request.user)

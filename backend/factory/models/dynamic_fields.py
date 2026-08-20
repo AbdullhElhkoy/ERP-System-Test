@@ -1,10 +1,10 @@
 from django.db import models
+from django.utils.translation import gettext_lazy as _
 
 
 class FieldDefinition(models.Model):
     """
-    مكتبة الحقول الشاملة (Master Fields Pool)
-    مشتركة لكل الشركة - مش لكل مصنع لوحده
+    Master Fields Pool — shared across the whole company, not per factory.
     """
     TYPE_NUMBER = "number"
     TYPE_INTEGER = "integer"
@@ -12,11 +12,11 @@ class FieldDefinition(models.Model):
     TYPE_DATE = "date"
     TYPE_CHOICE = "choice"
     FIELD_TYPE_CHOICES = [
-        (TYPE_NUMBER, "رقم عشري"),
-        (TYPE_INTEGER, "رقم صحيح"),
-        (TYPE_TEXT, "نص"),
-        (TYPE_DATE, "تاريخ"),
-        (TYPE_CHOICE, "اختيار من قائمة"),
+        (TYPE_NUMBER, _("Decimal")),
+        (TYPE_INTEGER, _("Integer")),
+        (TYPE_TEXT, _("Text")),
+        (TYPE_DATE, _("Date")),
+        (TYPE_CHOICE, _("Select from list")),
     ]
 
     CATEGORY_BASIC = "basic"
@@ -24,18 +24,18 @@ class FieldDefinition(models.Model):
     CATEGORY_PHYSICAL = "physical"
     CATEGORY_GENERAL = "general"
     CATEGORY_CHOICES = [
-        (CATEGORY_BASIC, "أساسي (وزن / كمية)"),
-        (CATEGORY_CHEMICAL, "فحص كيميائي"),
-        (CATEGORY_PHYSICAL, "فحص فيزيائي"),
-        (CATEGORY_GENERAL, "بيانات عامة"),
+        (CATEGORY_BASIC, _("Basic (Weight / Quantity)")),
+        (CATEGORY_CHEMICAL, _("Chemical Test")),
+        (CATEGORY_PHYSICAL, _("Physical Test")),
+        (CATEGORY_GENERAL, _("General Data")),
     ]
 
-    key = models.SlugField(max_length=50, unique=True, help_text="معرف فريد بالإنجليزي بدون مسافات، يستخدم داخليًا (مثال: batch_number)")
-    name = models.CharField(max_length=100, help_text="الاسم اللي هيظهر للمستخدم")
+    key = models.SlugField(max_length=50, unique=True, help_text=_("Unique English identifier without spaces, used internally (e.g. batch_number)"))
+    name = models.CharField(max_length=100, help_text=_("Name that will be shown to the user"))
     field_type = models.CharField(max_length=15, choices=FIELD_TYPE_CHOICES)
     category = models.CharField(max_length=15, choices=CATEGORY_CHOICES, default=CATEGORY_GENERAL)
     unit = models.CharField(max_length=20, blank=True)
-    choices = models.JSONField(blank=True, null=True, help_text="لنوع 'اختيار من قائمة' فقط - قائمة بالخيارات")
+    choices = models.JSONField(blank=True, null=True, help_text=_("For 'Select from list' type only — list of choices"))
     is_active = models.BooleanField(default=True)
 
     class Meta:
@@ -48,7 +48,7 @@ class FieldDefinition(models.Model):
 
 class PackingTypeField(models.Model):
     """
-    ربط الحقول المفعّلة بكل نوع تعبئة (Packaging Type Configuration)
+    Packaging Type Configuration — links active fields to each packing type.
     """
     packing_type = models.ForeignKey(
         "factory.PackingType", on_delete=models.CASCADE, related_name="field_configs"

@@ -1,16 +1,16 @@
 """
-موديلات "المنتج النهائي" لتطبيق factory.
+Final product models for the factory app.
 
-هذا الملف أُعيد بناؤه بالكامل من الصفر ليطابق الشكل الفعلي الموجود في قاعدة
-البيانات (تم التحقق عبر information_schema.columns و information_schema
-foreign key constraints على كل جدول من جداول factory_*). كل الجداول كانت
-فارغة (0 صف) وقت إعادة البناء، فلا يوجد خطر فقدان بيانات.
+This file was rebuilt from scratch to match the actual database schema
+(verified via information_schema.columns and foreign key constraints
+on every factory_* table). All tables were empty (0 rows) at rebuild time.
 """
 
 from decimal import Decimal
 
 from django.conf import settings
 from django.db import models, transaction
+from django.utils.translation import gettext_lazy as _
 
 from plants.models import Plant
 from employees.models import ShiftType
@@ -18,15 +18,15 @@ from .shared import TestDefinition, PackingLocation, PackingType, ConformityRule
 
 
 # ============================================================
-# 1) إعدادات الترقيم لكل مصنع (كود الطن + الدورة/Cycle)
+# 1) Lot numbering settings per factory (ton code + cycle)
 # ============================================================
 
 class PlantLotSetting(models.Model):
     LOT_MODE_WEIGHT_BASED = "weight_based"
     LOT_MODE_MANUAL = "manual"
     LOT_MODE_CHOICES = [
-        (LOT_MODE_WEIGHT_BASED, "تلقائي حسب الوزن التراكمي"),
-        (LOT_MODE_MANUAL, "يدوي"),
+        (LOT_MODE_WEIGHT_BASED, _("Automatic based on cumulative weight")),
+        (LOT_MODE_MANUAL, _("Manual")),
     ]
 
     plant = models.OneToOneField(Plant, on_delete=models.CASCADE, related_name="factory_lot_setting")
@@ -45,7 +45,7 @@ class PlantLotSetting(models.Model):
 
 
 # ============================================================
-# 2) نقاط السحب (Output Points) واختباراتها
+# 2) Output Points and their tests
 # ============================================================
 
 class OutputPoint(models.Model):
@@ -74,7 +74,7 @@ class OutputPointTest(models.Model):
 
 
 # ============================================================
-# 3) قراءة نقطة السحب (OutputReading) — سياق كل عملية سحب/تعبئة
+# 3) Output Reading — context for each packing/sampling operation
 # ============================================================
 
 class OutputReading(models.Model):
@@ -101,18 +101,18 @@ class OutputReading(models.Model):
     sampling_status = models.CharField(
         max_length=20, blank=True, default="",
         choices=[
-            ("تم", "تم"),
-            ("لم يتم", "لم يتم"),
+            ("تم", _("Sampled")),
+            ("لم يتم", _("Not sampled")),
         ],
-        help_text="حالة سحب العينة من شاشة الإدخال",
+        help_text=_("Sampling status from the input screen"),
     )
     result_time = models.TimeField(
-        null=True, blank=True, help_text="وقت ظهور النتيجة"
+        null=True, blank=True, help_text=_("Result time")
     )
 
     notes = models.TextField(blank=True, default="")
 
-    dynamic_data = models.JSONField(blank=True, default=dict, help_text="قيم الحقول الديناميكية المفعّلة لنوع التعبئة")
+    dynamic_data = models.JSONField(blank=True, default=dict, help_text=_("Active dynamic field values for the packing type"))
 
     sampled_by = models.ForeignKey(
         settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True,
@@ -155,7 +155,7 @@ class OutputAnalysisResult(models.Model):
 
 
 # ============================================================
-# 4) الطن (Ton) — الوحدة الأساسية للتتبع، مع الترقيم الذري
+# 4) Ton — the core tracking unit with auto-increment numbering
 # ============================================================
 
 class Ton(models.Model):
@@ -163,9 +163,9 @@ class Ton(models.Model):
     STATUS_SAMPLED = "sampled"
     STATUS_GRADED = "graded"
     STATUS_CHOICES = [
-        (STATUS_UNDER_TEST, "تحت الاختبار (لم يُسحب)"),
-        (STATUS_SAMPLED, "تم سحب العينة"),
-        (STATUS_GRADED, "أخذ الجريد"),
+        (STATUS_UNDER_TEST, _("Under test (not yet sampled)")),
+        (STATUS_SAMPLED, _("Sample taken")),
+        (STATUS_GRADED, _("Graded")),
     ]
 
     plant = models.ForeignKey(Plant, on_delete=models.CASCADE, related_name="factory_tons")
@@ -180,7 +180,7 @@ class Ton(models.Model):
     )
     status = models.CharField(
         max_length=20, choices=STATUS_CHOICES, default=STATUS_UNDER_TEST,
-        help_text="حالة الطن: تحت الاختبار حتى تُسحب العينة وتظهر النتيجة",
+        help_text=_("Ton status: under test until sample is taken and result appears"),
     )
 
     code = models.CharField(max_length=30, blank=True, default="")
@@ -241,7 +241,7 @@ class TonPhysicalResult(models.Model):
 
 
 # ============================================================
-# 5) العينة الممثلة (RepresentativeSample)
+# 5) Representative Sample
 # ============================================================
 
 class RepresentativeSample(models.Model):
@@ -301,15 +301,15 @@ class SampleChemicalResult(models.Model):
 
 
 # ============================================================
-# 6) قرار الجريد (التصنيف) لكل طن
+# 6) Grade Decision for each ton
 # ============================================================
 
 class GradeReason(models.Model):
     REASON_LOCAL = "local"
     REASON_NON_CONFORMING = "non_conforming"
     REASON_TYPE_CHOICES = [
-        (REASON_LOCAL, "محلي"),
-        (REASON_NON_CONFORMING, "غير مطابق"),
+        (REASON_LOCAL, _("Local")),
+        (REASON_NON_CONFORMING, _("Non-conforming")),
     ]
 
     plant = models.ForeignKey(Plant, on_delete=models.CASCADE, related_name="factory_grade_reasons")
@@ -327,11 +327,11 @@ class TonGradeAssignment(models.Model):
     ton = models.OneToOneField(Ton, on_delete=models.CASCADE, related_name="grade_assignment")
     primary_grade = models.ForeignKey(
         Grade, on_delete=models.PROTECT, related_name="ton_primary_assignments",
-        help_text="الجريد الأساسي (تصدير / محلي / غير مطابق)",
+        help_text=_("Primary grade (export / local / non-conforming)"),
     )
     secondary_grade = models.ForeignKey(
         Grade, on_delete=models.SET_NULL, null=True, blank=True, related_name="ton_secondary_assignments",
-        help_text="الجريد الثانوي التابع للأساسي (اختياري)",
+        help_text=_("Secondary grade under the primary (optional)"),
     )
     reason = models.ForeignKey(
         GradeReason, on_delete=models.SET_NULL, null=True, blank=True, related_name="ton_assignments"
@@ -352,7 +352,7 @@ class TonGradeAssignment(models.Model):
 
 
 # ============================================================
-# 7) حجم مجموعة العينة الممثلة الافتراضي
+# 7) Default representative group size
 # ============================================================
 
 class RepresentativeGroupSize(models.Model):
@@ -369,7 +369,7 @@ class RepresentativeGroupSize(models.Model):
 
 
 # ============================================================
-# 8) التعبئة والتحويل (Packing)
+# 8) Packing and Conversion
 # ============================================================
 
 class PackingEvent(models.Model):
@@ -379,7 +379,7 @@ class PackingEvent(models.Model):
     )
     packing_type = models.ForeignKey(PackingType, on_delete=models.PROTECT, related_name="packing_events")
     quantity = models.DecimalField(max_digits=10, decimal_places=2)
-    unit = models.CharField(max_length=20, default="بيج باج")
+    unit = models.CharField(max_length=20, default=_("Big Bag"))
     packed_at = models.DateTimeField()
     created_at = models.DateTimeField(auto_now_add=True)
 
@@ -396,7 +396,7 @@ class PackingConversion(models.Model):
     source_event = models.ForeignKey(PackingEvent, on_delete=models.CASCADE, related_name="conversions_out")
     target_packing_type = models.ForeignKey(PackingType, on_delete=models.PROTECT, related_name="conversions_in")
     quantity = models.DecimalField(max_digits=10, decimal_places=2)
-    unit = models.CharField(max_length=20, default="شكارة")
+    unit = models.CharField(max_length=20, default=_("Sack"))
     converted_at = models.DateTimeField()
     created_at = models.DateTimeField(auto_now_add=True)
     notes = models.TextField(blank=True, default="")
@@ -426,27 +426,27 @@ class QualityConformityResult(models.Model):
 
 
 # ============================================================
-# 9) المخزون الأرضي (Floor Stock) — موجود بالداتابيز، لم يكن موثقًا سابقًا
+# 9) Floor Stock — exists in database, was undocumented before
 # ============================================================
 
 class FloorStockBalance(models.Model):
     """
-    رصيد المخزون الأرضي الحالي لكل (مصنع + جريد + حالة).
-    سطر واحد لكل توليفة. القسمان المنتظران للجريد لا يحملان جريداً (grade=None).
+    Current floor stock balance for each (factory + grade + status).
+    One row per combination. Waiting sections have grade=None.
     """
     STATUS_GRADED = "graded"
     STATUS_WAITING_NOT_SAMPLED = "waiting_not_sampled"
     STATUS_WAITING_SAMPLED = "waiting_sampled"
     STATUS_CHOICES = [
-        (STATUS_GRADED, "أخذ الجريد"),
-        (STATUS_WAITING_NOT_SAMPLED, "في انتظار الجريد (لم يُسحب للمعمل)"),
-        (STATUS_WAITING_SAMPLED, "في انتظار الجريد (تم السحب للمعمل)"),
+        (STATUS_GRADED, _("Graded")),
+        (STATUS_WAITING_NOT_SAMPLED, _("Waiting for grade (not sampled)")),
+        (STATUS_WAITING_SAMPLED, _("Waiting for grade (sampled)")),
     ]
 
     plant = models.ForeignKey(Plant, on_delete=models.CASCADE, related_name="factory_floor_stock_balances")
     grade = models.ForeignKey(
         Grade, on_delete=models.CASCADE, null=True, blank=True, related_name="floor_stock_balances",
-        help_text="الجريد فقط لقسم \"أخذ الجريد\"، يبقى فارغاً للأقسام المنتظرة",
+        help_text=_("Grade only for 'Graded' section, empty for waiting sections"),
     )
     status = models.CharField(max_length=30, choices=STATUS_CHOICES, default=STATUS_GRADED)
     quantity = models.DecimalField(max_digits=12, decimal_places=2, default=Decimal("0"))
@@ -474,14 +474,14 @@ class FloorStockBalance(models.Model):
 
 class FloorStockMovement(models.Model):
     """
-    سجل حركات المخزون الأرضي (إضافة/سحب) لكل (مصنع + جريد + حالة)، مع ربط اختياري
-    بالطن المصدر.
+    Floor stock movement log (in/out) for each (factory + grade + status),
+    with optional link to the source ton.
     """
     MOVEMENT_IN = "in"
     MOVEMENT_OUT = "out"
     MOVEMENT_TYPE_CHOICES = [
-        (MOVEMENT_IN, "إضافة"),
-        (MOVEMENT_OUT, "سحب"),
+        (MOVEMENT_IN, _("In")),
+        (MOVEMENT_OUT, _("Out")),
     ]
 
     plant = models.ForeignKey(Plant, on_delete=models.CASCADE, related_name="factory_floor_stock_movements")

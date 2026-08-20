@@ -1,18 +1,17 @@
 """
-حذف كل المصانع وجميع البيانات المرتبطة بها، ثم إنشاء مصنع جديد فارغ.
+Delete all factories and all associated data, then create a new empty factory.
 
-الاستخدام:
-    python manage.py delete_all_plants            # يعرض المصانع ويطلب التأكيد
-    python manage.py delete_all_plants --yes      # بدون تأكيد
-    python manage.py delete_all_plants --yes --keep-positions  # يحذف كل المصانع لكن يحفظ المناصب
+Usage:
+    python manage.py delete_all_plants            # shows factories and asks for confirmation
+    python manage.py delete_all_plants --yes      # no confirmation
+    python manage.py delete_all_plants --yes --keep-positions  # deletes all factories but keeps positions
 
-المنهجية:
-    - يُجمع كل الموديلات التي تشير (مباشرة أو عبر سلسلة FKs) إلى Plant من التطبيقات:
+Methodology:
+    - Collects all models that reference Plant (directly or via FK chains) from apps:
       factory, orders, raw_materials.
-    - تُحذف في جولات: كل نموذج يُحذف أولاً، وأي نموذج يُرجع ProtectedError
-      يُؤجَّل إلى الجولة التالية (يُحذف النموذج المرجع إليه أولاً)، حتى لا يعتمد
-      الأمر على قائمة يدوية قد تنسى بعض الموديلات.
-"""
+    - Deletes in rounds: each model is deleted first, and any model that raises
+      ProtectedError is deferred to the next round (the referenced model is deleted first),
+    """
 
 from django.core.management.base import BaseCommand
 from django.db import transaction
@@ -20,6 +19,7 @@ from django.db.models import ForeignKey, OneToOneField
 from django.apps import apps
 from django.db.utils import ProgrammingError, OperationalError
 from django.db.models.deletion import ProtectedError
+from django.utils.translation import gettext_lazy as _
 
 from plants.models import Plant, OrgPosition, DepartmentPlantScope
 
@@ -27,30 +27,30 @@ SHARED_LABELS = {"factory.FieldDefinition", "factory.FactoryPlant"}
 
 
 class Command(BaseCommand):
-    help = "حذف كل المصانع وجميع البيانات المرتبطة بها وإنشاء مصنع جديد فارغ."
+    help = _("Delete all factories and all associated data, then create a new empty factory.")
 
     def add_arguments(self, parser):
-        parser.add_argument("--yes", action="store_true", help="تأكيد بدون سؤال")
+        parser.add_argument("--yes", action="store_true", help=_("Confirm without asking"))
         parser.add_argument(
             "--keep-positions",
             action="store_true",
-            help="لا تحذف OrgPosition (تُترك بإشارتها للمصنع المحذوف - غير مستحسن)",
+            help=_("Do not delete OrgPosition (left referencing deleted factory — not recommended)"),
         )
 
     def handle(self, *args, **options):
         plants = list(Plant.objects.all().order_by("plant_id"))
         if not plants:
-            self.stdout.write(self.style.WARNING("لا توجد مصانع لحذفها."))
+            self.stdout.write(self.style.WARNING(_("No factories to delete.")))
             return
 
-        self.stdout.write("المصانع الموجودة:")
+        self.stdout.write(_("Existing factories:"))
         for p in plants:
             self.stdout.write(f"  [{p.pk}] {p.plant_name}")
 
         if not options["yes"]:
-            confirm = input(f"\nحذف {len(plants)} مصنع وكل بياناتها؟ (اكتب yes): ")
+            confirm = input(_("\nDelete %(count)d factory and all its data? (type yes): ") % {"count": len(plants)})
             if confirm.strip().lower() != "yes":
-                self.stdout.write(self.style.WARNING("تم الإلغاء."))
+                self.stdout.write(self.style.WARNING(_("Cancelled.")))
                 return
 
         labels = self._collect_related_models()
@@ -75,7 +75,7 @@ class Command(BaseCommand):
                     except (ProgrammingError, OperationalError) as e:
                         self.stdout.write(
                             self.style.WARNING(
-                                f"تخطي {label} (الجدول غير موجود؟): {e}"
+                                _("Skipping %(label)s (table not found?): %(error)s") % {"label": label, "error": e}
                             )
                         )
                         n = 0
@@ -83,12 +83,11 @@ class Command(BaseCommand):
                     remaining.discard(label)
                     progressed = True
                     if n:
-                        self.stdout.write(f"حذف {label}: {n}")
+                        self.stdout.write(_("Deleted %(label)s: %(count)s") % {"label": label, "count": n})
                 if not progressed:
                     self.stdout.write(
                         self.style.ERROR(
-                            "لم يتبقَّ سجلات محمية من المصانع القديمة — تحقق من "
-                            "الموديلات: " + ", ".join(sorted(remaining))
+                            _("Remaining protected records from old factories — check models: %(models)s") % {"models": ", ".join(sorted(remaining))}
                         )
                     )
                     break
@@ -97,23 +96,23 @@ class Command(BaseCommand):
             if not options["keep_positions"]:
                 n = OrgPosition.objects.all().delete()[0]
                 if n:
-                    self.stdout.write(f"حذف OrgPosition: {n}")
+                    self.stdout.write(_("Deleted OrgPosition: %(count)s") % {"count": n})
 
             # حذف المصانع نفسها
             n = Plant.objects.filter(pk__in=[p.pk for p in plants]).delete()[0]
-            self.stdout.write(f"حذف المصانع: {n}")
+            self.stdout.write(_("Deleted factories: %(count)s") % {"count": n})
 
             # إنشاء مصنع جديد فارغ
-            new_plant = Plant.objects.create(plant_name="مصنع جديد")
+            new_plant = Plant.objects.create(plant_name=_("New Factory"))
             self.stdout.write(
                 self.style.SUCCESS(
-                    f"تم حذف كل المصانع. المصنع الجديد: [{new_plant.pk}] {new_plant.plant_name}"
+                    _("All factories deleted. New factory: [%(pk)s] %(name)s") % {"pk": new_plant.pk, "name": new_plant.plant_name}
                 )
             )
 
     def _collect_related_models(self):
-        """كل الموديلات (من التطبيقات factory/orders/raw_materials) التي تشير إلى Plant
-        عبر سلسلة FKs (مباشرة أو غير مباشرة)، عدا المشتركة للشركة."""
+        """Collect all models (from factory/orders/raw_materials apps) that reference Plant
+        via FK chains (direct or indirect), excluding shared company models."""
         plant_label = "plants.plant"
         related = set()
         frontier = {plant_label}

@@ -1,12 +1,15 @@
 """
-وحدة عرض/تعديل البيانات السابقة (صفحة داتا).
+Data grid module for viewing/editing existing data (data page).
 
-تبني شبكة منسقة على نفس تقسيم صفحة الإدخال: عينة ممثلة + أطنانها،
-مع عرض النتائج الكيميائية والفيزيائية وقرارات الجريد القابلة للتعديل.
-لا توجد أي عملية إضافة جديدة — فقط عرض وتعديل البيانات الموجودة.
+Builds a formatted grid following the same layout as the input page:
+representative sample + its tons, with chemical/physical results
+and editable grade decisions.
+No new additions — only view and edit existing data.
 """
 
 from datetime import datetime as dt
+
+from django.utils.translation import gettext_lazy as _
 
 from decimal import Decimal
 
@@ -197,7 +200,7 @@ def save_reading_edits(plant, reading, rows, user):
         try:
             ton = Ton.objects.get(pk=row["ton_id"], plant=plant)
         except (Ton.DoesNotExist, KeyError, ValueError):
-            errors.append(f"طن غير موجود: {row.get('ton_id')}")
+            errors.append(_("Ton not found: %(ton_id)s") % {"ton_id": row.get('ton_id')})
             continue
 
         if row.get("production_date"):

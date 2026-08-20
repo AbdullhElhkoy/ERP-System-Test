@@ -7,6 +7,7 @@ from django.http import JsonResponse
 from django.shortcuts import redirect, render
 from django.urls import path
 from django.utils.html import format_html
+from django.utils.translation import gettext_lazy as _
 from custom_permissions.admin_mixins import PlantScopedAdminMixin
 from .models.plant_proxy import FactoryPlant
 from .models.dynamic_fields import FieldDefinition, PackingTypeField
@@ -55,7 +56,7 @@ class FactoryPlantAdmin(admin.ModelAdmin):
             '<a class="button" href="{}">Enter Factory</a>',
             f"enter/{obj.pk}/",
         )
-    enter_button.short_description = "دخول المصنع"
+    enter_button.short_description = _("Enter Factory")
 
     def get_urls(self):
         urls = super().get_urls()
@@ -78,7 +79,7 @@ class FactoryPlantAdmin(admin.ModelAdmin):
     def _get_plant_or_redirect(self, request, plant_id):
         plant = FactoryPlant.objects.filter(pk=plant_id).first()
         if not plant:
-            self.message_user(request, "المصنع غير موجود")
+            self.message_user(request, _("Factory not found"))
             return None, redirect("admin:factory_factoryplant_changelist")
         request.session["factory_current_plant_id"] = plant_id
         return plant, None
@@ -108,38 +109,38 @@ class FactoryPlantAdmin(admin.ModelAdmin):
             return f"/admin/factory/{model}/", label
 
         reaction_groups = [
-            admin_url("processstage", "مراحل التفاعل (Process Stages)"),
+            admin_url("processstage", _("Reaction Stages")),
         ]
         final_product_groups = [
-            admin_url("packingtype", "أنواع التعبئة (Packing Types)"),
-            admin_url("packinglocation", "أماكن الإنتاج (Packing Locations)"),
-            admin_url("grade", "الجريد (Grades)"),
-            admin_url("gradereason", "أسباب الرفض (محلي / غير مطابق)"),
-            admin_url("testdefinition", "تعريفات الاختبارات (Test Definitions)"),
-            admin_url("conformityrule", "قواعد المطابقة (Conformity Rules)"),
-            admin_url("outputpoint", "نقاط السحب (Output Points)"),
-            admin_url("representativegroupsize", "حجم مجموعة العينة الممثلة"),
-            admin_url("plantlotsetting", "إعدادات الدفعات (Plant Lot Settings)"),
+            admin_url("packingtype", _("Packing Types")),
+            admin_url("packinglocation", _("Packing Locations")),
+            admin_url("grade", _("Grades")),
+            admin_url("gradereason", _("Rejection Reasons (Local / Non-conforming)")),
+            admin_url("testdefinition", _("Test Definitions")),
+            admin_url("conformityrule", _("Conformity Rules")),
+            admin_url("outputpoint", _("Output Points")),
+            admin_url("representativegroupsize", _("Representative Sample Group Size")),
+            admin_url("plantlotsetting", _("Plant Lot Settings")),
         ]
         final_product_groups.append((
             "/admin/factory/packingtypefield/",
-            "ربط الحقول بأنواع التعبئة (Packing Type Fields)",
+            _("Packing Type Fields"),
         ))
-        locked_spec = ("#", "المواصفة (معطلة حالياً)")
+        locked_spec = ("#", _("Specification (disabled)"))
         data_groups = [
-            admin_url("outputreading", "قراءات السحب (Output Readings)"),
-            admin_url("ton", "الأطنان (Tons)"),
-            admin_url("representativesample", "العينات الممثلة (Representative Samples)"),
-            admin_url("tongradeassignment", "قرارات الجريد (Ton Grade Assignments)"),
-            admin_url("packingevent", "أحداث التعبئة (Packing Events)"),
-            admin_url("packingconversion", "تحويلات التعبئة (Packing Conversions)"),
-            admin_url("qualityconformityresult", "نتائج المطابقة (Conformity Results)"),
-            admin_url("floorstockbalance", "أرصدة المخزون الأرضي (Floor Stock)"),
-            admin_url("floorstockmovement", "حركات المخزون الأرضي (Floor Movements)"),
-            admin_url("processreading", "قراءات التفاعل (Process Readings)"),
+            admin_url("outputreading", _("Output Readings")),
+            admin_url("ton", _("Tons")),
+            admin_url("representativesample", _("Representative Samples")),
+            admin_url("tongradeassignment", _("Ton Grade Assignments")),
+            admin_url("packingevent", _("Packing Events")),
+            admin_url("packingconversion", _("Packing Conversions")),
+            admin_url("qualityconformityresult", _("Conformity Results")),
+            admin_url("floorstockbalance", _("Floor Stock Balances")),
+            admin_url("floorstockmovement", _("Floor Stock Movements")),
+            admin_url("processreading", _("Process Readings")),
         ]
         company_groups = [
-            ("/admin/factory/fielddefinition/", "مكتبة الحقول الديناميكية (لكل الشركة)"),
+            ("/admin/factory/fielddefinition/", _("Dynamic Fields Library (Company-wide)")),
         ]
 
         context = {
@@ -202,15 +203,14 @@ class FactoryPlantAdmin(admin.ModelAdmin):
         return render(request, "factory/data.html", context)
 
     def data_packings(self, request, packing_type_id):
-        """قائمة القراءات السابقة لنوع تعبئة محدد."""
         plant = self._current_plant(request)
         if not plant:
-            self.message_user(request, "لازم تدخل مصنع الأول")
+            self.message_user(request, _("You must enter a factory first"))
             return redirect("admin:factory_factoryplant_changelist")
 
         packing_type = PackingType.objects.filter(pk=packing_type_id, plant=plant).first()
         if not packing_type:
-            self.message_user(request, "نوع التعبئة غير موجود لهذا المصنع")
+            self.message_user(request, _("Packing type not found for this factory"))
             return redirect("admin:factory_data", plant_id=plant.pk)
 
         readings = (
@@ -244,17 +244,16 @@ class FactoryPlantAdmin(admin.ModelAdmin):
         return render(request, "factory/data_packings.html", context)
 
     def data_reading(self, request, reading_id):
-        """عرض/تعديل قراءة واحدة سابقة. لا إضافة من هنا."""
         plant = self._current_plant(request)
         if not plant:
-            self.message_user(request, "لازم تدخل مصنع الأول")
+            self.message_user(request, _("You must enter a factory first"))
             return redirect("admin:factory_factoryplant_changelist")
 
         reading = OutputReading.objects.filter(pk=reading_id, plant=plant).select_related(
             "output_point", "packing_location", "packing_type", "sampled_by", "analyzed_by", "lab_shift_head", "reviewed_by"
         ).first()
         if not reading:
-            self.message_user(request, "القراءة غير موجودة")
+            self.message_user(request, _("Reading not found"))
             return redirect("admin:factory_data", plant_id=plant.pk)
 
         from .data_grid import build_reading_grid, save_reading_edits
@@ -263,7 +262,7 @@ class FactoryPlantAdmin(admin.ModelAdmin):
             try:
                 payload = json.loads(request.body)
             except json.JSONDecodeError:
-                return JsonResponse({"status": "error", "message": "بيانات غير صالحة"}, status=400)
+                return JsonResponse({"status": "error", "message": _("Invalid data")}, status=400)
             errors = save_reading_edits(plant, reading, payload.get("rows", []), request.user)
             if errors:
                 return JsonResponse({"status": "error", "message": "; ".join(errors)}, status=400)
@@ -306,15 +305,14 @@ class FactoryPlantAdmin(admin.ModelAdmin):
         return render(request, "factory/data_analysis.html", context)
 
     def data_reaction_readings(self, request, stage_id):
-        """قائمة قراءات التفاعل السابقة لمرحلة محددة."""
         plant = self._current_plant(request)
         if not plant:
-            self.message_user(request, "لازم تدخل مصنع الأول")
+            self.message_user(request, _("You must enter a factory first"))
             return redirect("admin:factory_factoryplant_changelist")
 
         stage = ProcessStage.objects.filter(pk=stage_id, plant=plant).first()
         if not stage:
-            self.message_user(request, "المرحلة غير موجودة لهذا المصنع")
+            self.message_user(request, _("Stage not found for this factory"))
             return redirect("admin:factory_data", plant_id=plant.pk)
 
         readings = ProcessReading.objects.filter(plant=plant, stage=stage).prefetch_related("results").order_by("-sampled_at")
@@ -340,15 +338,14 @@ class FactoryPlantAdmin(admin.ModelAdmin):
         return render(request, "factory/data_reaction_readings.html", context)
 
     def data_reaction_reading(self, request, reading_id):
-        """عرض/تعديل قراءة تفاعل واحدة سابقة. لا إضافة من هنا."""
         plant = self._current_plant(request)
         if not plant:
-            self.message_user(request, "لازم تدخل مصنع الأول")
+            self.message_user(request, _("You must enter a factory first"))
             return redirect("admin:factory_factoryplant_changelist")
 
         reading = ProcessReading.objects.filter(pk=reading_id, plant=plant).select_related("stage").first()
         if not reading:
-            self.message_user(request, "القراءة غير موجودة")
+            self.message_user(request, _("Reading not found"))
             return redirect("admin:factory_data", plant_id=plant.pk)
 
         tests = TestDefinition.objects.filter(
@@ -359,7 +356,7 @@ class FactoryPlantAdmin(admin.ModelAdmin):
             try:
                 payload = json.loads(request.body)
             except json.JSONDecodeError:
-                return JsonResponse({"status": "error", "message": "بيانات غير صالحة"}, status=400)
+                return JsonResponse({"status": "error", "message": _("Invalid data")}, status=400)
 
             notes = payload.get("notes", reading.notes)
             sampled_at_raw = payload.get("sampled_at") or reading.sampled_at.strftime("%Y-%m-%dT%H:%M")
@@ -419,7 +416,7 @@ class FactoryPlantAdmin(admin.ModelAdmin):
         plant, error = self._get_plant_or_redirect(request, plant_id)
         if error:
             return error
-        self.message_user(request, f"دخلت مصنع: {plant.plant_name}")
+        self.message_user(request, _("Entered factory: %(name)s") % {"name": plant.plant_name})
         return redirect("admin:factory_plant_dashboard", plant_id=plant.pk)
 
     def _current_plant(self, request):
@@ -431,12 +428,12 @@ class FactoryPlantAdmin(admin.ModelAdmin):
     def final_product_entry(self, request, packing_type_id):
         plant = self._current_plant(request)
         if not plant:
-            self.message_user(request, "لازم تدخل مصنع الأول")
+            self.message_user(request, _("You must enter a factory first"))
             return redirect("admin:factory_factoryplant_changelist")
 
         packing_type = PackingType.objects.filter(pk=packing_type_id, plant=plant).first()
         if not packing_type:
-            self.message_user(request, "نوع التعبئة غير موجود لهذا المصنع")
+            self.message_user(request, _("Packing type not found for this factory"))
             return redirect("admin:factory_factoryplant_changelist")
 
         if request.method == "POST":
@@ -526,14 +523,14 @@ class FactoryPlantAdmin(admin.ModelAdmin):
         try:
             payload = json.loads(request.body)
         except (ValueError, json.JSONDecodeError):
-            return JsonResponse({"status": "error", "message": "بيانات غير صالحة"}, status=400)
+            return JsonResponse({"status": "error", "message": _("Invalid data")}, status=400)
         rows = payload.get("rows", [])
         try:
             saved_count = save_final_product_rows(plant, packing_type, rows, request.user)
         except Exception as e:
             import traceback
             traceback.print_exc()
-            return JsonResponse({"status": "error", "message": f"حدث خطأ أثناء الحفظ: {e}"}, status=500)
+            return JsonResponse({"status": "error", "message": _("An error occurred while saving: %(error)s") % {"error": e}}, status=500)
         return JsonResponse({"status": "ok", "rows_saved": saved_count})
 
 
@@ -542,7 +539,7 @@ class TestDefinitionForm(forms.ModelForm):
         choices=TestDefinition.SCOPE_CHOICES,
         widget=forms.CheckboxSelectMultiple,
         required=True,
-        label="النطاقات",
+        label=_("Scopes"),
     )
 
     class Meta:
@@ -558,7 +555,7 @@ class TestDefinitionAdmin(PlantScopedAdminMixin, admin.ModelAdmin):
     form = TestDefinitionForm
     fieldsets = (
         (None, {"fields": ("plant", "name", "category", "unit")}),
-        ("النطاقات (يمكن اختيار أكثر من واحدة)", {"fields": ("scopes",), "classes": ("wide",)}),
+        (_("Scopes (multiple selection)"), {"fields": ("scopes",), "classes": ("wide",)}),
     )
 
 
@@ -616,7 +613,7 @@ class ProcessStageAdmin(PlantScopedAdminMixin, admin.ModelAdmin):
 
     def test_count(self, obj):
         return obj.stage_tests.count()
-    test_count.short_description = "عدد الاختبارات"
+    test_count.short_description = _("Number of Tests")
 
 
 class ProcessAnalysisResultInline(admin.TabularInline):
@@ -666,7 +663,7 @@ class QualityConformityResultAdmin(PlantScopedAdminMixin, admin.ModelAdmin):
 
     def plant(self, obj):
         return obj.reading.plant if obj.reading else None
-    plant.short_description = "المصنع"
+    plant.short_description = _("Factory")
 
 
 @admin.register(PackingEvent)
@@ -732,7 +729,7 @@ class TonGradeAssignmentAdmin(PlantScopedAdminMixin, admin.ModelAdmin):
 
     def plant(self, obj):
         return obj.ton.plant if obj.ton else None
-    plant.short_description = "المصنع"
+    plant.short_description = _("Factory")
 
     def save_model(self, request, obj, form, change):
         if not obj.pk:

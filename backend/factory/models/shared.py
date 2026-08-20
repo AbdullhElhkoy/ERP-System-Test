@@ -1,4 +1,5 @@
 from django.db import models
+from django.utils.translation import gettext_lazy as _
 from plants.models import Plant
 from shared_definitions.models import QualityGrade
 
@@ -7,21 +8,21 @@ class TestDefinition(models.Model):
     CATEGORY_CHEMICAL = "chemical"
     CATEGORY_PHYSICAL = "physical"
     CATEGORY_CHOICES = [
-        (CATEGORY_CHEMICAL, "كيميائي"),
-        (CATEGORY_PHYSICAL, "فيزيائي"),
+        (CATEGORY_CHEMICAL, _("Chemical")),
+        (CATEGORY_PHYSICAL, _("Physical")),
     ]
 
     SCOPE_REACTION = "reaction"
     SCOPE_FINAL_PRODUCT = "final_product"
     SCOPE_CHOICES = [
-        (SCOPE_REACTION, "التفاعل (Reaction)"),
-        (SCOPE_FINAL_PRODUCT, "المنتج النهائي (Final Product)"),
+        (SCOPE_REACTION, _("Reaction")),
+        (SCOPE_FINAL_PRODUCT, _("Final Product")),
     ]
 
     plant = models.ForeignKey(Plant, on_delete=models.CASCADE, related_name="factory_test_definitions")
     name = models.CharField(max_length=100)
     category = models.CharField(max_length=15, choices=CATEGORY_CHOICES)
-    scopes = models.JSONField(default=list, verbose_name="النطاقات")
+    scopes = models.JSONField(default=list, verbose_name=_("Scopes"))
     unit = models.CharField(max_length=20, blank=True)
 
     class Meta:
@@ -91,8 +92,8 @@ class Grade(models.Model):
     TYPE_PRIMARY = "primary"
     TYPE_SECONDARY = "secondary"
     TYPE_CHOICES = [
-        (TYPE_PRIMARY, "أساسي"),
-        (TYPE_SECONDARY, "ثانوي"),
+        (TYPE_PRIMARY, _("Primary")),
+        (TYPE_SECONDARY, _("Secondary")),
     ]
 
     plant = models.ForeignKey(Plant, on_delete=models.CASCADE, related_name="factory_grades")
@@ -101,8 +102,8 @@ class Grade(models.Model):
         max_length=10,
         choices=TYPE_CHOICES,
         default=TYPE_PRIMARY,
-        verbose_name="نوع الجريد",
-        help_text="أساسي = يظهر في عمود الجريد الأساسي، ثانوي = يظهر في عمود الجريد الثانوي",
+        verbose_name=_("Grade Type"),
+        help_text=_("Primary = shows in primary grade column, Secondary = shows in secondary grade column"),
     )
     is_active = models.BooleanField(default=True)
 
