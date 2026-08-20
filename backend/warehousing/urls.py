@@ -11,12 +11,29 @@ from .views import (
     delivery_edit,
     deliveries_reports,
     deliveries_analysis,
+    spare_parts_hub,
+    spare_parts_settings,
+    spare_parts_data,
+    spare_parts_reports,
+    spare_parts_analysis,
+    packaging_hub,
+    packaging_settings,
+    packaging_data,
+    packaging_reports,
+    packaging_analysis,
+    final_products_hub,
+    final_products_settings,
+    final_products_data,
+    final_products_reports,
+    final_products_analysis,
 )
 
 app_name = "warehousing"
 
 urlpatterns = [
     path("", warehousing_hub, name="warehousing_hub"),
+
+    # ── Raw Materials ────────────────────────────────────────
     path("raw-materials/", raw_materials_hub, name="raw_materials_hub"),
     path("raw-materials/settings/", warehousing_settings, name="warehousing_settings"),
     path("raw-materials/select-plant/<int:plant_id>/", select_plant, name="select_plant"),
@@ -25,22 +42,25 @@ urlpatterns = [
     path("raw-materials/data/delivery/<int:delivery_id>/", delivery_edit, name="delivery_edit"),
     path("raw-materials/reports/", deliveries_reports, name="deliveries_reports"),
     path("raw-materials/analysis/", deliveries_analysis, name="deliveries_analysis"),
-    path(
-        "spare-parts/",
-        coming_soon,
-        {"section_name": "Spare Parts"},
-        name="spare_parts",
-    ),
-    path(
-        "final-product/",
-        coming_soon,
-        {"section_name": "Final Products"},
-        name="final_product",
-    ),
-    path(
-        "packaging-materials/",
-        coming_soon,
-        {"section_name": "Packaging Materials"},
-        name="packaging_materials",
-    ),
+
+    # ── Spare Parts ──────────────────────────────────────────
+    path("spare-parts/", spare_parts_hub, name="spare_parts"),
+    path("spare-parts/settings/", spare_parts_settings, name="spare_parts_settings"),
+    path("spare-parts/data/", spare_parts_data, name="spare_parts_data"),
+    path("spare-parts/reports/", spare_parts_reports, name="spare_parts_reports"),
+    path("spare-parts/analysis/", spare_parts_analysis, name="spare_parts_analysis"),
+
+    # ── Packaging Materials ──────────────────────────────────
+    path("packaging-materials/", packaging_hub, name="packaging_materials"),
+    path("packaging-materials/settings/", packaging_settings, name="packaging_settings"),
+    path("packaging-materials/data/", packaging_data, name="packaging_data"),
+    path("packaging-materials/reports/", packaging_reports, name="packaging_reports"),
+    path("packaging-materials/analysis/", packaging_analysis, name="packaging_analysis"),
+
+    # ── Final Products ───────────────────────────────────────
+    path("final-product/", final_products_hub, name="final_product"),
+    path("final-product/settings/", final_products_settings, name="final_products_settings"),
+    path("final-product/data/", final_products_data, name="final_products_data"),
+    path("final-product/reports/", final_products_reports, name="final_products_reports"),
+    path("final-product/analysis/", final_products_analysis, name="final_products_analysis"),
 ]

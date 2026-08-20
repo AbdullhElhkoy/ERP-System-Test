@@ -16,6 +16,9 @@ from warehousing.raw_materials.models import (
     MaterialStorage,
     RawMaterialDelivery,
 )
+from warehousing.spare_parts.models import SparePartItem, SparePartStockBalance
+from warehousing.packaging.models import PackagingMaterial, PackagingStockBalance
+from finished_products.models import Product as FinishedProduct, StockBalance as FinishedStockBalance
 from .services import (
     save_delivery_rows,
     save_delivery_edits,
@@ -266,5 +269,257 @@ def deliveries_analysis(request):
         title="Delivery Data Analysis - " + plant.plant_name,
         plant=plant,
         hub_url=reverse("warehousing:raw_materials_hub"),
+    )
+    return render(request, "warehousing/coming_soon.html", context)
+
+
+# ── Spare Parts ──────────────────────────────────────────────
+
+@staff_member_required
+def spare_parts_hub(request):
+    context = _admin_context(
+        request,
+        title=_("Spare Parts"),
+        settings_url=reverse("warehousing:spare_parts_settings"),
+        data_url=reverse("warehousing:spare_parts_data"),
+        reports_url=reverse("warehousing:spare_parts_reports"),
+        data_analysis_url=reverse("warehousing:spare_parts_analysis"),
+    )
+    return render(request, "warehousing/spare_parts_hub.html", context)
+
+
+@staff_member_required
+def spare_parts_settings(request):
+    def _link(model, title):
+        return {"url": reverse(f"admin:spare_parts_{model}_changelist"), "title": title}
+
+    context = _admin_context(
+        request,
+        title=_("Spare Parts Settings"),
+        hub_url=reverse("warehousing:spare_parts_hub"),
+        items_groups=[
+            _link("sparepartitem", _("Spare Part Items")),
+        ],
+        transactions_groups=[
+            _link("sparepartstocktransaction", _("Stock Transactions")),
+            _link("receivingvoucher", _("Receiving Vouchers")),
+            _link("issuevoucher", _("Issue Vouchers")),
+        ],
+        stock_groups=[
+            _link("sparepartstockbalance", _("Stock Balances")),
+            _link("stockcount", _("Stock Counts")),
+        ],
+    )
+    return render(request, "warehousing/warehousing_settings.html", context)
+
+
+@staff_member_required
+def spare_parts_data(request):
+    items = SparePartItem.objects.all().order_by("item_name")
+    balances = {
+        b.item_id: b for b in SparePartStockBalance.objects.select_related("item").all()
+    }
+    rows = []
+    for item in items:
+        bal = balances.get(item.pk)
+        rows.append({
+            "item": item,
+            "total_stock": bal.total_stock if bal else 0,
+            "available": bal.available if bal else 0,
+            "on_loan": bal.on_loan if bal else 0,
+            "in_maintenance": bal.in_maintenance if bal else 0,
+        })
+    context = _admin_context(
+        request,
+        title=_("Spare Parts Data"),
+        rows=rows,
+        hub_url=reverse("warehousing:spare_parts_hub"),
+    )
+    return render(request, "warehousing/spare_parts_data.html", context)
+
+
+@staff_member_required
+def spare_parts_reports(request):
+    context = _admin_context(
+        request,
+        title=_("Spare Parts Reports"),
+        hub_url=reverse("warehousing:spare_parts_hub"),
+    )
+    return render(request, "warehousing/coming_soon.html", context)
+
+
+@staff_member_required
+def spare_parts_analysis(request):
+    context = _admin_context(
+        request,
+        title=_("Spare Parts Analysis"),
+        hub_url=reverse("warehousing:spare_parts_hub"),
+    )
+    return render(request, "warehousing/coming_soon.html", context)
+
+
+# ── Packaging Materials ──────────────────────────────────────
+
+@staff_member_required
+def packaging_hub(request):
+    context = _admin_context(
+        request,
+        title=_("Packaging Materials"),
+        settings_url=reverse("warehousing:packaging_settings"),
+        data_url=reverse("warehousing:packaging_data"),
+        reports_url=reverse("warehousing:packaging_reports"),
+        data_analysis_url=reverse("warehousing:packaging_analysis"),
+    )
+    return render(request, "warehousing/packaging_hub.html", context)
+
+
+@staff_member_required
+def packaging_settings(request):
+    def _link(model, title):
+        return {"url": reverse(f"admin:packaging_{model}_changelist"), "title": title}
+
+    context = _admin_context(
+        request,
+        title=_("Packaging Settings"),
+        hub_url=reverse("warehousing:packaging_hub"),
+        materials_groups=[
+            _link("packagingmaterial", _("Packaging Materials")),
+            _link("packagingsupplier", _("Packaging Suppliers")),
+        ],
+        transactions_groups=[
+            _link("packagingreceiving", _("Receiving Records")),
+            _link("packagingstockledger", _("Stock Ledger")),
+        ],
+        stock_groups=[
+            _link("packagingstockbalance", _("Stock Balances")),
+            _link("factorypackagingstock", _("Factory Packaging Stock")),
+            _link("packingoperation", _("Packing Operations")),
+            _link("packagingreconciliation", _("Reconciliation")),
+            _link("supplierevaluation", _("Supplier Evaluation")),
+        ],
+    )
+    return render(request, "warehousing/warehousing_settings.html", context)
+
+
+@staff_member_required
+def packaging_data(request):
+    materials = PackagingMaterial.objects.all().order_by("material_name")
+    balances = {
+        b.material_id: b for b in PackagingStockBalance.objects.select_related("material").all()
+    }
+    rows = []
+    for mat in materials:
+        bal = balances.get(mat.pk)
+        rows.append({
+            "material": mat,
+            "qty": bal.quantity if bal else 0,
+        })
+    context = _admin_context(
+        request,
+        title=_("Packaging Data"),
+        rows=rows,
+        hub_url=reverse("warehousing:packaging_hub"),
+    )
+    return render(request, "warehousing/packaging_data.html", context)
+
+
+@staff_member_required
+def packaging_reports(request):
+    context = _admin_context(
+        request,
+        title=_("Packaging Reports"),
+        hub_url=reverse("warehousing:packaging_hub"),
+    )
+    return render(request, "warehousing/coming_soon.html", context)
+
+
+@staff_member_required
+def packaging_analysis(request):
+    context = _admin_context(
+        request,
+        title=_("Packaging Analysis"),
+        hub_url=reverse("warehousing:packaging_hub"),
+    )
+    return render(request, "warehousing/coming_soon.html", context)
+
+
+# ── Final Products ───────────────────────────────────────────
+
+@staff_member_required
+def final_products_hub(request):
+    context = _admin_context(
+        request,
+        title=_("Final Products"),
+        settings_url=reverse("warehousing:final_products_settings"),
+        data_url=reverse("warehousing:final_products_data"),
+        reports_url=reverse("warehousing:final_products_reports"),
+        data_analysis_url=reverse("warehousing:final_products_analysis"),
+    )
+    return render(request, "warehousing/final_products_hub.html", context)
+
+
+@staff_member_required
+def final_products_settings(request):
+    def _link(model, title):
+        return {"url": reverse(f"admin:finished_products_{model}_changelist"), "title": title}
+
+    context = _admin_context(
+        request,
+        title=_("Final Products Settings"),
+        hub_url=reverse("warehousing:final_products_hub"),
+        materials_groups=[
+            _link("product", _("Products")),
+        ],
+        transactions_groups=[
+            _link("stockledger", _("Stock Ledger")),
+        ],
+        stock_groups=[
+            _link("stockbalance", _("Stock Balances")),
+        ],
+    )
+    return render(request, "warehousing/warehousing_settings.html", context)
+
+
+@staff_member_required
+def final_products_data(request):
+    products = FinishedProduct.objects.all().order_by("product_name")
+    balances = FinishedStockBalance.objects.select_related("product", "plant").all()
+    product_map = {}
+    for b in balances:
+        key = b.product_id
+        if key not in product_map:
+            product_map[key] = {"total": 0, "reserved": 0, "available": 0}
+        product_map[key]["total"] += b.total_stock
+        product_map[key]["reserved"] += b.reserved
+        product_map[key]["available"] += b.available
+    rows = []
+    for p in products:
+        agg = product_map.get(p.pk, {"total": 0, "reserved": 0, "available": 0})
+        rows.append({"product": p, **agg})
+    context = _admin_context(
+        request,
+        title=_("Final Products Data"),
+        rows=rows,
+        hub_url=reverse("warehousing:final_products_hub"),
+    )
+    return render(request, "warehousing/final_products_data.html", context)
+
+
+@staff_member_required
+def final_products_reports(request):
+    context = _admin_context(
+        request,
+        title=_("Final Products Reports"),
+        hub_url=reverse("warehousing:final_products_hub"),
+    )
+    return render(request, "warehousing/coming_soon.html", context)
+
+
+@staff_member_required
+def final_products_analysis(request):
+    context = _admin_context(
+        request,
+        title=_("Final Products Analysis"),
+        hub_url=reverse("warehousing:final_products_hub"),
     )
     return render(request, "warehousing/coming_soon.html", context)

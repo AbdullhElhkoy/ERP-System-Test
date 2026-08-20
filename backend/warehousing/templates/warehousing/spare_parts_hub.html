@@ -1,0 +1,48 @@
+{% extends "admin/base_site.html" %}
+{% block content %}
+<style>
+    .section-header { display: flex; align-items: center; gap: 15px; margin-bottom: 20px; }
+    .section-header .title { font-size: 22px; font-weight: bold; }
+    .back-btn { font-size: 13px; }
+    .section-grid { display: flex; flex-wrap: wrap; gap: 16px; margin-top: 20px; }
+    .section-card {
+        flex: 1 1 220px; max-width: 240px;
+        border: 1px solid #ccc; border-radius: 8px;
+        padding: 20px; text-align: center; background: #f9f9f9;
+        cursor: pointer; text-decoration: none; color: inherit; display: block;
+        transition: box-shadow .2s, background .2s;
+    }
+    .section-card:hover { box-shadow: 0 4px 12px rgba(0,0,0,.15); background: #fff; }
+    .section-card .icon { font-size: 34px; display: block; margin-bottom: 10px; }
+    .section-card .label { font-size: 16px; font-weight: bold; }
+</style>
+
+<div class="section-header">
+    <div class="title">🔧 {% trans "Spare Parts" %}</div>
+    <a class="button back-btn" href="{% url 'warehousing:warehousing_hub' %}">← {% trans "Back to Warehousing" %}</a>
+    {% include "warehousing/includes/lang_toggle.html" %}
+</div>
+
+<div class="section-grid">
+    <a class="section-card" href="{{ settings_url }}">
+        <span class="icon">⚙️</span>
+        <span class="label">{% trans "Settings" %}</span>
+        <div style="font-size: 12px; color: #666; margin-top: 6px;">{% trans "Items, Transactions, Vouchers" %}</div>
+    </a>
+    <a class="section-card" href="{{ data_url }}">
+        <span class="icon">🗄️</span>
+        <span class="label">{% trans "Data" %}</span>
+        <div style="font-size: 12px; color: #666; margin-top: 6px;">{% trans "View items and stock balances" %}</div>
+    </a>
+    <a class="section-card" href="{{ reports_url }}">
+        <span class="icon">📊</span>
+        <span class="label">{% trans "Reports" %}</span>
+        <div style="font-size: 12px; color: #666; margin-top: 6px;">{% trans "Reports (coming soon)" %}</div>
+    </a>
+    <a class="section-card" href="{{ data_analysis_url }}">
+        <span class="icon">📈</span>
+        <span class="label">{% trans "Data Analysis" %}</span>
+        <div style="font-size: 12px; color: #666; margin-top: 6px;">{% trans "Analysis (coming soon)" %}</div>
+    </a>
+</div>
+{% endblock %}

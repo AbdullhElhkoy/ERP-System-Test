@@ -1,0 +1,52 @@
+{% extends "admin/base_site.html" %}
+{% block content %}
+<style>
+    .page-nav { display: flex; align-items: center; gap: 15px; margin-bottom: 18px; }
+    .page-nav .title { font-size: 20px; font-weight: bold; }
+    .table-wrap { overflow-x: auto; margin-top: 12px; }
+    table.list-table { border-collapse: collapse; width: 100%; font-size: 13px; }
+    table.list-table th { background: #f1f5f9; color: #334155; padding: 8px; border: 1px solid #cbd5e1; white-space: nowrap; }
+    table.list-table td { padding: 7px 8px; border: 1px solid #e2e8f0; text-align: center; }
+    table.list-table tr:hover { background: #f8fafc; }
+    .empty-msg { text-align: center; color: #64748b; padding: 30px 0; }
+</style>
+
+<div class="page-nav">
+    <div class="title">🔧 {% trans "Spare Parts Data" %}</div>
+    <a class="button" href="{{ hub_url }}">← {% trans "Spare Parts Hub" %}</a>
+    {% include "warehousing/includes/lang_toggle.html" %}
+</div>
+
+<div class="table-wrap">
+<table class="list-table">
+    <thead>
+        <tr>
+            <th>{% trans "Code" %}</th>
+            <th>{% trans "Name" %}</th>
+            <th>{% trans "Category" %}</th>
+            <th>{% trans "Unit" %}</th>
+            <th>{% trans "Total Stock" %}</th>
+            <th>{% trans "Available" %}</th>
+            <th>{% trans "On Loan" %}</th>
+            <th>{% trans "In Maintenance" %}</th>
+        </tr>
+    </thead>
+    <tbody>
+        {% for r in rows %}
+        <tr>
+            <td>{{ r.item.item_code }}</td>
+            <td>{{ r.item.item_name }}</td>
+            <td>{{ r.item.category }}</td>
+            <td>{{ r.item.unit }}</td>
+            <td>{{ r.total_stock }}</td>
+            <td>{{ r.available }}</td>
+            <td>{{ r.on_loan }}</td>
+            <td>{{ r.in_maintenance }}</td>
+        </tr>
+        {% empty %}
+        <tr><td colspan="8" class="empty-msg">{% trans "No spare parts registered yet." %}</td></tr>
+        {% endfor %}
+    </tbody>
+</table>
+</div>
+{% endblock %}

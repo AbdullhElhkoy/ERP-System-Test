@@ -1,0 +1,50 @@
+{% extends "admin/base_site.html" %}
+{% block content %}
+<style>
+    .page-nav { display: flex; align-items: center; gap: 15px; margin-bottom: 18px; }
+    .page-nav .title { font-size: 20px; font-weight: bold; }
+    .table-wrap { overflow-x: auto; margin-top: 12px; }
+    table.list-table { border-collapse: collapse; width: 100%; font-size: 13px; }
+    table.list-table th { background: #f1f5f9; color: #334155; padding: 8px; border: 1px solid #cbd5e1; white-space: nowrap; }
+    table.list-table td { padding: 7px 8px; border: 1px solid #e2e8f0; text-align: center; }
+    table.list-table tr:hover { background: #f8fafc; }
+    .empty-msg { text-align: center; color: #64748b; padding: 30px 0; }
+</style>
+
+<div class="page-nav">
+    <div class="title">🏷️ {% trans "Packaging Data" %}</div>
+    <a class="button" href="{{ hub_url }}">← {% trans "Packaging Hub" %}</a>
+    {% include "warehousing/includes/lang_toggle.html" %}
+</div>
+
+<div class="table-wrap">
+<table class="list-table">
+    <thead>
+        <tr>
+            <th>{% trans "Code" %}</th>
+            <th>{% trans "Name" %}</th>
+            <th>{% trans "Category" %}</th>
+            <th>{% trans "Unit" %}</th>
+            <th>{% trans "Min Stock" %}</th>
+            <th>{% trans "Reorder Point" %}</th>
+            <th>{% trans "Warehouse Qty" %}</th>
+        </tr>
+    </thead>
+    <tbody>
+        {% for r in rows %}
+        <tr>
+            <td>{{ r.material.material_code }}</td>
+            <td>{{ r.material.material_name }}</td>
+            <td>{{ r.material.category }}</td>
+            <td>{{ r.material.unit }}</td>
+            <td>{{ r.material.minimum_stock|default:"—" }}</td>
+            <td>{{ r.material.reorder_point|default:"—" }}</td>
+            <td>{{ r.qty }}</td>
+        </tr>
+        {% empty %}
+        <tr><td colspan="7" class="empty-msg">{% trans "No packaging materials registered yet." %}</td></tr>
+        {% endfor %}
+    </tbody>
+</table>
+</div>
+{% endblock %}
