@@ -181,9 +181,6 @@ msgstr ""
 msgid "Factory not found"
 msgstr ""
 
-msgid "Reaction Stages"
-msgstr ""
-
 msgid "Packing Types"
 msgstr ""
 
@@ -269,9 +266,6 @@ msgid "Entered factory: %(name)s"
 msgstr ""
 
 msgid "An error occurred while saving: %(error)s"
-msgstr ""
-
-msgid "Scopes"
 msgstr ""
 
 msgid "Scopes (multiple selection)"
