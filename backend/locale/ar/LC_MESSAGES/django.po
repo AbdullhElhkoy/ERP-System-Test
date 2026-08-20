@@ -166,7 +166,7 @@ msgid "Waiting for grade (sampled)"
 msgstr "بانتظار التصنيف (تم أخذ العينة)"
 
 msgid "Grade only for 'Graded' section, empty for waiting sections"
-msgstr "الدرجة فقط لقسم 'تم التصنيف"، فارغة للأقسام المعلقة"
+msgstr "الدرجة فقط لقسم (تم التصنيف)، فارغة للأقسام المعلقة"
 
 msgid "In"
 msgstr "وارد"
@@ -505,3 +505,16 @@ msgstr "صرف"
 
 msgid "Stock Count"
 msgstr "جرد"
+
+# ── Language Settings page ───────────────────────────────────
+msgid "Language Settings"
+msgstr "إعدادات اللغة"
+
+msgid "Choose your preferred language for the entire application"
+msgstr "اختر اللغة المفضلة للبرنامج بالكامل"
+
+msgid "Language"
+msgstr "اللغة"
+
+msgid "Back"
+msgstr "رجوع"

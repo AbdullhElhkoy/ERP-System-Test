@@ -3,9 +3,11 @@ from django.urls import path, include
 from django.conf.urls.i18n import i18n_patterns
 
 import config.admin  # noqa: F401  - بيفعّل تقسيم صفحة الأدمن بتاعة factory
+from config import views as config_views
 
 urlpatterns = [
     path('i18n/', include('django.conf.urls.i18n')),
+    path('i18n/language/', config_views.language_settings, name='language_settings'),
     path('admin/', admin.site.urls),
     path('warehousing/', include('warehousing.urls')),
     path('factory/', include('factory.urls')),

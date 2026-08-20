@@ -1,0 +1,55 @@
+{% extends "admin/base_site.html" %}
+{% load i18n %}
+
+{% block content %}
+<style>
+    .lang-page { max-width: 500px; margin: 40px auto; text-align: center; }
+    .lang-page h2 { font-size: 22px; margin-bottom: 30px; }
+    .lang-options { display: flex; gap: 24px; justify-content: center; margin-bottom: 30px; }
+    .lang-btn {
+        flex: 1; max-width: 200px; padding: 30px 20px;
+        border: 2px solid #ccc; border-radius: 12px;
+        background: #f9f9f9; cursor: pointer; text-decoration: none;
+        color: inherit; display: block; transition: all .2s;
+    }
+    .lang-btn:hover { border-color: #79aec8; background: #fff; box-shadow: 0 4px 12px rgba(0,0,0,.12); }
+    .lang-btn.active { border-color: #417690; background: #e8f4fd; box-shadow: 0 2px 8px rgba(65,118,144,.25); }
+    .lang-btn .flag { font-size: 36px; display: block; margin-bottom: 10px; }
+    .lang-btn .name { font-size: 16px; font-weight: bold; }
+    .lang-btn .code { font-size: 12px; color: #888; margin-top: 4px; }
+    .back-link { margin-top: 20px; }
+</style>
+
+<div class="lang-page">
+    <h2>{% trans "Language Settings" %}</h2>
+    <p style="color:#666; margin-top:-20px; margin-bottom:24px;">{% trans "Choose your preferred language for the entire application" %}</p>
+
+    <div class="lang-options">
+        <form method="post" action="{% url 'set_language' %}">
+            {% csrf_token %}
+            <input type="hidden" name="language" value="en">
+            <input type="hidden" name="next" value="{{ request.path }}">
+            <button type="submit" class="lang-btn{% if current_language == 'en' %} active{% endif %}">
+                <span class="flag">🇬🇧</span>
+                <span class="name">English</span>
+                <span class="code">EN</span>
+            </button>
+        </form>
+
+        <form method="post" action="{% url 'set_language' %}">
+            {% csrf_token %}
+            <input type="hidden" name="language" value="ar">
+            <input type="hidden" name="next" value="{{ request.path }}">
+            <button type="submit" class="lang-btn{% if current_language == 'ar' %} active{% endif %}">
+                <span class="flag">🇪🇬</span>
+                <span class="name">العربية</span>
+                <span class="code">AR</span>
+            </button>
+        </form>
+    </div>
+
+    <div class="back-link">
+        <a href="javascript:history.back()">{% trans "Back" %}</a>
+    </div>
+</div>
+{% endblock %}

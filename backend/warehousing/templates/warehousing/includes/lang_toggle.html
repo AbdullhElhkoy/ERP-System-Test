@@ -1,14 +1,5 @@
 {% load i18n %}
-<form id="lang-form" method="post" action="{% url 'set_language' %}" style="display:inline;">
-    {% csrf_token %}
-    <input type="hidden" name="next" value="{{ request.path }}">
-    <select name="language" onchange="this.form.submit()" style="padding:3px 6px; font-size:12px; border:1px solid #cbd5e1; border-radius:4px; background:#fff; cursor:pointer;">
-        {% get_current_language as CURRENT_LANG %}
-        {% get_available_languages as LANGUAGES %}
-        {% for lang_code, lang_name in LANGUAGES %}
-        <option value="{{ lang_code }}"{% if lang_code == CURRENT_LANG %} selected{% endif %}>
-            {{ lang_name }}
-        </option>
-        {% endfor %}
-    </select>
-</form>
+<a href="{% url 'language_settings' %}?next={{ request.path }}"
+   style="display:inline-flex;align-items:center;gap:4px;padding:3px 8px;font-size:12px;font-weight:600;border:1px solid #cbd5e1;border-radius:4px;background:#fff;text-decoration:none;color:#333;cursor:pointer;">
+    🌐 {% trans "Language" %}
+</a>
