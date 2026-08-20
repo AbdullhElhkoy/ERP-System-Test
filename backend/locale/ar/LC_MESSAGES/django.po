@@ -18,319 +18,319 @@ msgstr ""
 
 # ── models/shared.py ──────────────────────────────────────────
 msgid "Chemical"
-msgstr ""
+msgstr "كيميائي"
 
 msgid "Physical"
-msgstr ""
+msgstr "فيزيائي"
 
 msgid "Reaction"
-msgstr ""
+msgstr "تفاعل"
 
 msgid "Final Product"
-msgstr ""
+msgstr "المنتج النهائي"
 
 msgid "Scopes"
-msgstr ""
+msgstr "النطاقات"
 
 msgid "Primary"
-msgstr ""
+msgstr "أساسي"
 
 msgid "Secondary"
-msgstr ""
+msgstr "ثانوي"
 
 msgid "Grade Type"
-msgstr ""
+msgstr "نوع الدرجة"
 
 msgid "Primary = shows in primary grade column, Secondary = shows in secondary grade column"
-msgstr ""
+msgstr "أساسي = يظهر في عمود الدرجة الأساسية، ثانوي = يظهر في عمود الدرجة الثانوية"
 
 # ── models/reaction.py ────────────────────────────────────────
 msgid "Optional — preferred as an additional code only"
-msgstr ""
+msgstr "اختياري — يُفضّل كرمز إضافي فقط"
 
 msgid "Stage Name"
-msgstr ""
+msgstr "اسم المرحلة"
 
 msgid "Order"
-msgstr ""
+msgstr "الترتيب"
 
 msgid "Active"
-msgstr ""
+msgstr "نشط"
 
 msgid "Reaction Stage"
-msgstr ""
+msgstr "مرحلة التفاعل"
 
 msgid "Reaction Stages"
-msgstr ""
+msgstr "مراحل التفاعل"
 
 # ── models/plant_proxy.py ─────────────────────────────────────
 msgid "Plant"
-msgstr ""
+msgstr "المصنع"
 
 msgid "Plants"
-msgstr ""
+msgstr "المصانع"
 
 # ── models/dynamic_fields.py ──────────────────────────────────
 msgid "Decimal"
-msgstr ""
+msgstr "عشري"
 
 msgid "Integer"
-msgstr ""
+msgstr "عدد صحيح"
 
 msgid "Text"
-msgstr ""
+msgstr "نص"
 
 msgid "Date"
-msgstr ""
+msgstr "تاريخ"
 
 msgid "Select from list"
-msgstr ""
+msgstr "اختيار من القائمة"
 
 msgid "Basic (Weight / Quantity)"
-msgstr ""
+msgstr "أساسي (وزن / كمية)"
 
 msgid "Chemical Test"
-msgstr ""
+msgstr "اختبار كيميائي"
 
 msgid "Physical Test"
-msgstr ""
+msgstr "اختبار فيزيائي"
 
 msgid "General Data"
-msgstr ""
+msgstr "بيانات عامة"
 
 msgid "Unique English identifier without spaces, used internally (e.g. batch_number)"
-msgstr ""
+msgstr "معرف إنجليزي فريد بدون مساحات، يُستخدم داخلياً (مثال: batch_number)"
 
 msgid "Name that will be shown to the user"
-msgstr ""
+msgstr "الاسم الذي سيظهر للمستخدم"
 
 msgid "For 'Select from list' type only — list of choices"
-msgstr ""
+msgstr "لفئة 'اختيار من القائمة' فقط — قائمة الخيارات"
 
 # ── models/final_product.py ───────────────────────────────────
 msgid "Automatic based on cumulative weight"
-msgstr ""
+msgstr "تلقائي حسب الوزن التراكمي"
 
 msgid "Manual"
-msgstr ""
+msgstr "يدوي"
 
 msgid "Sampled"
-msgstr ""
+msgstr "تم أخذ العينة"
 
 msgid "Not sampled"
-msgstr ""
+msgstr "لم تُأخذ عينة"
 
 msgid "Sampling status from the input screen"
-msgstr ""
+msgstr "حالة أخذ العينات من شاشة الإدخال"
 
 msgid "Result time"
-msgstr ""
+msgstr "وقت النتيجة"
 
 msgid "Active dynamic field values for the packing type"
-msgstr ""
+msgstr "قيم الحقول الديناميكية النشطة لنوع التعبئة"
 
 msgid "Under test (not yet sampled)"
-msgstr ""
+msgstr "قيد الاختبار (لم تُأخذ عينة بعد)"
 
 msgid "Sample taken"
-msgstr ""
+msgstr "تم أخذ العينة"
 
 msgid "Graded"
-msgstr ""
+msgstr "تم التصنيف"
 
 msgid "Ton status: under test until sample is taken and result appears"
-msgstr ""
+msgstr "حالة الطن: قيد الاختبار حتى أخذ العينة وظهور النتيجة"
 
 msgid "Local"
-msgstr ""
+msgstr "محلي"
 
 msgid "Non-conforming"
-msgstr ""
+msgstr "غير مطابق"
 
 msgid "Primary grade (export / local / non-conforming)"
-msgstr ""
+msgstr "الدرجة الأساسية (تصدير / محلي / غير مطابق)"
 
 msgid "Secondary grade under the primary (optional)"
-msgstr ""
+msgstr "الدرجة الثانوية تحت الأساسية (اختياري)"
 
 msgid "Big Bag"
-msgstr ""
+msgstr "بلاعة كبيرة"
 
 msgid "Sack"
-msgstr ""
+msgstr "كيس"
 
 msgid "Waiting for grade (not sampled)"
-msgstr ""
+msgstr "بانتظار التصنيف (لم تُأخذ عينة)"
 
 msgid "Waiting for grade (sampled)"
-msgstr ""
+msgstr "بانتظار التصنيف (تم أخذ العينة)"
 
 msgid "Grade only for 'Graded' section, empty for waiting sections"
-msgstr ""
+msgstr "الدرجة فقط لقسم 'تم التصنيف"، فارغة للأقسام المعلقة"
 
 msgid "In"
-msgstr ""
+msgstr "وارد"
 
 msgid "Out"
-msgstr ""
+msgstr "صادر"
 
 # ── admin.py ──────────────────────────────────────────────────
 msgid "Enter Factory"
-msgstr ""
+msgstr "دخول المصنع"
 
 msgid "Factory not found"
-msgstr ""
+msgstr "المصنع غير موجود"
 
 msgid "Packing Types"
-msgstr ""
+msgstr "أنواع التعبئة"
 
 msgid "Packing Locations"
-msgstr ""
+msgstr "أماكن التعبئة"
 
 msgid "Grades"
-msgstr ""
+msgstr "الدرجات"
 
 msgid "Rejection Reasons (Local / Non-conforming)"
-msgstr ""
+msgstr "أسباب الرفض (محلي / غير مطابق)"
 
 msgid "Test Definitions"
-msgstr ""
+msgstr "تعريفات الاختبارات"
 
 msgid "Conformity Rules"
-msgstr ""
+msgstr "قواعد المطابقة"
 
 msgid "Output Points"
-msgstr ""
+msgstr "نقاط التصريف"
 
 msgid "Representative Sample Group Size"
-msgstr ""
+msgstr "حجم مجموعة العينات التمثيلية"
 
 msgid "Plant Lot Settings"
-msgstr ""
+msgstr "إعدادات دفعة المصنع"
 
 msgid "Packing Type Fields"
-msgstr ""
+msgstr "حقول نوع التعبئة"
 
 msgid "Specification (disabled)"
-msgstr ""
+msgstr "المواصفات (معطّل)"
 
 msgid "Output Readings"
-msgstr ""
+msgstr "قراءات التصريف"
 
 msgid "Tons"
-msgstr ""
+msgstr "الأطنان"
 
 msgid "Representative Samples"
-msgstr ""
+msgstr "العينات التمثيلية"
 
 msgid "Ton Grade Assignments"
-msgstr ""
+msgstr "تعيينات درجات الأطنان"
 
 msgid "Packing Events"
-msgstr ""
+msgstr "أحداث التعبئة"
 
 msgid "Packing Conversions"
-msgstr ""
+msgstr "تحويلات التعبئة"
 
 msgid "Conformity Results"
-msgstr ""
+msgstr "نتائج المطابقة"
 
 msgid "Floor Stock Balances"
-msgstr ""
+msgstr "أرصدة مخزون الأرضية"
 
 msgid "Floor Stock Movements"
-msgstr ""
+msgstr "حركات مخزون الأرضية"
 
 msgid "Process Readings"
-msgstr ""
+msgstr "قراءات العملية"
 
 msgid "Dynamic Fields Library (Company-wide)"
-msgstr ""
+msgstr "مكتبة الحقول الديناميكية (على مستوى الشركة)"
 
 msgid "You must enter a factory first"
-msgstr ""
+msgstr "يجب إدخال مصنع أولاً"
 
 msgid "Packing type not found for this factory"
-msgstr ""
+msgstr "نوع التعبئة غير موجود لهذا المصنع"
 
 msgid "Reading not found"
-msgstr ""
+msgstr "القراءة غير موجودة"
 
 msgid "Invalid data"
-msgstr ""
+msgstr "بيانات غير صحيحة"
 
 msgid "Stage not found for this factory"
-msgstr ""
+msgstr "المرحلة غير موجودة لهذا المصنع"
 
 msgid "Entered factory: %(name)s"
-msgstr ""
+msgstr "تم دخول المصنع: %(name)s"
 
 msgid "An error occurred while saving: %(error)s"
-msgstr ""
+msgstr "حدث خطأ أثناء الحفظ: %(error)s"
 
 msgid "Scopes (multiple selection)"
-msgstr ""
+msgstr "النطاقات (اختيار متعدد)"
 
 msgid "Number of Tests"
-msgstr ""
+msgstr "عدد الاختبارات"
 
 msgid "Factory"
-msgstr ""
+msgstr "المصنع"
 
 # ── services.py ───────────────────────────────────────────────
 msgid "General Output Point"
-msgstr ""
+msgstr "نقطة التصريف العامة"
 
 # ── views.py ──────────────────────────────────────────────────
 msgid "Readings saved successfully"
-msgstr ""
+msgstr "تم حفظ القراءات بنجاح"
 
 # ── data_grid.py ──────────────────────────────────────────────
 msgid "Ton not found: %(ton_id)s"
-msgstr ""
+msgstr "الطن غير موجود: %(ton_id)s"
 
 # ── delete_all_plants.py ──────────────────────────────────────
 msgid "Delete all factories and all associated data, then create a new empty factory."
-msgstr ""
+msgstr "حذف جميع المصانع وجميع البيانات المرتبطة، ثم إنشاء مصنع جديد فارغ."
 
 msgid "Confirm without asking"
-msgstr ""
+msgstr "تأكيد بدون سؤال"
 
 msgid "Do not delete OrgPosition (left referencing deleted factory — not recommended)"
-msgstr ""
+msgstr "عدم حذف OrgPosition (يترك مرجعاً للمصنع المحذوف — غير مُوصى به)"
 
 msgid "No factories to delete."
-msgstr ""
+msgstr "لا توجد مصانع للحذف."
 
 msgid "Existing factories:"
-msgstr ""
+msgstr "المصانع الموجودة:"
 
 msgid "Delete %(count)d factory and all its data? (type yes): "
-msgstr ""
+msgstr "حذف %(count)d مصنع وجميع بياناته؟ (اكتب yes): "
 
 msgid "Cancelled."
-msgstr ""
+msgstr "تم الإلغاء."
 
 msgid "Skipping %(label)s (table not found?): %(error)s"
-msgstr ""
+msgstr "تخطي %(label)s (الجدول غير موجود؟): %(error)s"
 
 msgid "Deleted %(label)s: %(count)s"
-msgstr ""
+msgstr "تم حذف %(label)s: %(count)s"
 
 msgid "Remaining protected records from old factories — check models: %(models)s"
-msgstr ""
+msgstr "السجلات المحمية المتبقية من المصانع القديمة — تحقق من النماذج: %(models)s"
 
 msgid "Deleted OrgPosition: %(count)s"
-msgstr ""
+msgstr "تم حذف OrgPosition: %(count)s"
 
 msgid "Deleted factories: %(count)s"
-msgstr ""
+msgstr "تم حذف المصانع: %(count)s"
 
 msgid "New Factory"
-msgstr ""
+msgstr "مصنع جديد"
 
 msgid "All factories deleted. New factory: [%(pk)s] %(name)s"
-msgstr ""
+msgstr "تم حذف جميع المصانع. المصنع الجديد: [%(pk)s] %(name)s"
 
 # ── Existing translations (warehousing, lab, etc.) ───────────
 # Dashboard
