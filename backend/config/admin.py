@@ -9,17 +9,6 @@ VIEW_PERMS = {"add": False, "change": False, "delete": False, "view": True}
 HIDDEN_APP_LABELS = {"raw_materials", "spare_parts", "packaging", "finished_products"}
 
 
-def _admin_link(app_label, model_name, title):
-    return {
-        "name": title,
-        "object_name": model_name,
-        "perms": VIEW_PERMS,
-        "admin_url": reverse(f"admin:{app_label}_{model_name}_changelist"),
-        "add_url": None,
-        "view_only": True,
-    }
-
-
 def _warehouse_section():
     entries = [
         {
@@ -30,24 +19,30 @@ def _warehouse_section():
             "add_url": None,
             "view_only": True,
         },
-        _admin_link("spare_parts", "sparepartitem", "Spare Part Items"),
-        _admin_link("spare_parts", "sparepartstocktransaction", "Stock Transactions"),
-        _admin_link("spare_parts", "receivingvoucher", "Receiving Vouchers"),
-        _admin_link("spare_parts", "issuevoucher", "Issue Vouchers"),
-        _admin_link("spare_parts", "sparepartstockbalance", "Stock Balances"),
-        _admin_link("spare_parts", "stockcount", "Stock Counts"),
-        _admin_link("finished_products", "product", "Products"),
-        _admin_link("finished_products", "stockledger", "Stock Ledger"),
-        _admin_link("finished_products", "stockbalance", "Stock Balances"),
-        _admin_link("packaging", "packagingmaterial", "Packaging Materials"),
-        _admin_link("packaging", "packagingsupplier", "Packaging Suppliers"),
-        _admin_link("packaging", "packagingreceiving", "Receiving Records"),
-        _admin_link("packaging", "packagingstockledger", "Stock Ledger"),
-        _admin_link("packaging", "packagingstockbalance", "Stock Balances"),
-        _admin_link("packaging", "factorypackagingstock", "Factory Packaging Stock"),
-        _admin_link("packaging", "packingoperation", "Packing Operations"),
-        _admin_link("packaging", "packagingreconciliation", "Reconciliation"),
-        _admin_link("packaging", "supplierevaluation", "Supplier Evaluation"),
+        {
+            "name": "Spare Parts",
+            "object_name": "SpareParts",
+            "perms": VIEW_PERMS,
+            "admin_url": reverse("warehousing:spare_parts"),
+            "add_url": None,
+            "view_only": True,
+        },
+        {
+            "name": "Final Products",
+            "object_name": "FinalProduct",
+            "perms": VIEW_PERMS,
+            "admin_url": reverse("warehousing:final_product"),
+            "add_url": None,
+            "view_only": True,
+        },
+        {
+            "name": "Packaging Materials",
+            "object_name": "PackagingMaterials",
+            "perms": VIEW_PERMS,
+            "admin_url": reverse("warehousing:packaging_materials"),
+            "add_url": None,
+            "view_only": True,
+        },
     ]
     return {
         "name": "Warehousing",
