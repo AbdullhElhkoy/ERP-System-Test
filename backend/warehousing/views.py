@@ -4,8 +4,9 @@ from django.contrib import admin
 from django.contrib.admin.views.decorators import staff_member_required
 from django.http import JsonResponse
 from django.shortcuts import render, redirect
+from django.http import JsonResponse
 from django.urls import reverse
-
+from django.utils import timezone
 from django.utils.translation import gettext_lazy as _
 
 from plants.models import Plant
@@ -15,6 +16,11 @@ from warehousing.raw_materials.models import (
     Supplier,
     MaterialStorage,
     RawMaterialDelivery,
+    InventoryTransaction,
+    RawMaterialSample,
+    RawMaterialAnalysis,
+    MaterialTest,
+    MaterialSpecification,
 )
 from warehousing.spare_parts.models import SparePartItem, SparePartStockBalance
 from warehousing.packaging.models import PackagingMaterial, PackagingStockBalance
@@ -24,6 +30,7 @@ from .services import (
     save_delivery_edits,
     delivery_row_data,
 )
+from warehousing.raw_materials.services import record_inventory_movement, issue_inventory, adjust_inventory
 
 
 def _admin_context(request, **extra):
@@ -271,6 +278,392 @@ def deliveries_analysis(request):
         hub_url=reverse("warehousing:raw_materials_hub"),
     )
     return render(request, "warehousing/coming_soon.html", context)
+
+
+# ── Raw Materials — New Features ────────────────────────────
+
+@staff_member_required
+def analysis1_entry(request):
+    """تحليل أولي — قبل الوزن. المستخدم يدخل رقم الشاحنة ويشوف بيانات الشحنة."""
+    plant = _current_plant(request)
+    if not plant:
+        return redirect("warehousing:raw_materials_hub")
+
+    deliveries = RawMaterialDelivery.objects.filter(
+        plant=plant, decision=RawMaterialDelivery.DECISION_ACCEPTED
+    ).select_related("material", "supplier", "storage").order_by("-arrived_at")
+
+    if request.method == "POST":
+        try:
+            payload = json.loads(request.body)
+        except json.JSONDecodeError:
+            return JsonResponse({"status": "error", "message": "بيانات غير صحيحة"}, status=400)
+
+        delivery_id = payload.get("delivery_id")
+        test_results = payload.get("test_results", [])
+
+        delivery = RawMaterialDelivery.objects.filter(pk=delivery_id, plant=plant).first()
+        if not delivery:
+            return JsonResponse({"status": "error", "message": "الشحنة غير موجودة"}, status=404)
+
+        sample = RawMaterialSample.objects.create(
+            sample_stage=RawMaterialSample.STAGE_RECEIPT,
+            plant=plant,
+            material=delivery.material,
+            delivery=delivery,
+            sample_number=RawMaterialSample.objects.filter(
+                plant=plant, material=delivery.material, sample_stage=RawMaterialSample.STAGE_RECEIPT
+            ).count() + 1,
+            sampled_at=timezone.now(),
+            sampled_by=str(request.user),
+            user=request.user,
+            notes=payload.get("notes", ""),
+        )
+
+        for tr in test_results:
+            test = MaterialTest.objects.filter(pk=tr.get("test_id")).first()
+            if test:
+                RawMaterialAnalysis.objects.create(
+                    sample=sample,
+                    test=test,
+                    result=tr.get("result"),
+                    remarks=tr.get("remarks", ""),
+                )
+
+        return JsonResponse({"status": "ok", "sample_id": sample.pk})
+
+    delivery_json = json.dumps(
+        list(deliveries.values("id", "vehicle_number", "weight_tons", "material__material_name", "supplier__supplier_name")),
+        ensure_ascii=False,
+    )
+    tests_json = json.dumps(
+        list(MaterialTest.objects.filter(is_active=True).values("id", "test_name", "unit")),
+        ensure_ascii=False,
+    )
+
+    context = _admin_context(
+        request,
+        title="تحليل أولي - " + plant.plant_name,
+        plant=plant,
+        deliveries_json=delivery_json,
+        tests_json=tests_json,
+        hub_url=reverse("warehousing:raw_materials_hub"),
+    )
+    return render(request, "warehousing/analysis1_entry.html", context)
+
+
+@staff_member_required
+def chemical_analysis(request, sample_id=None):
+    """تحليل كيميائي — إدخال نتائج الاختبارات لعينة."""
+    plant = _current_plant(request)
+    if not plant:
+        return redirect("warehousing:raw_materials_hub")
+
+    sample = None
+    if sample_id:
+        sample = RawMaterialSample.objects.filter(pk=sample_id, plant=plant).select_related(
+            "material", "delivery", "delivery__supplier"
+        ).first()
+        if not sample:
+            return redirect("warehousing:raw_materials_hub")
+
+    samples = RawMaterialSample.objects.filter(plant=plant).select_related(
+        "material", "delivery"
+    ).order_by("-sampled_at")
+
+    if request.method == "POST":
+        try:
+            payload = json.loads(request.body)
+        except json.JSONDecodeError:
+            return JsonResponse({"status": "error", "message": "بيانات غير صحيحة"}, status=400)
+
+        sid = payload.get("sample_id")
+        test_results = payload.get("test_results", [])
+
+        target = RawMaterialSample.objects.filter(pk=sid, plant=plant).first()
+        if not target:
+            return JsonResponse({"status": "error", "message": "العينة غير موجودة"}, status=404)
+
+        for tr in test_results:
+            test = MaterialTest.objects.filter(pk=tr.get("test_id")).first()
+            if test:
+                RawMaterialAnalysis.objects.update_or_create(
+                    sample=target,
+                    test=test,
+                    defaults={
+                        "result": tr.get("result"),
+                        "remarks": tr.get("remarks", ""),
+                    },
+                )
+
+        return JsonResponse({"status": "ok"})
+
+    samples_json = json.dumps(
+        list(samples.values("id", "material__material_name", "sample_stage", "sample_number", "sampled_at")),
+        ensure_ascii=False,
+    )
+    tests_json = json.dumps(
+        list(MaterialTest.objects.filter(is_active=True).values("id", "test_name", "unit")),
+        ensure_ascii=False,
+    )
+    sample_details_json = "null"
+    if sample:
+        existing = list(sample.analyses.select_related("test").values("test_id", "result", "remarks"))
+        sample_details_json = json.dumps({
+            "sample_id": sample.pk,
+            "material": sample.material.material_name,
+            "stage": sample.get_sample_stage_display(),
+            "results": existing,
+        }, ensure_ascii=False)
+
+    context = _admin_context(
+        request,
+        title="تحليل كيميائي - " + plant.plant_name,
+        plant=plant,
+        samples_json=samples_json,
+        tests_json=tests_json,
+        sample_details_json=sample_details_json,
+        hub_url=reverse("warehousing:raw_materials_hub"),
+    )
+    return render(request, "warehousing/chemical_analysis.html", context)
+
+
+@staff_member_required
+def weighing_entry(request):
+    """وزن الشحنة — تسجيل الوزن الفعلي واختيار المخزن وتحديث المخزون تلقائياً."""
+    plant = _current_plant(request)
+    if not plant:
+        return redirect("warehousing:raw_materials_hub")
+
+    deliveries = RawMaterialDelivery.objects.filter(
+        plant=plant, decision=RawMaterialDelivery.DECISION_ACCEPTED
+    ).select_related("material", "storage").order_by("-arrived_at")
+
+    if request.method == "POST":
+        try:
+            payload = json.loads(request.body)
+        except json.JSONDecodeError:
+            return JsonResponse({"status": "error", "message": "بيانات غير صحيحة"}, status=400)
+
+        delivery_id = payload.get("delivery_id")
+        actual_weight = payload.get("actual_weight")
+        storage_id = payload.get("storage_id")
+
+        if not all([delivery_id, actual_weight, storage_id]):
+            return JsonResponse({"status": "error", "message": "لازم تكمل كل الحقول"}, status=400)
+
+        from decimal import Decimal as D
+        try:
+            actual_weight = D(str(actual_weight))
+        except (ValueError, TypeError):
+            return JsonResponse({"status": "error", "message": "الوزن غير صحيح"}, status=400)
+
+        delivery = RawMaterialDelivery.objects.filter(pk=delivery_id, plant=plant).first()
+        if not delivery:
+            return JsonResponse({"status": "error", "message": "الشحنة غير موجودة"}, status=404)
+
+        storage = MaterialStorage.objects.filter(pk=storage_id, plant=plant).first()
+        if not storage:
+            return JsonResponse({"status": "error", "message": "المخزن غير موجود"}, status=404)
+
+        record_inventory_movement(
+            user=request.user,
+            material=delivery.material,
+            plant=plant,
+            storage=storage,
+            movement_type=InventoryTransaction.MOVEMENT_IN,
+            quantity_tons=actual_weight,
+            notes=f"وزن فعلي للشحنة {delivery.vehicle_number}",
+            reference_delivery=delivery,
+        )
+
+        return JsonResponse({"status": "ok"})
+
+    deliveries_json = json.dumps(
+        list(deliveries.values("id", "vehicle_number", "weight_tons", "material__material_name", "material_id")),
+        ensure_ascii=False,
+    )
+    storages_json = json.dumps(
+        list(MaterialStorage.objects.filter(plant=plant, is_active=True).values("id", "material_id", "storage_name")),
+        ensure_ascii=False,
+    )
+
+    context = _admin_context(
+        request,
+        title="وزن الشحنات - " + plant.plant_name,
+        plant=plant,
+        deliveries_json=deliveries_json,
+        storages_json=storages_json,
+        hub_url=reverse("warehousing:raw_materials_hub"),
+    )
+    return render(request, "warehousing/weighing_entry.html", context)
+
+
+@staff_member_required
+def issue_entry(request):
+    """صرف وتسوية المواد الخام. صرف يتطلب اختيار مصنع. تسووية تتطلب ملاحظات تفصيلية."""
+    plant = _current_plant(request)
+    if not plant:
+        return redirect("warehousing:raw_materials_hub")
+
+    storages = MaterialStorage.objects.filter(
+        plant=plant, is_active=True
+    ).select_related("material").order_by("material__material_name")
+
+    if request.method == "POST":
+        try:
+            payload = json.loads(request.body)
+        except json.JSONDecodeError:
+            return JsonResponse({"status": "error", "message": "بيانات غير صحيحة"}, status=400)
+
+        movement_type = payload.get("movement_type")
+        storage_id = payload.get("storage_id")
+        quantity = payload.get("quantity_tons")
+        notes = payload.get("notes", "")
+        factory_plant_id = payload.get("factory_plant_id")
+
+        from decimal import Decimal as D
+        try:
+            quantity = D(str(quantity))
+        except (ValueError, TypeError):
+            return JsonResponse({"status": "error", "message": "الكمية غير صحيحة"}, status=400)
+
+        storage = MaterialStorage.objects.filter(pk=storage_id, plant=plant).first()
+        if not storage:
+            return JsonResponse({"status": "error", "message": "المخزن غير موجود"}, status=404)
+
+        try:
+            if movement_type == InventoryTransaction.MOVEMENT_OUT:
+                if not factory_plant_id:
+                    return JsonResponse({"status": "error", "message": "لازم تحدد المصنع المستلم"}, status=400)
+                target_plant = Plant.objects.filter(pk=factory_plant_id).first()
+                if not target_plant:
+                    return JsonResponse({"status": "error", "message": "المصنع غير موجود"}, status=404)
+                issue_inventory(
+                    user=request.user,
+                    material=storage.material,
+                    plant=target_plant,
+                    storage=storage,
+                    quantity_tons=quantity,
+                    notes=notes,
+                )
+            elif movement_type == InventoryTransaction.MOVEMENT_ADJUSTMENT:
+                adjust_inventory(
+                    user=request.user,
+                    material=storage.material,
+                    plant=plant,
+                    storage=storage,
+                    quantity_tons=quantity,
+                    notes=notes,
+                )
+            else:
+                return JsonResponse({"status": "error", "message": "نوع الحركة غير صحيح"}, status=400)
+        except ValueError as e:
+            return JsonResponse({"status": "error", "message": str(e)}, status=400)
+
+        return JsonResponse({"status": "ok"})
+
+    storages_json = json.dumps(
+        list(storages.values("id", "material_id", "storage_name", "material__material_name")),
+        ensure_ascii=False,
+    )
+    factories_json = json.dumps(
+        list(Plant.objects.all().values("id", "plant_name")),
+        ensure_ascii=False,
+    )
+
+    context = _admin_context(
+        request,
+        title="صرف وتسوية المواد - " + plant.plant_name,
+        plant=plant,
+        storages_json=storages_json,
+        factories_json=factories_json,
+        hub_url=reverse("warehousing:raw_materials_hub"),
+    )
+    return render(request, "warehousing/issue_entry.html", context)
+
+
+@staff_member_required
+def analysis2_entry(request):
+    """تحليل ثاني — عينات متعددة المراحل (قبل/بعد الطحن)."""
+    plant = _current_plant(request)
+    if not plant:
+        return redirect("warehousing:raw_materials_hub")
+
+    samples = RawMaterialSample.objects.filter(plant=plant).select_related(
+        "material", "delivery"
+    ).order_by("-sampled_at")
+
+    materials = Material.objects.filter(is_active=True).order_by("material_name")
+
+    if request.method == "POST":
+        try:
+            payload = json.loads(request.body)
+        except json.JSONDecodeError:
+            return JsonResponse({"status": "error", "message": "بيانات غير صحيحة"}, status=400)
+
+        material_id = payload.get("material_id")
+        stage = payload.get("stage")
+        test_results = payload.get("test_results", [])
+        notes = payload.get("notes", "")
+
+        if not material_id or not stage:
+            return JsonResponse({"status": "error", "message": "لازم تختار المادة والمرحلة"}, status=400)
+
+        material = Material.objects.filter(pk=material_id).first()
+        if not material:
+            return JsonResponse({"status": "error", "message": "الخام غير موجودة"}, status=404)
+
+        next_num = RawMaterialSample.objects.filter(
+            plant=plant, material=material, sample_stage=stage
+        ).count() + 1
+
+        sample = RawMaterialSample.objects.create(
+            sample_stage=stage,
+            plant=plant,
+            material=material,
+            sample_number=next_num,
+            sampled_at=timezone.now(),
+            sampled_by=str(request.user),
+            user=request.user,
+            notes=notes,
+        )
+
+        for tr in test_results:
+            test = MaterialTest.objects.filter(pk=tr.get("test_id")).first()
+            if test:
+                RawMaterialAnalysis.objects.create(
+                    sample=sample,
+                    test=test,
+                    result=tr.get("result"),
+                    remarks=tr.get("remarks", ""),
+                )
+
+        return JsonResponse({"status": "ok", "sample_id": sample.pk})
+
+    materials_json = json.dumps(
+        list(materials.values("id", "material_name")),
+        ensure_ascii=False,
+    )
+    tests_json = json.dumps(
+        list(MaterialTest.objects.filter(is_active=True).values("id", "test_name", "unit")),
+        ensure_ascii=False,
+    )
+    samples_json = json.dumps(
+        list(samples.values("id", "material__material_name", "sample_stage", "sample_number", "sampled_at", "sampled_by")),
+        ensure_ascii=False,
+    )
+
+    context = _admin_context(
+        request,
+        title="تحليل ثاني - " + plant.plant_name,
+        plant=plant,
+        materials_json=materials_json,
+        tests_json=tests_json,
+        samples_json=samples_json,
+        hub_url=reverse("warehousing:raw_materials_hub"),
+    )
+    return render(request, "warehousing/analysis2_entry.html", context)
 
 
 # ── Spare Parts ──────────────────────────────────────────────

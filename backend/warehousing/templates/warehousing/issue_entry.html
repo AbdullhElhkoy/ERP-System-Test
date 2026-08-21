@@ -1,0 +1,225 @@
+{% extends "admin/base_site.html" %}
+{% block content %}
+{% csrf_token %}
+<style>
+    .page-header { display: flex; align-items: center; gap: 15px; margin-bottom: 18px; }
+    .page-header .title { font-size: 20px; font-weight: bold; }
+    .form-card { background: #f9fafb; border: 1px solid #e2e8f0; border-radius: 8px; padding: 20px; margin-bottom: 16px; }
+    .form-row { display: flex; gap: 12px; flex-wrap: wrap; margin-bottom: 12px; align-items: flex-end; }
+    .form-group { display: flex; flex-direction: column; }
+    .form-group label { font-size: 13px; font-weight: 600; color: #374151; margin-bottom: 4px; }
+    .form-group input, .form-group select, .form-group textarea {
+        padding: 8px 10px; border: 1px solid #d1d5db; border-radius: 4px; font-size: 13px;
+    }
+    .form-group input:focus, .form-group select:focus, .form-group textarea:focus {
+        outline: none; border-color: #3b82f6; box-shadow: 0 0 0 2px rgba(59,130,246,.2);
+    }
+    .btn { padding: 8px 16px; border: none; border-radius: 4px; cursor: pointer; font-size: 13px; font-weight: 600; }
+    .btn-primary { background: #2563eb; color: #fff; }
+    .btn-primary:hover { background: #1d4ed8; }
+    .btn-danger { background: #dc2626; color: #fff; }
+    .btn-danger:hover { background: #b91c1c; }
+    .balance-display { padding: 6px 12px; background: #f0fdf4; border: 1px solid #bbf7d0; border-radius: 4px; font-size: 13px; margin-top: 6px; }
+    .msg { padding: 10px 14px; border-radius: 6px; margin-bottom: 12px; font-size: 13px; }
+    .msg-ok { background: #dcfce7; color: #166534; border: 1px solid #bbf7d0; }
+    .msg-err { background: #fee2e2; color: #991b1b; border: 1px solid #fecaca; }
+    .tabs { display: flex; gap: 8px; margin-bottom: 16px; }
+    .tab { padding: 10px 20px; border: 1px solid #d1d5db; border-radius: 6px; cursor: pointer; font-size: 14px; font-weight: 600; background: #f9fafb; }
+    .tab.active { background: #2563eb; color: #fff; border-color: #2563eb; }
+</style>
+
+<div class="page-header">
+    <div class="title">📤 صرف وتسوية المواد - {{ plant.plant_name }}</div>
+    <a class="button" href="{{ hub_url }}">← العودة للمخازن</a>
+    {% include "warehousing/includes/lang_toggle.html" %}
+</div>
+
+<div id="msg-area"></div>
+
+<div class="tabs">
+    <div class="tab active" id="tab-issue" onclick="switchTab('issue')">صرف للمصنع</div>
+    <div class="tab" id="tab-adjust" onclick="switchTab('adjust')">تسوية مخزون</div>
+</div>
+
+<!-- صرف -->
+<div class="form-card" id="panel-issue">
+    <h3 style="margin:0 0 12px 0; font-size:15px;">صرف خام للمصنع</h3>
+    <div class="form-row">
+        <div class="form-group">
+            <label>المخزن</label>
+            <select id="issue-storage" style="min-width: 250px;">
+                <option value="">-- اختر مخزن --</option>
+            </select>
+        </div>
+        <div class="form-group">
+            <label>المصنع المستلم</label>
+            <select id="issue-factory" style="min-width: 200px;">
+                <option value="">-- اختر مصنع --</option>
+            </select>
+        </div>
+    </div>
+    <div id="issue-balance" class="balance-display" style="display:none;"></div>
+    <div class="form-row">
+        <div class="form-group">
+            <label>الكمية (طن)</label>
+            <input type="number" step="any" id="issue-qty" style="width:120px;">
+        </div>
+        <div class="form-group" style="flex:1;">
+            <label>ملاحظات</label>
+            <textarea id="issue-notes" rows="2" style="width:100%;"></textarea>
+        </div>
+    </div>
+    <div style="margin-top:12px;">
+        <button class="btn btn-primary" id="issue-btn">تنفيذ الصرف</button>
+    </div>
+</div>
+
+<!-- تسوية -->
+<div class="form-card" id="panel-adjust" style="display:none;">
+    <h3 style="margin:0 0 12px 0; font-size:15px;">تسوية مخزون</h3>
+    <div class="form-row">
+        <div class="form-group">
+            <label>المخزن</label>
+            <select id="adjust-storage" style="min-width: 250px;">
+                <option value="">-- اختر مخزن --</option>
+            </select>
+        </div>
+    </div>
+    <div id="adjust-balance" class="balance-display" style="display:none;"></div>
+    <div class="form-row">
+        <div class="form-group">
+            <label>الكمية (طن) — سالب للخصم</label>
+            <input type="number" step="any" id="adjust-qty" style="width:120px;" placeholder="-1.500">
+        </div>
+    </div>
+    <div class="form-row">
+        <div class="form-group" style="flex:1;">
+            <label>ملاحظات تفصيلية (إلزامي)</label>
+            <textarea id="adjust-notes" rows="3" style="width:100%;" placeholder="اكتب سبب التسوية بالتفصيل..."></textarea>
+        </div>
+    </div>
+    <div style="margin-top:12px;">
+        <button class="btn btn-danger" id="adjust-btn">تنفيذ التسوية</button>
+    </div>
+</div>
+
+{{ storages_json|json_script:"storages-data" }}
+{{ factories_json|json_script:"factories-data" }}
+
+<script>
+const STORAGES = JSON.parse(document.getElementById('storages-data').textContent || '[]');
+const FACTORIES = JSON.parse(document.getElementById('factories-data').textContent || '[]');
+
+function switchTab(tab) {
+    document.getElementById('panel-issue').style.display = tab === 'issue' ? 'block' : 'none';
+    document.getElementById('panel-adjust').style.display = tab === 'adjust' ? 'block' : 'none';
+    document.getElementById('tab-issue').className = 'tab' + (tab === 'issue' ? ' active' : '');
+    document.getElementById('tab-adjust').className = 'tab' + (tab === 'adjust' ? ' active' : '');
+}
+
+function buildStorageSelect(selectId) {
+    const sel = document.getElementById(selectId);
+    sel.innerHTML = '<option value="">-- اختر مخزن --</option>';
+    STORAGES.forEach(s => {
+        const opt = document.createElement('option');
+        opt.value = s.id;
+        opt.textContent = `${s.material__material_name} — ${s.storage_name}`;
+        sel.appendChild(opt);
+    });
+}
+
+function buildFactorySelect() {
+    const sel = document.getElementById('issue-factory');
+    sel.innerHTML = '<option value="">-- اختر مصنع --</option>';
+    FACTORIES.forEach(f => {
+        const opt = document.createElement('option');
+        opt.value = f.id;
+        opt.textContent = f.plant_name;
+        sel.appendChild(opt);
+    });
+}
+
+buildStorageSelect('issue-storage');
+buildStorageSelect('adjust-storage');
+buildFactorySelect();
+
+function getStorageById(id) { return STORAGES.find(s => String(s.id) === String(id)); }
+
+document.getElementById('issue-storage').addEventListener('change', function() {
+    const s = getStorageById(this.value);
+    const box = document.getElementById('issue-balance');
+    if (s) {
+        box.innerHTML = `<strong>المادة:</strong> ${s.material__material_name}`;
+        box.style.display = 'block';
+    } else {
+        box.style.display = 'none';
+    }
+});
+
+document.getElementById('adjust-storage').addEventListener('change', function() {
+    const s = getStorageById(this.value);
+    const box = document.getElementById('adjust-balance');
+    if (s) {
+        box.innerHTML = `<strong>المادة:</strong> ${s.material__material_name}`;
+        box.style.display = 'block';
+    } else {
+        box.style.display = 'none';
+    }
+});
+
+function post(payload, btnEl) {
+    const csrfInput = document.querySelector("[name=csrfmiddlewaretoken]");
+    if (!csrfInput) { alert('Recarregue a página'); return; }
+    btnEl.disabled = true;
+
+    fetch(window.location.href, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'X-CSRFToken': csrfInput.value },
+        body: JSON.stringify(payload),
+    })
+    .then(r => r.json())
+    .then(data => {
+        btnEl.disabled = false;
+        if (data.status === 'ok') {
+            document.getElementById('msg-area').innerHTML = `<div class="msg msg-ok">تم التنفيذ بنجاح</div>`;
+        } else {
+            document.getElementById('msg-area').innerHTML = `<div class="msg msg-err">${data.message}</div>`;
+        }
+    })
+    .catch(() => {
+        btnEl.disabled = false;
+        document.getElementById('msg-area').innerHTML = `<div class="msg msg-err">خطأ في الاتصال</div>`;
+    });
+}
+
+document.getElementById('issue-btn').addEventListener('click', function() {
+    const storageId = document.getElementById('issue-storage').value;
+    const factoryId = document.getElementById('issue-factory').value;
+    const qty = document.getElementById('issue-qty').value;
+    if (!storageId || !factoryId || !qty) { alert('املأ كل الحقول'); return; }
+
+    post({
+        movement_type: 'out',
+        storage_id: parseInt(storageId),
+        factory_plant_id: parseInt(factoryId),
+        quantity_tons: parseFloat(qty),
+        notes: document.getElementById('issue-notes').value,
+    }, this);
+});
+
+document.getElementById('adjust-btn').addEventListener('click', function() {
+    const storageId = document.getElementById('adjust-storage').value;
+    const qty = document.getElementById('adjust-qty').value;
+    const notes = document.getElementById('adjust-notes').value;
+    if (!storageId || !qty) { alert('املأ كل الحقول'); return; }
+    if (!notes || !notes.trim()) { alert('التسوية لازم يكون فيها ملاحظات تفصيلية'); return; }
+
+    post({
+        movement_type: 'adjustment',
+        storage_id: parseInt(storageId),
+        quantity_tons: parseFloat(qty),
+        notes: notes,
+    }, this);
+});
+</script>
+{% endblock %}

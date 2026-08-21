@@ -1,0 +1,184 @@
+{% extends "admin/base_site.html" %}
+{% block content %}
+{% csrf_token %}
+<style>
+    .page-header { display: flex; align-items: center; gap: 15px; margin-bottom: 18px; }
+    .page-header .title { font-size: 20px; font-weight: bold; }
+    .form-card { background: #f9fafb; border: 1px solid #e2e8f0; border-radius: 8px; padding: 20px; margin-bottom: 16px; }
+    .form-row { display: flex; gap: 12px; flex-wrap: wrap; margin-bottom: 12px; align-items: flex-end; }
+    .form-group { display: flex; flex-direction: column; }
+    .form-group label { font-size: 13px; font-weight: 600; color: #374151; margin-bottom: 4px; }
+    .form-group input, .form-group select, .form-group textarea {
+        padding: 8px 10px; border: 1px solid #d1d5db; border-radius: 4px; font-size: 13px;
+    }
+    .form-group input:focus, .form-group select:focus { outline: none; border-color: #3b82f6; box-shadow: 0 0 0 2px rgba(59,130,246,.2); }
+    .btn { padding: 8px 16px; border: none; border-radius: 4px; cursor: pointer; font-size: 13px; font-weight: 600; }
+    .btn-primary { background: #2563eb; color: #fff; }
+    .btn-primary:hover { background: #1d4ed8; }
+    .results-table { border-collapse: collapse; width: 100%; font-size: 13px; margin-top: 12px; }
+    .results-table th { background: #f1f5f9; padding: 8px; border: 1px solid #cbd5e1; text-align: center; }
+    .results-table td { padding: 6px 8px; border: 1px solid #e2e8f0; text-align: center; }
+    .msg { padding: 10px 14px; border-radius: 6px; margin-bottom: 12px; font-size: 13px; }
+    .msg-ok { background: #dcfce7; color: #166534; border: 1px solid #bbf7d0; }
+    .msg-err { background: #fee2e2; color: #991b1b; border: 1px solid #fecaca; }
+    .history-table { border-collapse: collapse; width: 100%; font-size: 12px; margin-top: 12px; }
+    .history-table th { background: #e2e8f0; padding: 6px; border: 1px solid #cbd5e1; text-align: center; }
+    .history-table td { padding: 5px 6px; border: 1px solid #e2e8f0; text-align: center; }
+</style>
+
+<div class="page-header">
+    <div class="title">🔬 تحليل ثاني - {{ plant.plant_name }}</div>
+    <a class="button" href="{{ hub_url }}">← العودة للمخازن</a>
+    {% include "warehousing/includes/lang_toggle.html" %}
+</div>
+
+<div id="msg-area"></div>
+
+<div class="form-card">
+    <h3 style="margin:0 0 12px 0; font-size:15px;">إنشاء عينة جديدة</h3>
+    <div class="form-row">
+        <div class="form-group">
+            <label>الخام</label>
+            <select id="a2-material" style="min-width: 200px;">
+                <option value="">-- اختر خام --</option>
+            </select>
+        </div>
+        <div class="form-group">
+            <label>المرحلة</label>
+            <select id="a2-stage" style="min-width: 150px;">
+                <option value="pre_milling">قبل الطحن</option>
+                <option value="post_milling">بعد الطحن</option>
+            </select>
+        </div>
+    </div>
+    <div class="form-row">
+        <div class="form-group" style="flex:1;">
+            <label>ملاحظات</label>
+            <input type="text" id="a2-notes" style="width:100%;">
+        </div>
+    </div>
+</div>
+
+<div class="form-card">
+    <h3 style="margin:0 0 12px 0; font-size:15px;">نتائج الاختبارات</h3>
+    <table class="results-table">
+        <thead>
+            <tr>
+                <th>الاختبار</th>
+                <th>الوحدة</th>
+                <th>النتيجة</th>
+                <th>ملاحظات</th>
+            </tr>
+        </thead>
+        <tbody id="tests-tbody"></tbody>
+    </table>
+    <div style="margin-top:12px;">
+        <button class="btn btn-primary" id="save-btn">حفظ العينة والنتائج</button>
+    </div>
+</div>
+
+<div class="form-card">
+    <h3 style="margin:0 0 12px 0; font-size:15px;">سجل العينات</h3>
+    <div style="overflow-x:auto;">
+        <table class="history-table">
+            <thead>
+                <tr>
+                    <th>الخام</th>
+                    <th>المرحلة</th>
+                    <th>رقم العينة</th>
+                    <th>التاريخ</th>
+                    <th>تم بواسطة</th>
+                </tr>
+            </thead>
+            <tbody id="history-tbody"></tbody>
+        </table>
+    </div>
+</div>
+
+{{ materials_json|json_script:"materials-data" }}
+{{ tests_json|json_script:"tests-data" }}
+{{ samples_json|json_script:"samples-data" }}
+
+<script>
+const MATERIALS = JSON.parse(document.getElementById('materials-data').textContent || '[]');
+const TESTS = JSON.parse(document.getElementById('tests-data').textContent || '[]');
+const SAMPLES = JSON.parse(document.getElementById('samples-data').textContent || '[]');
+const testsTbody = document.getElementById('tests-tbody');
+const historyTbody = document.getElementById('history-tbody');
+
+const matSel = document.getElementById('a2-material');
+MATERIALS.forEach(m => {
+    const opt = document.createElement('option');
+    opt.value = m.id;
+    opt.textContent = m.material_name;
+    matSel.appendChild(opt);
+});
+
+TESTS.forEach(t => {
+    const tr = document.createElement('tr');
+    tr.innerHTML = `
+        <td>${t.test_name}</td>
+        <td>${t.unit}</td>
+        <td><input type="number" step="any" class="test-result" data-test-id="${t.id}" style="width:100px;"></td>
+        <td><input type="text" class="test-remarks" style="width:140px;"></td>
+    `;
+    testsTbody.appendChild(tr);
+});
+
+SAMPLES.forEach(s => {
+    const stageMap = {'receipt': 'عند الاستلام', 'pre_milling': 'قبل الطحن', 'post_milling': 'بعد الطحن'};
+    const tr = document.createElement('tr');
+    tr.innerHTML = `
+        <td>${s.material__material_name}</td>
+        <td>${stageMap[s.sample_stage] || s.sample_stage}</td>
+        <td>${s.sample_number}</td>
+        <td>${s.sampled_at ? s.sampled_at.substring(0, 16).replace('T', ' ') : ''}</td>
+        <td>${s.sampled_by || '—'}</td>
+    `;
+    historyTbody.appendChild(tr);
+});
+
+document.getElementById('save-btn').addEventListener('click', function() {
+    const materialId = matSel.value;
+    const stage = document.getElementById('a2-stage').value;
+    if (!materialId) { alert('اختر الخامة'); return; }
+
+    const results = [];
+    testsTbody.querySelectorAll('tr').forEach(tr => {
+        const testId = tr.querySelector('.test-result').dataset.testId;
+        const val = tr.querySelector('.test-result').value;
+        if (val) {
+            results.push({
+                test_id: parseInt(testId),
+                result: parseFloat(val),
+                remarks: tr.querySelector('.test-remarks').value,
+            });
+        }
+    });
+
+    const csrfInput = document.querySelector("[name=csrfmiddlewaretoken]");
+    if (!csrfInput) { alert('Recarregue a página'); return; }
+
+    fetch(window.location.href, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'X-CSRFToken': csrfInput.value },
+        body: JSON.stringify({
+            material_id: parseInt(materialId),
+            stage: stage,
+            test_results: results,
+            notes: document.getElementById('a2-notes').value,
+        }),
+    })
+    .then(r => r.json())
+    .then(data => {
+        if (data.status === 'ok') {
+            document.getElementById('msg-area').innerHTML = `<div class="msg msg-ok">تم حفظ العينة رقم ${data.sample_id} بنجاح</div>`;
+            setTimeout(() => location.reload(), 1500);
+        } else {
+            document.getElementById('msg-area').innerHTML = `<div class="msg msg-err">${data.message}</div>`;
+        }
+    })
+    .catch(() => { document.getElementById('msg-area').innerHTML = `<div class="msg msg-err">خطأ في الاتصال</div>`; });
+});
+</script>
+{% endblock %}

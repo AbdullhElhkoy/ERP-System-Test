@@ -116,6 +116,7 @@ class RawMaterialDeliveryAdmin(PlantScopedAdminMixin, admin.ModelAdmin):
         "vehicle_number",
         "weight_tons",
         "decision",
+        "user",
         "arrived_at",
     )
 
@@ -145,6 +146,7 @@ class InventoryTransactionAdmin(PlantScopedAdminMixin, admin.ModelAdmin):
         "movement_type",
         "quantity_tons",
         "accuracy_type",
+        "user",
         "transaction_date",
     )
 
@@ -187,6 +189,7 @@ class RawMaterialSampleAdmin(PlantScopedAdminMixin, admin.ModelAdmin):
         "sample_number",
         "sampled_at",
         "sampled_by",
+        "user",
     )
 
     list_filter = (

@@ -73,6 +73,37 @@
         <div style="font-size: 12px; color: #666; margin-top: 6px;">Data Analysis (coming soon)</div>
     </a>
 </div>
+
+<div style="margin-top: 28px; margin-bottom: 6px;">
+    <h2 style="margin: 0 0 12px 0; font-size: 17px; color: #334155; border-bottom: 2px solid #e2e8f0; padding-bottom: 6px;">🔬 Raw Materials Operations</h2>
+</div>
+<div class="section-grid">
+    <a class="section-card" href="{% url 'warehousing:analysis1_entry' %}">
+        <span class="icon">🧪</span>
+        <span class="label">Analysis 1</span>
+        <div style="font-size: 12px; color: #666; margin-top: 6px;">Pre-weighing analysis by truck</div>
+    </a>
+    <a class="section-card" href="{% url 'warehousing:chemical_analysis' %}">
+        <span class="icon">🔬</span>
+        <span class="label">Chemical Analysis</span>
+        <div style="font-size: 12px; color: #666; margin-top: 6px;">Record test results</div>
+    </a>
+    <a class="section-card" href="{% url 'warehousing:weighing_entry' %}">
+        <span class="icon">⚖️</span>
+        <span class="label">Weighing</span>
+        <div style="font-size: 12px; color: #666; margin-top: 6px;">Record weight & update inventory</div>
+    </a>
+    <a class="section-card" href="{% url 'warehousing:issue_entry' %}">
+        <span class="icon">📤</span>
+        <span class="label">Issue & Adjustment</span>
+        <div style="font-size: 12px; color: #666; margin-top: 6px;">Issue to factory / reconciliation</div>
+    </a>
+    <a class="section-card" href="{% url 'warehousing:analysis2_entry' %}">
+        <span class="icon">🔬</span>
+        <span class="label">Analysis 2</span>
+        <div style="font-size: 12px; color: #666; margin-top: 6px;">Multi-stage samples</div>
+    </a>
+</div>
 {% else %}
 <p style="margin-top: 20px; color: #999;">Select a plant above to access the warehouse sheets.</p>
 {% endif %}

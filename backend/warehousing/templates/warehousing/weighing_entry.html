@@ -1,0 +1,145 @@
+{% extends "admin/base_site.html" %}
+{% block content %}
+{% csrf_token %}
+<style>
+    .page-header { display: flex; align-items: center; gap: 15px; margin-bottom: 18px; }
+    .page-header .title { font-size: 20px; font-weight: bold; }
+    .form-card { background: #f9fafb; border: 1px solid #e2e8f0; border-radius: 8px; padding: 20px; margin-bottom: 16px; }
+    .form-row { display: flex; gap: 12px; flex-wrap: wrap; margin-bottom: 12px; align-items: flex-end; }
+    .form-group { display: flex; flex-direction: column; }
+    .form-group label { font-size: 13px; font-weight: 600; color: #374151; margin-bottom: 4px; }
+    .form-group input, .form-group select {
+        padding: 8px 10px; border: 1px solid #d1d5db; border-radius: 4px; font-size: 13px;
+    }
+    .form-group input:focus, .form-group select:focus { outline: none; border-color: #3b82f6; box-shadow: 0 0 0 2px rgba(59,130,246,.2); }
+    .btn { padding: 8px 16px; border: none; border-radius: 4px; cursor: pointer; font-size: 13px; font-weight: 600; }
+    .btn-primary { background: #2563eb; color: #fff; }
+    .btn-primary:hover { background: #1d4ed8; }
+    .info-box { padding: 10px 14px; background: #eff6ff; border: 1px solid #bfdbfe; border-radius: 6px; font-size: 13px; margin-bottom: 12px; }
+    .msg { padding: 10px 14px; border-radius: 6px; margin-bottom: 12px; font-size: 13px; }
+    .msg-ok { background: #dcfce7; color: #166534; border: 1px solid #bbf7d0; }
+    .msg-err { background: #fee2e2; color: #991b1b; border: 1px solid #fecaca; }
+</style>
+
+<div class="page-header">
+    <div class="title">⚖️ وزن الشحنات - {{ plant.plant_name }}</div>
+    <a class="button" href="{{ hub_url }}">← العودة للمخازن</a>
+    {% include "warehousing/includes/lang_toggle.html" %}
+</div>
+
+<div id="msg-area"></div>
+
+<div class="form-card">
+    <h3 style="margin:0 0 12px 0; font-size:15px;">اختيار الشحنة</h3>
+    <div class="form-row">
+        <div class="form-group">
+            <label>الشحنة</label>
+            <select id="delivery-select" style="min-width: 350px;">
+                <option value="">-- اختر شحنة --</option>
+            </select>
+        </div>
+    </div>
+    <div id="delivery-info" style="display:none;" class="info-box"></div>
+</div>
+
+<div class="form-card" id="weigh-card" style="display:none;">
+    <h3 style="margin:0 0 12px 0; font-size:15px;">تسجيل الوزن</h3>
+    <div class="form-row">
+        <div class="form-group">
+            <label>الوزن الأصلي (طن)</label>
+            <input type="number" step="any" id="original-weight" readonly style="background:#f1f5f9; width:120px;">
+        </div>
+        <div class="form-group">
+            <label>الوزن الفعلي (طن)</label>
+            <input type="number" step="any" id="actual-weight" style="width:120px;" placeholder="0.000">
+        </div>
+        <div class="form-group">
+            <label>المخزن</label>
+            <select id="storage-select" style="min-width: 200px;">
+                <option value="">-- اختر مخزن --</option>
+            </select>
+        </div>
+    </div>
+    <div style="margin-top:12px;">
+        <button class="btn btn-primary" id="save-btn">تسجيل الوزن وتحديث المخزون</button>
+    </div>
+</div>
+
+{{ deliveries_json|json_script:"deliveries-data" }}
+{{ storages_json|json_script:"storages-data" }}
+
+<script>
+const DELIVERIES = JSON.parse(document.getElementById('deliveries-data').textContent || '[]');
+const STORAGES = JSON.parse(document.getElementById('storages-data').textContent || '[]');
+const sel = document.getElementById('delivery-select');
+const info = document.getElementById('delivery-info');
+const weighCard = document.getElementById('weigh-card');
+const origWeight = document.getElementById('original-weight');
+const storSel = document.getElementById('storage-select');
+let selectedDelivery = null;
+
+DELIVERIES.forEach(d => {
+    const opt = document.createElement('option');
+    opt.value = d.id;
+    opt.textContent = `${d.vehicle_number} | ${d.material__material_name} | ${d.weight_tons} طن`;
+    sel.appendChild(opt);
+});
+
+sel.addEventListener('change', function() {
+    const id = parseInt(this.value);
+    selectedDelivery = DELIVERIES.find(d => d.id === id);
+    if (!selectedDelivery) {
+        info.style.display = 'none';
+        weighCard.style.display = 'none';
+        return;
+    }
+    info.innerHTML = `
+        <strong>الخام:</strong> ${selectedDelivery.material__material_name} | 
+        <strong>رقم الشاحنة:</strong> ${selectedDelivery.vehicle_number}
+    `;
+    info.style.display = 'block';
+    origWeight.value = selectedDelivery.weight_tons;
+
+    storSel.innerHTML = '<option value="">-- اختر مخزن --</option>';
+    STORAGES.filter(s => String(s.material_id) === String(selectedDelivery.material_id)).forEach(s => {
+        const opt = document.createElement('option');
+        opt.value = s.id;
+        opt.textContent = s.storage_name;
+        storSel.appendChild(opt);
+    });
+    weighCard.style.display = 'block';
+});
+
+document.getElementById('save-btn').addEventListener('click', function() {
+    if (!selectedDelivery) { alert('اختر شحنة أولاً'); return; }
+    const actualWeight = document.getElementById('actual-weight').value;
+    const storageId = storSel.value;
+    if (!actualWeight || !storageId) { alert('املأ كل الحقول'); return; }
+
+    const csrfInput = document.querySelector("[name=csrfmiddlewaretoken]");
+    if (!csrfInput) { alert('Recarregue a página'); return; }
+
+    fetch(window.location.href, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'X-CSRFToken': csrfInput.value },
+        body: JSON.stringify({
+            delivery_id: selectedDelivery.id,
+            actual_weight: parseFloat(actualWeight),
+            storage_id: parseInt(storageId),
+        }),
+    })
+    .then(r => r.json())
+    .then(data => {
+        if (data.status === 'ok') {
+            document.getElementById('msg-area').innerHTML = `<div class="msg msg-ok">تم تسجيل الوزن وتحديث المخزون بنجاح</div>`;
+            weighCard.style.display = 'none';
+            sel.value = '';
+            info.style.display = 'none';
+        } else {
+            document.getElementById('msg-area').innerHTML = `<div class="msg msg-err">${data.message}</div>`;
+        }
+    })
+    .catch(() => { document.getElementById('msg-area').innerHTML = `<div class="msg msg-err">خطأ في الاتصال</div>`; });
+});
+</script>
+{% endblock %}

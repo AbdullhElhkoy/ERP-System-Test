@@ -1,0 +1,166 @@
+{% extends "admin/base_site.html" %}
+{% block content %}
+{% csrf_token %}
+<style>
+    .page-header { display: flex; align-items: center; gap: 15px; margin-bottom: 18px; }
+    .page-header .title { font-size: 20px; font-weight: bold; }
+    .form-card { background: #f9fafb; border: 1px solid #e2e8f0; border-radius: 8px; padding: 20px; margin-bottom: 16px; }
+    .form-row { display: flex; gap: 12px; flex-wrap: wrap; margin-bottom: 12px; align-items: flex-end; }
+    .form-group { display: flex; flex-direction: column; }
+    .form-group label { font-size: 13px; font-weight: 600; color: #374151; margin-bottom: 4px; }
+    .form-group input, .form-group select, .form-group textarea {
+        padding: 8px 10px; border: 1px solid #d1d5db; border-radius: 4px; font-size: 13px;
+    }
+    .form-group input:focus, .form-group select:focus { outline: none; border-color: #3b82f6; box-shadow: 0 0 0 2px rgba(59,130,246,.2); }
+    .btn { padding: 8px 16px; border: none; border-radius: 4px; cursor: pointer; font-size: 13px; font-weight: 600; }
+    .btn-primary { background: #2563eb; color: #fff; }
+    .btn-primary:hover { background: #1d4ed8; }
+    .btn-secondary { background: #e5e7eb; color: #374151; }
+    .results-table { border-collapse: collapse; width: 100%; font-size: 13px; margin-top: 12px; }
+    .results-table th { background: #f1f5f9; padding: 8px; border: 1px solid #cbd5e1; text-align: center; }
+    .results-table td { padding: 6px 8px; border: 1px solid #e2e8f0; text-align: center; }
+    .badge { display: inline-block; padding: 2px 10px; border-radius: 12px; font-size: 12px; font-weight: 600; }
+    .badge-ok { background: #dcfce7; color: #166534; }
+    .badge-fail { background: #fee2e2; color: #991b1b; }
+    .msg { padding: 10px 14px; border-radius: 6px; margin-bottom: 12px; font-size: 13px; }
+    .msg-ok { background: #dcfce7; color: #166534; border: 1px solid #bbf7d0; }
+    .msg-err { background: #fee2e2; color: #991b1b; border: 1px solid #fecaca; }
+</style>
+
+<div class="page-header">
+    <div class="title">🧪 تحليل أولي - {{ plant.plant_name }}</div>
+    <a class="button" href="{{ hub_url }}">← العودة للمخازن</a>
+    {% include "warehousing/includes/lang_toggle.html" %}
+</div>
+
+<div id="msg-area"></div>
+
+<div class="form-card">
+    <h3 style="margin:0 0 12px 0; font-size:15px;">اختيار الشحنة</h3>
+    <div class="form-row">
+        <div class="form-group">
+            <label>رقم الشاحنة</label>
+            <select id="delivery-select" style="min-width: 200px;">
+                <option value="">-- اختر شحنة --</option>
+            </select>
+        </div>
+        <div class="form-group" id="delivery-info" style="display:none;">
+            <label>بيانات الشحنة</label>
+            <div id="delivery-details" style="padding:8px; background:#fff; border:1px solid #e2e8f0; border-radius:4px; min-width:300px; font-size:13px;"></div>
+        </div>
+    </div>
+</div>
+
+<div class="form-card" id="tests-card" style="display:none;">
+    <h3 style="margin:0 0 12px 0; font-size:15px;">نتائج الاختبارات</h3>
+    <table class="results-table">
+        <thead>
+            <tr>
+                <th>الاختبار</th>
+                <th>الوحدة</th>
+                <th>النتيجة</th>
+                <th>ملاحظات</th>
+            </tr>
+        </thead>
+        <tbody id="tests-tbody"></tbody>
+    </table>
+    <div style="margin-top:10px;">
+        <div class="form-group">
+            <label>ملاحظات عامة</label>
+            <textarea id="general-notes" rows="2" style="width:100%;"></textarea>
+        </div>
+    </div>
+    <div style="margin-top:12px;">
+        <button class="btn btn-primary" id="save-btn">حفظ النتائج</button>
+    </div>
+</div>
+
+{{ deliveries_json|json_script:"deliveries-data" }}
+{{ tests_json|json_script:"tests-data" }}
+
+<script>
+const DELIVERIES = JSON.parse(document.getElementById('deliveries-data').textContent || '[]');
+const TESTS = JSON.parse(document.getElementById('tests-data').textContent || '[]');
+const sel = document.getElementById('delivery-select');
+const info = document.getElementById('delivery-info');
+const details = document.getElementById('delivery-details');
+const testsCard = document.getElementById('tests-card');
+const testsTbody = document.getElementById('tests-tbody');
+let selectedDelivery = null;
+
+DELIVERIES.forEach(d => {
+    const opt = document.createElement('option');
+    opt.value = d.id;
+    opt.textContent = `${d.vehicle_number} | ${d.material__material_name} | ${d.weight_tons} طن | ${d.supplier__supplier_name}`;
+    sel.appendChild(opt);
+});
+
+sel.addEventListener('change', function() {
+    const id = parseInt(this.value);
+    selectedDelivery = DELIVERIES.find(d => d.id === id);
+    if (!selectedDelivery) {
+        info.style.display = 'none';
+        testsCard.style.display = 'none';
+        return;
+    }
+    details.innerHTML = `
+        <strong>الخام:</strong> ${selectedDelivery.material__material_name}<br>
+        <strong>المورد:</strong> ${selectedDelivery.supplier__supplier_name}<br>
+        <strong>الوزن:</strong> ${selectedDelivery.weight_tons} طن
+    `;
+    info.style.display = 'block';
+
+    testsTbody.innerHTML = '';
+    TESTS.forEach(t => {
+        const tr = document.createElement('tr');
+        tr.innerHTML = `
+            <td>${t.test_name}</td>
+            <td>${t.unit}</td>
+            <td><input type="number" step="any" class="test-result" data-test-id="${t.id}" style="width:100px;"></td>
+            <td><input type="text" class="test-remarks" style="width:140px;"></td>
+        `;
+        testsTbody.appendChild(tr);
+    });
+    testsCard.style.display = 'block';
+});
+
+document.getElementById('save-btn').addEventListener('click', function() {
+    if (!selectedDelivery) { alert('اختر شحنة أولاً'); return; }
+    const csrfInput = document.querySelector("[name=csrfmiddlewaretoken]");
+    if (!csrfInput) { alert('Recarregue a página'); return; }
+
+    const results = [];
+    testsTbody.querySelectorAll('tr').forEach(tr => {
+        const testId = tr.querySelector('.test-result').dataset.testId;
+        const val = tr.querySelector('.test-result').value;
+        if (val) {
+            results.push({
+                test_id: parseInt(testId),
+                result: parseFloat(val),
+                remarks: tr.querySelector('.test-remarks').value,
+            });
+        }
+    });
+
+    fetch(window.location.href, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'X-CSRFToken': csrfInput.value },
+        body: JSON.stringify({
+            delivery_id: selectedDelivery.id,
+            test_results: results,
+            notes: document.getElementById('general-notes').value,
+        }),
+    })
+    .then(r => r.json())
+    .then(data => {
+        if (data.status === 'ok') {
+            document.getElementById('msg-area').innerHTML = `<div class="msg msg-ok">تم الحفظ بنجاح - رقم العينة: ${data.sample_id}</div>`;
+            setTimeout(() => { testsCard.style.display = 'none'; sel.value = ''; info.style.display = 'none'; }, 2000);
+        } else {
+            document.getElementById('msg-area').innerHTML = `<div class="msg msg-err">${data.message}</div>`;
+        }
+    })
+    .catch(() => { document.getElementById('msg-area').innerHTML = `<div class="msg msg-err">خطأ في الاتصال</div>`; });
+});
+</script>
+{% endblock %}
