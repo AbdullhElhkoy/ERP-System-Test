@@ -4,7 +4,6 @@ from django.contrib import admin
 from django.contrib.admin.views.decorators import staff_member_required
 from django.http import JsonResponse
 from django.shortcuts import render, redirect
-from django.http import JsonResponse
 from django.urls import reverse
 from django.utils import timezone
 from django.utils.translation import gettext_lazy as _
