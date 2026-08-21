@@ -337,7 +337,7 @@ def analysis1_entry(request):
         ensure_ascii=False,
     )
     tests_json = json.dumps(
-        list(MaterialTest.objects.filter(is_active=True).values("id", "test_name", "unit")),
+        list(MaterialTest.objects.values("id", "test_name", "unit")),
         ensure_ascii=False,
     )
 
@@ -403,7 +403,7 @@ def chemical_analysis(request, sample_id=None):
         ensure_ascii=False,
     )
     tests_json = json.dumps(
-        list(MaterialTest.objects.filter(is_active=True).values("id", "test_name", "unit")),
+        list(MaterialTest.objects.all().values("id", "test_name", "unit")),
         ensure_ascii=False,
     )
     sample_details_json = "null"
@@ -646,7 +646,7 @@ def analysis2_entry(request):
         ensure_ascii=False,
     )
     tests_json = json.dumps(
-        list(MaterialTest.objects.filter(is_active=True).values("id", "test_name", "unit")),
+        list(MaterialTest.objects.all().values("id", "test_name", "unit")),
         ensure_ascii=False,
     )
     samples_json = json.dumps(
